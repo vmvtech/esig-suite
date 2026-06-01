@@ -1,0 +1,60 @@
+{
+  "name": "@vmvtech/esig-supabase",
+  "version": "0.1.0",
+  "description": "Supabase adapters (CertStore / AuditLogStore / PdfStorageStore) for @vmvtech/esig-core — self-contained PDF e-signature persistence on Supabase Postgres + Storage.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "supabase",
+    "pdf",
+    "esignature",
+    "pkcs7",
+    "self-contained",
+    "esign",
+    "certstore",
+    "audit-log"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vmvtech/esig-suite.git",
+    "directory": "packages/esig-supabase"
+  },
+  "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-supabase#readme",
+  "peerDependencies": {
+    "@supabase/supabase-js": ">=2",
+    "@vmvtech/esig-core": "^0.3.0"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.98.0",
+    "@types/node": "^22.0.0",
+    "@vmvtech/esig-core": "^0.3.0",
+    "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  }
+}

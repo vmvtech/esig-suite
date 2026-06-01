@@ -1,0 +1,63 @@
+{
+  "name": "@vmvtech/esig-react",
+  "version": "0.1.0",
+  "description": "React UI for self-contained PDF e-signing — draw-to-sign canvas, sign flow, and signed-receipt components. Framework-agnostic (no Next/Supabase coupling).",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "react",
+    "signature-pad",
+    "pdf",
+    "esignature",
+    "esign",
+    "self-contained",
+    "ui"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vmvtech/esig-suite.git",
+    "directory": "packages/esig-react"
+  },
+  "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-react#readme",
+  "dependencies": {
+    "signature_pad": "^5.0.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "name": "@vmvtech/esig-core",
+  "version": "0.3.0",
+  "description": "Self-contained PKCS#7 PDF signing — no SaaS, no metering, no per-doc fees. Render→sign→verify engine + pluggable persistence interfaces + end-to-end signDocument() orchestrator.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./signature-block": {
+      "types": "./dist/signature-block.d.ts",
+      "import": "./dist/signature-block.js",
+      "default": "./dist/signature-block.js"
+    },
+    "./adapters": {
+      "types": "./dist/adapters.d.ts",
+      "import": "./dist/adapters.js",
+      "default": "./dist/adapters.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "CONSUMING.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "echo 'Tests live in the parent repo at src/lib/integrations/esig/*.test.ts'"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "pdf",
+    "esignature",
+    "e-signature",
+    "pkcs7",
+    "pades",
+    "etsi",
+    "cades",
+    "self-hosted",
+    "documenso",
+    "docuseal",
+    "self-contained",
+    "esign",
+    "ueta",
+    "hipaa"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vmvtech/esig-suite.git",
+    "directory": "packages/esig-core"
+  },
+  "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-core#readme",
+  "dependencies": {
+    "@signpdf/placeholder-plain": "^3.3.0",
+    "@signpdf/signpdf": "^3.3.0",
+    "@signpdf/utils": "^3.3.0",
+    "node-forge": "^1.4.0",
+    "puppeteer-core": "^24.0.0 || ^25.0.0"
+  },
+  "peerDependencies": {
+    "@sparticuz/chromium": "^140.0.0 || ^148.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@sparticuz/chromium": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@sparticuz/chromium": "^140.0.0",
+    "@types/node": "^22.0.0",
+    "@types/node-forge": "^1.3.0",
+    "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  }
+}
