@@ -5,3 +5,4 @@ dist/
 .env
 .env.local
 package-lock.json
+packages/esig-react/npmrc.publish
