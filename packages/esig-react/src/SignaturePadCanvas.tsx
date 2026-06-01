@@ -65,8 +65,21 @@ export const SignaturePadCanvas = forwardRef<
   const padRef = useRef<SignaturePad | null>(null);
   const [empty, setEmpty] = useState(true);
 
-  // Resize-aware mount. signature_pad needs the canvas internal resolution to
-  // match its CSS size × devicePixelRatio for crisp rendering on retina/mobile.
+  // Keep the latest onChange in a ref so the canvas-init effect below does NOT
+  // depend on it. Parents commonly pass an inline `onChange={(e) => ...}` that is
+  // a new function every render; if that were an effect dependency, the first
+  // endStroke → setState → parent re-render → new onChange → effect re-run →
+  // `canvas.width = …` (which CLEARS the canvas) would wipe the first signature.
+  // (That's the "first stroke disappears, second one sticks" bug.)
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  // Mount-once init. signature_pad needs the canvas internal resolution to match
+  // its CSS size × devicePixelRatio for crisp rendering on retina/mobile. Setting
+  // canvas.width/height clears the bitmap, so this must run exactly once per
+  // canvas (penColor/backgroundColor are config props and effectively stable).
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -89,7 +102,7 @@ export const SignaturePadCanvas = forwardRef<
     const handleStrokeEnd = () => {
       const isEmpty = pad.isEmpty();
       setEmpty(isEmpty);
-      onChange?.(isEmpty);
+      onChangeRef.current?.(isEmpty);
     };
     pad.addEventListener("endStroke", handleStrokeEnd);
 
@@ -98,7 +111,9 @@ export const SignaturePadCanvas = forwardRef<
       pad.off();
       padRef.current = null;
     };
-  }, [penColor, backgroundColor, onChange]);
+    // onChange intentionally excluded — see onChangeRef above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [penColor, backgroundColor]);
 
   const clear = useCallback(() => {
     padRef.current?.clear();

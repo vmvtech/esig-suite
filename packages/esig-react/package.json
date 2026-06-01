@@ -1,6 +1,6 @@
 {
   "name": "@vmvtech/esig-react",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "React UI for self-contained PDF e-signing — draw-to-sign canvas, sign flow, and signed-receipt components. Framework-agnostic (no Next/Supabase coupling).",
   "license": "MIT",
   "type": "module",
