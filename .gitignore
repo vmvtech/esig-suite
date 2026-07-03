@@ -5,3 +5,4 @@ dist/
 .env
 .env.local
 packages/esig-react/npmrc.publish
+examples/quickstart/signed.pdf

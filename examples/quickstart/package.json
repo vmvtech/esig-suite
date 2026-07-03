@@ -1,0 +1,13 @@
+{
+  "name": "esig-quickstart",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal @e-sig/core quickstart: issue a cert, sign a PDF, verify it, detect tampering.",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@e-sig/core": "*"
+  }
+}
