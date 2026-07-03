@@ -34,6 +34,16 @@ function issue() {
   return generateSelfSignedCert({ subjectName: "Acme Inc" });
 }
 
+/** Total encoded length (header + content) of the DER value at offset 0. */
+function derTotalLength(buf: Buffer): number {
+  const l0 = buf[1];
+  if (l0 < 0x80) return 2 + l0;
+  const n = l0 & 0x7f;
+  let v = 0;
+  for (let k = 0; k < n; k++) v = v * 256 + buf[2 + k];
+  return 2 + n + v;
+}
+
 async function sign(opts: { padesStrict?: boolean } = {}) {
   const cert = issue();
   const { signedPdf } = await signPdf({
@@ -60,9 +70,11 @@ function signedAttrOids(signedPdf: Buffer): string[] {
   const region = signedPdf
     .subarray(a + b + 1, c - 1)
     .toString("binary")
-    .replace(/[^0-9a-fA-F]/g, "")
-    .replace(/(00)+$/, "");
-  const der = Buffer.from(region, "hex").toString("binary");
+    .replace(/[^0-9a-fA-F]/g, "");
+  // Slice at the DER-declared length (do NOT trim trailing "00" pairs — a
+  // signature legitimately ending in 0x00 would be truncated, ~1/256 flake).
+  const bytes = Buffer.from(region, "hex");
+  const der = bytes.subarray(0, derTotalLength(bytes)).toString("binary");
   const root = asn1.fromDer(der);
   let sd: any;
   for (const ch of root.value as any[])
@@ -142,6 +154,52 @@ describe("sign → verify (cryptographic)", () => {
   it("verifyPdfSignature is the same verifier", async () => {
     const { signedPdf } = await sign();
     expect(verifyPdfSignature(signedPdf).ok).toBe(true);
+  });
+
+  // Regression (CI flake): the /Contents hole is zero-padded past the DER, and
+  // the verifier used to strip trailing "00" hex pairs — truncating any PKCS#7
+  // blob whose final byte is legitimately 0x00 (~1/256 of RSA signatures) and
+  // rejecting a valid document with "Too few bytes to read ASN.1 value".
+  it("does not truncate a /Contents DER whose last byte is 0x00", () => {
+    const asn1 = forge.asn1;
+    // Minimal ContentInfo{signedData} whose DER ends with an empty signerInfos
+    // SET — encoded 31 00, so the final DER byte is 0x00 by construction.
+    const der = asn1
+      .toDer(
+        asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
+          asn1.create(asn1.Class.UNIVERSAL, asn1.Type.OID, false, asn1.oidToDer("1.2.840.113549.1.7.2").getBytes()),
+          asn1.create(asn1.Class.CONTEXT_SPECIFIC, 0, true, [
+            asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
+              asn1.create(asn1.Class.UNIVERSAL, asn1.Type.INTEGER, false, "\x01"),
+              asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SET, true, []),
+              asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
+                asn1.create(asn1.Class.UNIVERSAL, asn1.Type.OID, false, asn1.oidToDer("1.2.840.113549.1.7.1").getBytes()),
+              ]),
+              asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SET, true, []),
+            ]),
+          ]),
+        ]),
+      )
+      .getBytes();
+    expect(der.charCodeAt(der.length - 1)).toBe(0); // the hazard under test
+
+    // Wrap it in a minimal "signed PDF" byte layout: consistent /ByteRange,
+    // hex /Contents with zero padding. Fixed-width numbers keep offsets stable.
+    const hex = forge.util.bytesToHex(der) + "00".repeat(16);
+    const pad = (n: number) => String(n).padStart(10, "0");
+    const mk = (a: number, b: number, c: number, d: number) =>
+      `%fake /ByteRange [${pad(a)} ${pad(b)} ${pad(c)} ${pad(d)}] /Contents <${hex}> %%EOF`;
+    const draft = mk(0, 0, 0, 0);
+    const b = draft.indexOf("<");
+    const c = draft.indexOf(">") + 1;
+    const fake = Buffer.from(mk(0, b, c, draft.length - c), "binary");
+
+    const v = verifyPdfStructure(fake);
+    // This synthetic CMS carries no certificates/signature, so verification
+    // must fail on semantic grounds — NOT by mangling the DER while stripping
+    // padding. The exact DER length surviving intact is the regression check.
+    expect(v.pkcs7ActualSize).toBe(der.length);
+    expect(v.failures.join(" ")).not.toMatch(/Too few bytes/i);
   });
 
   it("REJECTS a byte flipped in the first covered segment", async () => {

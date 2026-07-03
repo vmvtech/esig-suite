@@ -88,8 +88,17 @@ export function verifyPdfStructure(signed: Buffer): VerifyResult {
 
   const contentsRegion = signed.slice(a + b + 1, c - 1);
   const hexBlob = contentsRegion.toString("binary").replace(/[^0-9a-fA-F]/g, "");
-  const trimmedHex = hexBlob.replace(/(00)+$/, "");
-  const pkcs7Der = Buffer.from(trimmedHex, "hex").toString("binary");
+  // The /Contents hole is zero-padded past the end of the DER. Slice at the
+  // length declared in the DER's own TLV header — trimming trailing "00" pairs
+  // instead truncates any signature whose final byte is legitimately 0x00
+  // (~1/256 of signatures), falsely rejecting a valid document.
+  const contentsBytes = Buffer.from(hexBlob, "hex");
+  const derLen = derTotalLength(contentsBytes);
+  if (derLen === null || derLen > contentsBytes.length) {
+    failures.push("/Contents does not hold a well-formed DER structure");
+    return result;
+  }
+  const pkcs7Der = contentsBytes.subarray(0, derLen).toString("binary");
   result.pkcs7ActualSize = pkcs7Der.length;
 
   try {
@@ -377,6 +386,22 @@ function inspectTimestamp(contentInfo: forge.asn1.Asn1): {
   }
 
   return { present: false, sigValueHex };
+}
+
+/**
+ * Total encoded length (header + content) of the DER value starting at byte 0,
+ * or null if the bytes cannot start a DER SEQUENCE (wrong tag, indefinite/BER
+ * length, or a length-of-length that cannot be a real PKCS#7 blob).
+ */
+function derTotalLength(buf: Buffer): number | null {
+  if (buf.length < 2 || buf[0] !== 0x30) return null; // ContentInfo is a SEQUENCE
+  const l0 = buf[1];
+  if (l0 < 0x80) return 2 + l0;
+  const n = l0 & 0x7f;
+  if (n === 0 || n > 4 || buf.length < 2 + n) return null;
+  let v = 0;
+  for (let k = 0; k < n; k++) v = v * 256 + buf[2 + k];
+  return 2 + n + v;
 }
 
 function safeOid(der: string): string {
