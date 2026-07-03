@@ -22,6 +22,11 @@
       "types": "./dist/adapters.d.ts",
       "import": "./dist/adapters.js",
       "default": "./dist/adapters.js"
+    },
+    "./fs": {
+      "types": "./dist/fs-adapters.d.ts",
+      "import": "./dist/fs-adapters.js",
+      "default": "./dist/fs-adapters.js"
     }
   },
   "files": [
