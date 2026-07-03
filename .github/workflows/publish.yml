@@ -1,0 +1,44 @@
+name: Publish to npm
+
+# Publishes @e-sig/core, @e-sig/supabase, @e-sig/react to the public npm registry
+# with build provenance (Sigstore) on a GitHub Release.
+#
+# One-time setup (owner):
+#   1. Create the free npm org "e-sig" (npmjs.com → add org → Free for public packages).
+#   2. Create an npm Automation access token and add it as the repo secret NPM_TOKEN.
+#   3. Bump the package versions, then publish a GitHub Release (or run this workflow
+#      manually via "Run workflow"). Provenance requires this to run from GitHub Actions.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # required for npm provenance (OIDC → Sigstore)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Publish @e-sig/core
+        run: npm publish -w @e-sig/core --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish @e-sig/supabase
+        run: npm publish -w @e-sig/supabase --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish @e-sig/react
+        run: npm publish -w @e-sig/react --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

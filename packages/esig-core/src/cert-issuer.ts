@@ -63,7 +63,12 @@ export function generateSelfSignedCert(opts: GenerateCertOptions): GeneratedCert
   const keys = forge.pki.rsa.generateKeyPair(2048);
   const cert = forge.pki.createCertificate();
   cert.publicKey = keys.publicKey;
-  cert.serialNumber = Date.now().toString(16);
+  // Serial: 128 bits of CSPRNG entropy (RFC 5280 §4.1.2.2 — unique, unpredictable,
+  // ≤20 octets). Clear the top bit so the DER INTEGER is positive without a
+  // leading zero; force a nonzero leading byte so it isn't short-encoded.
+  const serialBytes = crypto.randomBytes(16);
+  serialBytes[0] = (serialBytes[0] & 0x7f) | 0x40;
+  cert.serialNumber = serialBytes.toString("hex");
   const now = new Date();
   cert.validity.notBefore = now;
   cert.validity.notAfter = new Date(now.getTime() + validityDays * 86400_000);
@@ -79,8 +84,14 @@ export function generateSelfSignedCert(opts: GenerateCertOptions): GeneratedCert
   cert.setExtensions(
     opts.extensions ?? [
       { name: "basicConstraints", cA: false },
+      // digitalSignature + nonRepudiation (contentCommitment) — the key usages
+      // for a document-signing end-entity cert.
       { name: "keyUsage", digitalSignature: true, nonRepudiation: true },
-      { name: "extKeyUsage", emailProtection: true, clientAuth: true },
+      // Document signing → emailProtection (S/MIME/document). clientAuth (TLS
+      // client) was semantically wrong for a signing cert and is removed.
+      { name: "extKeyUsage", emailProtection: true },
+      // Subject Key Identifier improves cert hygiene / chain building.
+      { name: "subjectKeyIdentifier" },
     ]
   );
   cert.sign(keys.privateKey, forge.md.sha256.create());

@@ -1,23 +1,15 @@
-# Consuming `@vmvtech/esig-core`
+# Consuming `@e-sig/core`
 
 How to install and use this package in another project. It is a self-contained,
 dependency-light PKCS#7 PDF signing core — no SaaS, no metering, no per-document
 fees — extracted from the Opendelphi production e-signature pipeline.
 
-## Install (GitHub Packages, internal visibility)
+## Install
 
-The package is published to GitHub Packages under the `@vmvtech` scope. Add a
-project-local `.npmrc`:
-
-```
-@vmvtech:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
-```
-
-`GITHUB_TOKEN` needs the `read:packages` scope. Then:
+Published to the public npm registry — no auth or registry config needed:
 
 ```sh
-npm install @vmvtech/esig-core
+npm install @e-sig/core
 ```
 
 Runtime requirements: Node ≥ 20, ESM. The only crypto dependencies are
@@ -28,7 +20,7 @@ Lambda/Vercel).
 ## Minimal sign + verify
 
 ```ts
-import { generateSelfSignedCert, signPdf, verifyPdfStructure } from "@vmvtech/esig-core";
+import { generateSelfSignedCert, signPdf, verifyPdfStructure } from "@e-sig/core";
 
 const { keyPem, certPem } = generateSelfSignedCert({ subjectName: "Acme" });
 const { signedPdf } = await signPdf({
@@ -50,7 +42,7 @@ itself, which keeps it dependency-free and keeps egress under your control. The
 TSA only ever receives a **SHA-256 hash** — never the document, never any PHI.
 
 ```ts
-import type { TsaTransport } from "@vmvtech/esig-core";
+import type { TsaTransport } from "@e-sig/core";
 
 const tsa: TsaTransport = {
   required: false, // false → degrade to CAdES-B on failure; true → throw

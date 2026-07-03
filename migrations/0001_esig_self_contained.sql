@@ -1,7 +1,7 @@
 -- 0001_esig_self_contained.sql
 --
--- Persistence backbone for the @vmvtech/esig-* self-contained PDF signing
--- pipeline, paired with @vmvtech/esig-supabase. Generic, tenant_id-keyed.
+-- Persistence backbone for the @e-sig/* self-contained PDF signing
+-- pipeline, paired with @e-sig/supabase. Generic, tenant_id-keyed.
 --
 --   1. esig_tenant_member(uuid)   — RLS predicate STUB (you MUST replace it)
 --   2. org_signing_certs          — one RSA cert+key per tenant (key encrypted)
@@ -10,7 +10,7 @@
 --
 -- This bundle does NOT include any document/domain table — the consumer keeps
 -- its own (DUA, contract, consent, …) and stores the returned signed_pdf_url +
--- esig_audit_log id on its row. `@vmvtech/esig-supabase` defaults to the table
+-- esig_audit_log id on its row. `@e-sig/supabase` defaults to the table
 -- names + `tenant_id` column below; pass options to map onto an existing schema.
 
 -- ==================================================================

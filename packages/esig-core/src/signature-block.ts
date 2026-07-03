@@ -34,7 +34,7 @@ export function renderSignatureBlocksHtml(opts: {
     <p><strong>Signed electronically by:</strong> ${escapeHtml(s.name)}${
       s.email ? ` &lt;${escapeHtml(s.email)}&gt;` : ""
     }</p>
-    <img src="${s.signatureImageDataUrl}" alt="Signature of ${escapeHtml(s.name)}">
+    <img src="${assertImageDataUrl(s.signatureImageDataUrl)}" alt="Signature of ${escapeHtml(s.name)}">
     <p class="signature-meta">Signed at ${s.signedAt.toISOString()}</p>
   </div>`
     )
@@ -65,4 +65,22 @@ export function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * A base64 image data URL (png/jpeg/webp/gif) — the only shape allowed into the
+ * signature `<img src>`. Rejecting anything else prevents attribute-breakout /
+ * script/URL injection into the rendered (and then signed) PDF.
+ */
+const IMAGE_DATA_URL = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+export function assertImageDataUrl(dataUrl: string): string {
+  const compact = (dataUrl ?? "").replace(/\s+/g, "");
+  if (!IMAGE_DATA_URL.test(compact)) {
+    throw new Error(
+      "renderSignatureBlocksHtml: signatureImageDataUrl must be a base64 image data URL " +
+        "(data:image/png;base64,…). Refusing to interpolate untrusted content into the signed PDF.",
+    );
+  }
+  return compact;
 }

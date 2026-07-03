@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>e-sig docs — self-hosted PDF e-signature SDK</title>
+<meta name="description" content="Documentation for e-sig: an MIT-licensed, self-hosted PDF e-signature SDK. Render → sign (PKCS#7 / PAdES) → RFC-3161 timestamp → verify → audit, entirely in your own infrastructure.">
+<meta property="og:title" content="e-sig documentation">
+<meta property="og:description" content="Install, quickstart, signing, RFC-3161 timestamps, verification, adapters, React UI, and compliance for the self-hosted e-sig PDF signing SDK.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://docs.e-sig.org">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%8D%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0b0d10; --bg2:#111418; --card:#151a20; --line:#232a33;
+    --fg:#e8edf2; --mut:#93a1b0; --dim:#68757f;
+    --accent:#5b9dff; --accent2:#8affc1; --ink:#e8edf2;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    --sb:280px;
+  }
+  @media (prefers-color-scheme:light){
+    :root{--bg:#fbfcfe;--bg2:#f2f5f9;--card:#ffffff;--line:#e4e9f0;--fg:#141a21;--mut:#54636f;--dim:#8494a0;--accent:#1f6feb;--accent2:#0e9f6e;--ink:#141a21;}
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.65;-webkit-font-smoothing:antialiased;font-size:16px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.9em;background:var(--bg2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+  pre code{background:none;border:0;padding:0;font-size:inherit}
+
+  header{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:color-mix(in srgb,var(--bg) 82%,transparent);border-bottom:1px solid var(--line)}
+  nav.top{display:flex;align-items:center;gap:18px;height:58px;max-width:1240px;margin:0 auto;padding:0 22px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.02em;font-size:18px;color:var(--fg)}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .brand small{font-weight:500;color:var(--mut);font-size:12.5px;border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:2px}
+  nav.top .spacer{flex:1}
+  nav.top a.link{color:var(--mut);font-size:14.5px;font-weight:500}
+  nav.top a.link:hover{color:var(--fg);text-decoration:none}
+  .ghbtn{border:1px solid var(--line);padding:6px 13px;border-radius:8px;color:var(--fg)!important}
+
+  .shell{max-width:1240px;margin:0 auto;padding:0 22px;display:grid;grid-template-columns:var(--sb) 1fr;gap:40px;align-items:start}
+  aside{position:sticky;top:58px;height:calc(100vh - 58px);overflow-y:auto;padding:26px 0 60px}
+  aside .grp{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);font-weight:700;margin:18px 0 7px}
+  aside a{display:block;color:var(--mut);font-size:14px;padding:5px 12px;border-radius:8px;border-left:2px solid transparent}
+  aside a:hover{color:var(--fg);text-decoration:none;background:var(--card)}
+  aside a.active{color:var(--fg);border-left-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);font-weight:600}
+
+  main{min-width:0;padding:32px 0 120px;max-width:820px}
+  main h1{font-size:clamp(30px,5vw,42px);line-height:1.08;letter-spacing:-.03em;margin:0 0 12px;font-weight:800}
+  main h1 .grad{background:linear-gradient(120deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tagline{color:var(--mut);font-size:18px;margin:0 0 26px}
+  section{scroll-margin-top:74px;padding:26px 0;border-top:1px solid var(--line)}
+  section:first-of-type{border-top:0}
+  h2{font-size:clamp(21px,3.2vw,27px);letter-spacing:-.02em;margin:0 0 10px;font-weight:750}
+  h3{font-size:17px;letter-spacing:-.01em;margin:26px 0 8px;font-weight:650}
+  p{margin:0 0 14px;color:var(--fg)}
+  .mut{color:var(--mut)}
+  ul,ol{margin:0 0 14px;padding-left:22px;color:var(--fg)}
+  li{margin:5px 0}
+  li::marker{color:var(--accent)}
+
+  pre{background:#0a0c0f;border:1px solid var(--line);border-radius:12px;padding:18px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.65;margin:0 0 16px;color:#e6edf3}
+  @media (prefers-color-scheme:light){pre{background:#0d1117;color:#e6edf3}}
+
+  .note{border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--card);border-radius:10px;padding:14px 16px;margin:0 0 16px;font-size:14.5px}
+  .note.warn{border-left-color:#e0a94a}
+  .note.ok{border-left-color:var(--accent2)}
+  .note b{color:var(--fg)}
+  .note p:last-child{margin:0}
+
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:0 0 16px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:var(--bg2);color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  tbody tr:last-child td{border-bottom:0}
+  td code{white-space:nowrap}
+  .tblwrap{overflow-x:auto}
+
+  .flow{display:flex;flex-wrap:wrap;gap:7px;align-items:center;font-family:var(--mono);font-size:13.5px;color:var(--mut);margin:0 0 18px}
+  .flow span{background:var(--bg2);border:1px solid var(--line);padding:4px 10px;border-radius:8px;color:var(--fg)}
+  .flow .arw{color:var(--accent);border:0;background:none;padding:0 1px}
+
+  footer{border-top:1px solid var(--line);margin-top:20px;padding:26px 0;color:var(--dim);font-size:13.5px}
+  .disc{margin-top:10px;font-size:12.5px;color:var(--dim)}
+
+  .menutoggle{display:none}
+  @media(max-width:920px){
+    .shell{grid-template-columns:1fr;gap:0}
+    aside{position:fixed;top:58px;left:0;width:280px;background:var(--bg);border-right:1px solid var(--line);padding-left:22px;transform:translateX(-102%);transition:transform .2s;z-index:15}
+    #nav-toggle:checked ~ .shell aside{transform:none}
+    .menutoggle{display:inline-flex;cursor:pointer;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-size:14px}
+    main{padding-top:24px}
+  }
+</style>
+</head>
+<body>
+<input type="checkbox" id="nav-toggle" hidden>
+<header><nav class="top">
+  <label class="menutoggle" for="nav-toggle">☰</label>
+  <a class="brand" href="https://e-sig.org"><span class="dot"></span>e-sig<small>docs</small></a>
+  <span class="spacer"></span>
+  <a class="link" href="https://e-sig.org">Home</a>
+  <a class="link" href="#compliance">Compliance</a>
+  <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+</nav></header>
+
+<div class="shell">
+<aside>
+  <div class="grp">Getting started</div>
+  <a href="#intro">Introduction</a>
+  <a href="#install">Install</a>
+  <a href="#quickstart">Quickstart</a>
+  <div class="grp">Core</div>
+  <a href="#certificates">Certificates &amp; keys</a>
+  <a href="#render">Rendering HTML → PDF</a>
+  <a href="#signing">Signing</a>
+  <a href="#timestamps">Trusted timestamps</a>
+  <a href="#verification">Verification</a>
+  <a href="#orchestrator">signDocument()</a>
+  <div class="grp">Integrations</div>
+  <a href="#adapters">Storage adapters</a>
+  <a href="#react">React UI</a>
+  <div class="grp">Reference</div>
+  <a href="#compliance">Security &amp; compliance</a>
+  <a href="#api">API reference</a>
+</aside>
+
+<main>
+  <h1>e-sig <span class="grad">documentation</span></h1>
+  <p class="tagline">A self-hosted PDF e-signature SDK. Render, cryptographically sign, timestamp, verify, and audit — entirely inside your own infrastructure.</p>
+
+  <section id="intro">
+    <h2>Introduction</h2>
+    <p><strong>e-sig</strong> is an MIT-licensed toolkit for adding real cryptographic PDF signing to your own product. There is no SaaS in the loop: your certificates, your database, your object storage, your audit trail. No metering, no per-document fees.</p>
+    <div class="flow">
+      <span>render</span><span class="arw">→</span>
+      <span>sign</span><span class="arw">→</span>
+      <span>timestamp</span><span class="arw">→</span>
+      <span>verify</span><span class="arw">→</span>
+      <span>audit</span>
+    </div>
+    <p>The suite is three packages plus a Next.js starter:</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Package</th><th>Role</th><th>Runtime</th></tr></thead>
+      <tbody>
+        <tr><td><code>@e-sig/core</code></td><td>The engine — render, cert issuance, PKCS#7/PAdES signing (+ RFC-3161 TSA), verification, and the storage-adapter interfaces.</td><td>Node, stack-agnostic</td></tr>
+        <tr><td><code>@e-sig/supabase</code></td><td>Reference adapters: cert store, audit-log store, PDF storage over Supabase (Postgres + Storage).</td><td>Supabase</td></tr>
+        <tr><td><code>@e-sig/react</code></td><td>UI: draw-to-sign pad, self-sign flow, receipt.</td><td>React 18/19</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note warn">
+      <p><b>Trust vs. validity — read this first.</b> e-sig produces signatures that are cryptographically <em>valid</em> (the math verifies and any edit breaks them), but the default signing cert is <em>self-issued</em>. Stock Adobe Reader shows "validity unknown" until that cert is trusted (import into an org trust store, or plug in an AATL/CA signer). e-sig verifies the signature math and document integrity — it does not, by itself, assert third-party trust. See <a href="#compliance">Security &amp; compliance</a>.</p>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <p>Published to the public npm registry — no auth or registry config needed.</p>
+    <pre><code>npm i @e-sig/core            # engine only
+npm i @e-sig/core @e-sig/supabase @e-sig/react   # full stack</code></pre>
+    <p class="mut">Runtime requirements: Node ≥ 20, ESM. The only crypto dependencies are <code>node-forge</code> and the <code>@signpdf/*</code> packages. HTML→PDF rendering uses <code>puppeteer-core</code> (bring your own Chrome, or <code>@sparticuz/chromium</code> on Lambda).</p>
+  </section>
+
+  <section id="quickstart">
+    <h2>Quickstart</h2>
+    <p>Issue a cert, render an agreement to PDF, sign it, and verify the result:</p>
+    <pre><code>import {
+  generateSelfSignedCert,
+  renderHtmlToPdf,
+  signPdf,
+  verifyPdfSignature,
+} from "@e-sig/core";
+
+// 1. Issue a one-off signing cert (in production, persist + reuse — see below).
+const cert = generateSelfSignedCert({ subjectName: "Acme Corp" });
+
+// 2. Render HTML → unsigned PDF.
+const unsigned = await renderHtmlToPdf({
+  html: `&lt;h1&gt;Service Agreement&lt;/h1&gt;&lt;p&gt;Signed by Jane Doe.&lt;/p&gt;`,
+});
+
+// 3. Sign it (PKCS#7 detached, ETSI.CAdES.detached subfilter).
+const { signedPdf } = await signPdf({
+  pdf: unsigned,
+  keyPem: cert.keyPem,
+  certPem: cert.certPem,
+  reason: "Service Agreement acceptance",
+  location: "https://acme.example",
+  contactInfo: "jane@example.com",
+  name: "Jane Doe",
+});
+
+// 4. Verify cryptographically.
+const v = verifyPdfSignature(signedPdf);
+console.log(v.ok, v.digestValid, v.signatureValid, v.signerCommonName);
+// → true, true, true, "E-sig (Acme Corp)"</code></pre>
+    <div class="note ok"><p><b>ok === true</b> only when structure, document digest, <em>and</em> the RSA signature all pass. A single flipped byte under the signature makes <code>ok=false</code> and <code>digestValid=false</code>.</p></div>
+  </section>
+
+  <section id="certificates">
+    <h2>Certificates &amp; keys</h2>
+    <p><code>generateSelfSignedCert()</code> produces an RSA-2048 X.509 cert suitable for PKCS#7 detached PDF signing (128-bit CSPRNG serial, <code>digitalSignature</code> + <code>nonRepudiation</code> key usage, <code>emailProtection</code> EKU, subject key identifier).</p>
+    <pre><code>const { keyPem, certPem, fingerprint, notBefore, notAfter } =
+  generateSelfSignedCert({ subjectName: "Acme Corp" });</code></pre>
+    <p class="mut"><code>subjectName</code> is ASCII-only — node-forge miscounts DER byte length for non-ASCII subject values on round-trip, so the guard rejects them up front.</p>
+    <h3>Encrypting keys at rest</h3>
+    <p>Wrap the private key with AES-256-GCM (scrypt-derived from a passphrase) before persisting it, so a database leak doesn't hand over signing authority:</p>
+    <pre><code>import { encryptKeyPem, decryptKeyPem } from "@e-sig/core";
+
+const blob = encryptKeyPem(keyPem, passphrase);   // Uint8Array, opaque
+// ... store blob ...
+const keyPemBack = decryptKeyPem(blob, passphrase);</code></pre>
+    <p class="mut">The passphrase must be ≥ 24 characters (high-entropy env secret). Layout is <code>version | salt | iv | authTag | ciphertext</code>; a wrong passphrase or any tampering surfaces as a GCM auth-tag error.</p>
+    <h3>Cert lifecycle per tenant</h3>
+    <p><code>ensureActiveCert()</code> caches one active cert per tenant over a <code>CertStore</code> you supply, generating on first use and reusing thereafter (no churn):</p>
+    <pre><code>import { ensureActiveCert } from "@e-sig/core";
+
+const { cert, certPem, keyPem } = await ensureActiveCert({
+  store, tenantId: "acme", subjectName: "Acme Corp", passphrase,
+});</code></pre>
+  </section>
+
+  <section id="render">
+    <h2>Rendering HTML → PDF</h2>
+    <p><code>renderHtmlToPdf()</code> turns a document template into a PDF with headless Chromium. It auto-detects Lambda (<code>@sparticuz/chromium</code>) vs local/system Chrome.</p>
+    <pre><code>const pdf = await renderHtmlToPdf({
+  html,
+  format: "Letter",              // any puppeteer PaperFormat
+  printBackground: true,
+  javascriptEnabled: false,      // default — see note
+  timeoutMs: 30_000,
+});</code></pre>
+    <div class="note warn"><p><b>JavaScript is disabled by default.</b> Document templates are static HTML; executing interpolated/untrusted HTML with scripting on is an SSRF / data-exfiltration surface. Only set <code>javascriptEnabled: true</code> if your templates genuinely need in-page scripting.</p></div>
+  </section>
+
+  <section id="signing">
+    <h2>Signing</h2>
+    <p><code>signPdf()</code> injects a signature placeholder and embeds a PKCS#7 detached signature under the <strong>ETSI.CAdES.detached</strong> subfilter, with the ESS <strong>signing-certificate-v2</strong> attribute (RFC 5035) binding the signer cert into the signed data.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>pdf</code></td><td>Unsigned PDF bytes (Buffer/Uint8Array).</td></tr>
+        <tr><td><code>keyPem</code>, <code>certPem</code></td><td>Signer private key + certificate (PEM).</td></tr>
+        <tr><td><code>name</code>, <code>reason</code>, <code>location</code>, <code>contactInfo</code></td><td>Signature dictionary metadata shown in the PDF signature panel.</td></tr>
+        <tr><td><code>signingTime</code></td><td>Optional signing time (<code>Date</code>).</td></tr>
+        <tr><td><code>tsa</code></td><td>Optional RFC-3161 timestamp transport → upgrades to CAdES-T. See below.</td></tr>
+        <tr><td><code>padesStrict</code></td><td><code>true</code> = strict PAdES B-B: also drops the PAdES-forbidden <code>signing-time</code> signed attribute.</td></tr>
+        <tr><td><code>signatureLength</code></td><td>Override the <code>/Contents</code> placeholder budget (bytes).</td></tr>
+      </tbody>
+    </table></div>
+    <pre><code>const { signedPdf } = await signPdf({
+  pdf, keyPem, certPem,
+  name: "Jane Doe",
+  reason: "DUA acceptance",
+  location: "acme.example",
+  contactInfo: "legal@acme.example",
+  padesStrict: true,       // strict PAdES B-B
+});</code></pre>
+    <p>The result opens cleanly in Preview / Adobe Reader with a valid signature panel; any post-signing edit invalidates the signature.</p>
+  </section>
+
+  <section id="timestamps">
+    <h2>Trusted timestamps (CAdES-T)</h2>
+    <p>Pass a <code>tsa</code> transport to embed an RFC-3161 TimeStampToken, upgrading the signature from CAdES-B to CAdES-T. The token is added as the <code>id-aa-timeStampToken</code> unsigned attribute over the SignerInfo signature value.</p>
+    <p>e-sig performs <strong>no network egress</strong> — you inject the POST, so the package stays dependency-free. The TSA only ever receives a <strong>SHA-256 hash</strong>, never the document:</p>
+    <pre><code>import type { TsaTransport } from "@e-sig/core";
+
+const tsa: TsaTransport = {
+  required: false,  // false = degrade to CAdES-B on TSA failure; true = throw
+  fetch: async (reqDerBytes) => {
+    const res = await fetch("http://timestamp.digicert.com", {
+      method: "POST",
+      headers: { "Content-Type": "application/timestamp-query" },
+      body: reqDerBytes,
+    });
+    return new Uint8Array(await res.arrayBuffer());
+  },
+};
+
+const { signedPdf, timestamped, tsaError } = await signPdf({
+  pdf, keyPem, certPem, name: "Acme", reason: "acceptance",
+  location: "", contactInfo: "", tsa,
+});</code></pre>
+    <ul>
+      <li><b>Budget</b>: when <code>tsa</code> is supplied and <code>signatureLength</code> is omitted, the <code>/Contents</code> budget defaults to 30720 (vs 8192) to fit the token + TSA chain. Overflow is rejected, never truncated.</li>
+      <li><b>Degradation</b>: <code>required: false</code> yields a valid CAdES-B signature and sets <code>tsaError</code>; <code>required: true</code> rethrows.</li>
+      <li><b>Verification</b> enforces the RFC-3161 §2.4.2 binding: the token's <code>messageImprint</code> must equal <code>sha256(SignerInfo.signature)</code>, else <code>ok:false</code>.</li>
+    </ul>
+  </section>
+
+  <section id="verification">
+    <h2>Verification</h2>
+    <p><code>verifyPdfStructure()</code> (aliased <code>verifyPdfSignature()</code>) is fully cryptographic: it recomputes SHA-256 over the ByteRange-covered bytes and compares to the signed <code>messageDigest</code>, and RSA-verifies the signature over the DER-encoded signed attributes.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>ok</code></td><td><code>true</code> only when structure + digest + signature (+ TSA binding, if present) all pass.</td></tr>
+        <tr><td><code>digestValid</code></td><td>Recomputed document digest matches the signed <code>messageDigest</code>.</td></tr>
+        <tr><td><code>signatureValid</code></td><td>RSA signature over the signed attributes verifies against the signer cert.</td></tr>
+        <tr><td><code>signerCommonName</code></td><td>Signer cert CN.</td></tr>
+        <tr><td><code>byteRange</code></td><td>The <code>/ByteRange</code> array the signature covers.</td></tr>
+        <tr><td><code>timestamped</code>, <code>timestampTime</code>, <code>tsaCommonName</code></td><td>Present when a valid RFC-3161 token is embedded.</td></tr>
+      </tbody>
+    </table></div>
+    <pre><code>const v = verifyPdfStructure(signedPdf);
+if (!v.ok) throw new Error("signature invalid");
+// v.digestValid, v.signatureValid, v.signerCommonName,
+// v.timestamped, v.timestampTime, v.tsaCommonName</code></pre>
+  </section>
+
+  <section id="orchestrator">
+    <h2>signDocument() — end-to-end</h2>
+    <p>The optional orchestrator ties the pieces together over your stores: ensure the tenant cert, render, sign (optional TSA), persist the signed PDF, and write an audit-log entry — one call.</p>
+    <pre><code>import { signDocument } from "@e-sig/core";
+
+const result = await signDocument({
+  stores: { cert: certStore, audit: auditStore, storage: pdfStore },
+  tenantId: "acme",
+  subjectName: "Acme Corp",
+  passphrase,
+  html,
+  signer: { name: "Jane Doe", reason: "acceptance", contactInfo: "jane@acme.example" },
+  tsa,                       // optional
+});
+// result.signedPdf, result.storage, result.audit, result.verification</code></pre>
+    <p class="mut">You bring the three store implementations; <code>@e-sig/supabase</code> is a ready reference set.</p>
+  </section>
+
+  <section id="adapters">
+    <h2>Storage adapters</h2>
+    <p>e-sig keeps persistence, auth, and UI out of the core. You implement three small interfaces (or use <code>@e-sig/supabase</code>):</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Interface</th><th>Responsibility</th></tr></thead>
+      <tbody>
+        <tr><td><code>CertStore</code></td><td>Persist + look up per-tenant certs (encrypted keys). Methods: <code>findActive</code>, <code>insert</code>, <code>deactivate</code>, <code>findExpiring</code>.</td></tr>
+        <tr><td><code>AuditLogStore</code></td><td>Append-only signing audit records (<code>insert</code>) for ESIGN/UETA evidence.</td></tr>
+        <tr><td><code>PdfStorageStore</code></td><td>Store the signed PDF bytes (<code>upload</code>) and return a locator.</td></tr>
+      </tbody>
+    </table></div>
+    <pre><code>import {
+  SupabaseCertStore,
+  SupabaseAuditLogStore,
+  SupabasePdfStorageStore,
+} from "@e-sig/supabase";</code></pre>
+    <p class="mut">Apply <code>migrations/0001_esig_self_contained.sql</code> (tenant-keyed <code>esig_cert</code> + <code>esig_audit_log</code> tables) and replace the <code>esig_tenant_member()</code> stub with your membership check.</p>
+  </section>
+
+  <section id="react">
+    <h2>React UI</h2>
+    <p><code>@e-sig/react</code> ships the signature-capture surface so you don't build it from scratch:</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Component</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><code>SignaturePadCanvas</code></td><td>Draw-to-sign canvas → PNG data URL.</td></tr>
+        <tr><td><code>SelfSignFlow</code></td><td>Full self-sign flow (review → sign → submit).</td></tr>
+        <tr><td><code>SelfSignedReceipt</code></td><td>Post-sign receipt with verification details.</td></tr>
+      </tbody>
+    </table></div>
+    <pre><code>import { SelfSignFlow } from "@e-sig/react";
+
+&lt;SelfSignFlow
+  documentHtml={html}
+  onSigned={(receipt) =&gt; { /* persist / redirect */ }}
+/&gt;</code></pre>
+    <p class="mut">Signature images are validated as image data URLs before they reach the PDF template.</p>
+  </section>
+
+  <section id="compliance">
+    <h2>Security &amp; compliance</h2>
+    <h3>What e-sig gives you</h3>
+    <ul>
+      <li><b>Integrity</b>: the signed ByteRange is hashed and RSA-signed; any later edit fails verification.</li>
+      <li><b>Attribution</b>: the signer cert + signature dictionary (name/reason/time) bind who signed and why.</li>
+      <li><b>PAdES</b>: ETSI.CAdES.detached subfilter with ESS signing-certificate-v2; <code>padesStrict</code> for B-B.</li>
+      <li><b>CAdES-T</b>: optional RFC-3161 timestamp proves the signature existed at a point in time.</li>
+      <li><b>Evidence</b>: an append-only audit log per signing event for ESIGN / UETA / 21 CFR §11 support.</li>
+    </ul>
+    <h3>The self-signed trust model</h3>
+    <p>By default the signing cert is self-issued. That makes signatures cryptographically valid but not automatically <em>trusted</em> by third-party readers — Adobe shows "validity unknown" until the cert (or its issuer) is in a trust store. Two ways to establish trust:</p>
+    <ol>
+      <li><b>Closed ecosystem</b>: import your org cert into the relevant trust stores. Sufficient for internal / B2B flows where both sides know the issuer.</li>
+      <li><b>Public trust</b>: plug an AATL/CA-issued signer (or a qualified TSP) into the same <code>signPdf</code> path — the code is signer-agnostic.</li>
+    </ol>
+    <div class="note warn"><p><b>Not legal advice.</b> ESIGN/UETA validity depends on intent to sign, attribution, record integrity, and retention — process concerns e-sig helps evidence but does not adjudicate. Confirm your specific compliance requirements with counsel.</p></div>
+  </section>
+
+  <section id="api">
+    <h2>API reference</h2>
+    <p>Everything exported from <code>@e-sig/core</code>:</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Export</th><th>Kind</th></tr></thead>
+      <tbody>
+        <tr><td><code>generateSelfSignedCert</code>, <code>encryptKeyPem</code>, <code>decryptKeyPem</code></td><td>Certs &amp; keys</td></tr>
+        <tr><td><code>ensureActiveCert</code></td><td>Per-tenant cert lifecycle</td></tr>
+        <tr><td><code>renderHtmlToPdf</code></td><td>HTML → PDF</td></tr>
+        <tr><td><code>signPdf</code>, <code>PemSigner</code></td><td>Signing</td></tr>
+        <tr><td><code>verifyPdfStructure</code> / <code>verifyPdfSignature</code></td><td>Verification</td></tr>
+        <tr><td><code>buildTimeStampReq</code>, <code>parseTimeStampResp</code>, <code>parseTstInfo</code>, <code>OID_TIMESTAMP_TOKEN</code></td><td>RFC-3161 timestamps</td></tr>
+        <tr><td><code>signDocument</code></td><td>End-to-end orchestrator</td></tr>
+        <tr><td><code>CertStore</code>, <code>AuditLogStore</code>, <code>PdfStorageStore</code></td><td>Adapter interfaces (types)</td></tr>
+        <tr><td><code>Signer</code>, <code>SigningCertPem</code>, <code>SignedPdfMetadata</code>, <code>TsaTransport</code></td><td>Shared types</td></tr>
+      </tbody>
+    </table></div>
+    <p class="mut">Full consumer guide: <code>packages/esig-core/CONSUMING.md</code> in the repo.</p>
+  </section>
+
+  <footer>
+    <div>e-sig · MIT-licensed · <a href="https://github.com/vmvtech/esig-suite">github.com/vmvtech/esig-suite</a> · <a href="https://e-sig.org">e-sig.org</a></div>
+    <div class="disc">e-sig provides cryptographic tooling, not legal advice. Signature validity under ESIGN, UETA, eIDAS, or 21 CFR Part 11 depends on your process and trust configuration. Verify requirements for your jurisdiction and use case.</div>
+  </footer>
+</main>
+</div>
+
+<script>
+// Scrollspy: highlight the active section in the sidebar.
+(function () {
+  var links = Array.prototype.slice.call(document.querySelectorAll('aside a[href^="#"]'));
+  var map = {};
+  links.forEach(function (a) { map[a.getAttribute('href').slice(1)] = a; });
+  var sections = links.map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); }).filter(Boolean);
+  var obs = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        links.forEach(function (l) { l.classList.remove('active'); });
+        var a = map[e.target.id];
+        if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });
+  sections.forEach(function (s) { obs.observe(s); });
+  // Close the mobile drawer when a link is tapped.
+  links.forEach(function (a) { a.addEventListener('click', function () {
+    var t = document.getElementById('nav-toggle'); if (t) t.checked = false;
+  }); });
+})();
+</script>
+</body>
+</html>

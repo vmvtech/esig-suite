@@ -2,7 +2,7 @@
 //
 // Server component: load the document, then render the client SelfSignFlow.
 // On a successful sign it re-renders to show the receipt. This is the minimal
-// wiring of @vmvtech/esig-react against the /api/esign/sign route.
+// wiring of @e-sig/react against the /api/esign/sign route.
 
 import { createClient } from "@/lib/supabase/server";
 import { SignClient } from "./sign-client";

@@ -3,7 +3,7 @@
 // examples/nextjs-supabase — client wrapper around SelfSignFlow / SelfSignedReceipt.
 
 import { useRouter } from "next/navigation";
-import { SelfSignFlow, SelfSignedReceipt } from "@vmvtech/esig-react";
+import { SelfSignFlow, SelfSignedReceipt } from "@e-sig/react";
 
 type Doc = {
   id: string;

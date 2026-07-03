@@ -1,4 +1,4 @@
-// @vmvtech/esig-react — SelfSignedReceipt
+// @e-sig/react — SelfSignedReceipt
 //
 // Receipt shown after a document is signed via the self-contained pipeline.
 // Surfaces the signed-PDF download, the signature image, and cryptographic +
