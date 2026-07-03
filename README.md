@@ -19,6 +19,18 @@ Extracted from the Opendelphi production pipeline (live since 2026-05).
 Plus **`migrations/`** (a `tenant_id`-keyed schema bundle) and a **Next.js +
 Supabase starter** under `examples/nextjs-supabase`.
 
+## Quickstart (60 seconds, no services)
+
+Issue a cert → sign a PDF → verify → detect tampering, with nothing but Node:
+
+```bash
+git clone https://github.com/vmvtech/esig-suite && cd esig-suite
+npm install && npm run build && npm run quickstart
+```
+
+Or copy [`examples/quickstart`](examples/quickstart) into your own project —
+one file, one dependency (`@e-sig/core`), no database or browser required.
+
 ## Quickstart (Next.js + Supabase)
 
 ```bash

@@ -3,7 +3,7 @@
 // CertStore backed by a Postgres table (default `org_signing_certs`) via
 // supabase-js. Matches the schema in migrations/0001_esig_self_contained.sql.
 // The tenant key column is `tenant_id` in the bundled migration; pass
-// `tenantColumn` if yours differs (Opendelphi uses `org_id`).
+// `tenantColumn` if yours differs (e.g. an existing `org_id` column).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CertStore, StoredCert, GeneratedCert } from "@e-sig/core";

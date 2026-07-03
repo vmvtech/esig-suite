@@ -164,7 +164,7 @@ npm i @e-sig/core @e-sig/supabase @e-sig/react   # full stack</code></pre>
 
   <section id="quickstart">
     <h2>Quickstart</h2>
-    <p>Issue a cert, render an agreement to PDF, sign it, and verify the result:</p>
+    <p>Issue a cert, render an agreement to PDF, sign it, and verify the result. Rendering needs a local Chrome; for a zero-dependency runnable version that signs an existing PDF (no browser), copy <a href="https://github.com/vmvtech/esig-suite/tree/main/examples/quickstart">examples/quickstart</a>.</p>
     <pre><code>import {
   generateSelfSignedCert,
   renderHtmlToPdf,
@@ -315,15 +315,18 @@ if (!v.ok) throw new Error("signature invalid");
     <pre><code>import { signDocument } from "@e-sig/core";
 
 const result = await signDocument({
-  stores: { cert: certStore, audit: auditStore, storage: pdfStore },
+  html,                      // fully-rendered, signature-embedded HTML
   tenantId: "acme",
   subjectName: "Acme Corp",
-  passphrase,
-  html,
-  signer: { name: "Jane Doe", reason: "acceptance", contactInfo: "jane@acme.example" },
-  tsa,                       // optional
+  passphrase,                // key-at-rest passphrase (≥ 24 chars)
+  signer: { name: "Jane Doe", email: "jane@acme.example" },
+  certStore, auditStore, storage,
+  pathPrefix: "acme/doc-42",
+  reason: "Service Agreement acceptance",
+  tsa,                       // optional → CAdES-T
 });
-// result.signedPdf, result.storage, result.audit, result.verification</code></pre>
+// result.signedPdfUrl, result.auditLogId, result.certId,
+// result.certFingerprint, result.timestamped</code></pre>
     <p class="mut">You bring the three store implementations; <code>@e-sig/supabase</code> is a ready reference set.</p>
   </section>
 
@@ -343,7 +346,7 @@ const result = await signDocument({
   SupabaseAuditLogStore,
   SupabasePdfStorageStore,
 } from "@e-sig/supabase";</code></pre>
-    <p class="mut">Apply <code>migrations/0001_esig_self_contained.sql</code> (tenant-keyed <code>esig_cert</code> + <code>esig_audit_log</code> tables) and replace the <code>esig_tenant_member()</code> stub with your membership check.</p>
+    <p class="mut">Apply <code>migrations/0001_esig_self_contained.sql</code> (tenant-keyed <code>org_signing_certs</code> + <code>esig_audit_log</code> tables) and replace the <code>esig_tenant_member()</code> stub with your membership check.</p>
   </section>
 
   <section id="react">

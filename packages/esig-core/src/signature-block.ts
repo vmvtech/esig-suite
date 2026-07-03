@@ -52,7 +52,7 @@ export function renderSignatureBlocksHtml(opts: {
   </style>
   ${rows}
   <p class="audit-footer">
-    Cryptographically sealed via the Opendelphi ${platform}${url ? ` (${escapeHtml(url)})` : ""}.
+    Cryptographically sealed via the ${escapeHtml(platform)}${url ? ` (${escapeHtml(url)})` : ""}.
     Any post-signing modification invalidates the signature panel in Adobe Reader / Preview.
   </p>
 </div>`;

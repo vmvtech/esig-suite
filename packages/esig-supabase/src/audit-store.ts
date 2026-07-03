@@ -1,7 +1,7 @@
 // @e-sig/supabase — SupabaseAuditLogStore
 //
 // Append-only AuditLogStore backed by a Postgres table (default `esig_audit_log`)
-// via supabase-js. Tenant key column defaults to `tenant_id` (Opendelphi: `org_id`).
+// via supabase-js. Tenant key column defaults to `tenant_id` (override for e.g. `org_id`).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuditLogStore, AuditLogEntry, AuditLogRow } from "@e-sig/core";

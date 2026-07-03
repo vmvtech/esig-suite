@@ -4,8 +4,8 @@
 
 Please report suspected vulnerabilities privately via
 [GitHub Security Advisories](https://github.com/vmvtech/esig-suite/security/advisories/new)
-(preferred) or by email to **security@e-sig.org** (replace with your real
-contact before publishing). Do not open a public issue for a security report.
+(preferred) or by email to **security@e-sig.org**. Do not open a public issue
+for a security report.
 
 We aim to acknowledge within 3 business days and to ship a fix or mitigation
 plan within 30 days for confirmed issues. Please give us a reasonable
