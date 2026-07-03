@@ -1,10 +1,10 @@
-# @vmvtech/esig-supabase
+# @e-sig/supabase
 
-Supabase reference adapters for [`@vmvtech/esig-core`](https://github.com/vmvtech/esig-suite/tree/main/packages/esig-core) —
+Supabase reference adapters for [`@e-sig/core`](https://github.com/vmvtech/esig-suite/tree/main/packages/esig-core) —
 self-contained PDF e-signature persistence on Supabase Postgres + Storage.
 
 ```bash
-npm i @vmvtech/esig-core @vmvtech/esig-supabase @supabase/supabase-js
+npm i @e-sig/core @e-sig/supabase @supabase/supabase-js
 ```
 
 Apply `migrations/0001_esig_self_contained.sql` (in the suite root) first.
@@ -15,7 +15,7 @@ import {
   SupabaseCertStore,
   SupabaseAuditLogStore,
   SupabasePdfStorageStore,
-} from "@vmvtech/esig-supabase";
+} from "@e-sig/supabase";
 
 const service = createClient(url, serviceRoleKey); // service-role: bypasses RLS for cert/audit/storage writes
 
@@ -33,8 +33,8 @@ new SupabaseAuditLogStore(service, { tenantColumn: "org_id" });
 new SupabasePdfStorageStore(service, { bucket: "signed-documents" });
 ```
 
-Pass these to `signDocument()` from `@vmvtech/esig-core`. The stores handle the
+Pass these to `signDocument()` from `@e-sig/core`. The stores handle the
 Postgres `\x`-hex bytea round-trip for the encrypted key and return the storage
 **path** (private buckets have no public URL — serve via an RLS-gated download route).
 
-Peer deps: `@vmvtech/esig-core`, `@supabase/supabase-js`. License: MIT.
+Peer deps: `@e-sig/core`, `@supabase/supabase-js`. License: MIT.

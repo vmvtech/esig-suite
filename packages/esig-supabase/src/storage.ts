@@ -1,4 +1,4 @@
-// @vmvtech/esig-supabase — SupabasePdfStorageStore
+// @e-sig/supabase — SupabasePdfStorageStore
 //
 // PdfStorageStore backed by a private Supabase Storage bucket (default
 // `signed-documents`). Returns the storage PATH as the `url` — private buckets
@@ -7,7 +7,7 @@
 // service-role client (bucket write policy is service-role-only).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { PdfStorageStore } from "@vmvtech/esig-core";
+import type { PdfStorageStore } from "@e-sig/core";
 
 export interface SupabasePdfStorageStoreOptions {
   /** Bucket name. Default `signed-documents`. */

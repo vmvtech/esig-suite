@@ -26,7 +26,7 @@ self-contained signing pipeline: `org_signing_certs`, the append-only
    $$;
    ```
 2. **Wire `tenant_id`** to your org/tenant key. The tables key on `tenant_id`;
-   `@vmvtech/esig-supabase` defaults to that column. If your column is different
+   `@e-sig/supabase` defaults to that column. If your column is different
    (Opendelphi uses `org_id`), pass `{ tenantColumn: 'org_id' }` to the store
    constructors instead of renaming.
 

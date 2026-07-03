@@ -32,6 +32,11 @@ import type { TsaTransport } from "./types.js";
 
 const asn1 = forge.asn1;
 
+/** id-aa-signingCertificateV2 (ESS, RFC 5035) — binds the signer cert into the signed data. */
+const OID_SIGNING_CERT_V2 = "1.2.840.113549.1.9.16.2.47";
+/** id-signingTime (PKCS#9) — PAdES forbids this signed attribute (time belongs in /M). */
+const OID_SIGNING_TIME = "1.2.840.113549.1.9.5";
+
 export interface PemSignerInput {
   keyPem: string;
   certPem: string;
@@ -42,19 +47,28 @@ export interface PemSignerInput {
    * performs egress (the TSA only ever receives a SHA-256 hash, never PHI).
    */
   tsa?: TsaTransport;
+  /**
+   * Strict PAdES baseline (ETSI EN 319 142-1) mode. When true, the CMS
+   * `signing-time` signed attribute is removed (PAdES requires the claimed time
+   * to live in the signature dictionary /M entry, not the CMS). Default false
+   * keeps `signing-time` for backward compatibility with existing deployments;
+   * the ESS `signing-certificate-v2` attribute is added in BOTH modes.
+   */
+  padesStrict?: boolean;
 }
 
 export class PemSigner extends Signer {
   private privateKey: forge.pki.rsa.PrivateKey;
   private certificate: forge.pki.Certificate;
   private tsa?: TsaTransport;
+  private padesStrict: boolean;
 
   /** True after the most recent sign() embedded a TimeStampToken (CAdES-T). */
   public lastTimestamped = false;
   /** Set when a non-required TSA call failed (signature falls back to CAdES-B). */
   public lastTsaError?: string;
 
-  constructor({ keyPem, certPem, tsa }: PemSignerInput) {
+  constructor({ keyPem, certPem, tsa, padesStrict }: PemSignerInput) {
     super();
     if (!keyPem.includes("-----BEGIN")) {
       throw new Error("PemSigner: keyPem must be PEM-encoded");
@@ -65,6 +79,7 @@ export class PemSigner extends Signer {
     this.privateKey = forge.pki.privateKeyFromPem(keyPem) as forge.pki.rsa.PrivateKey;
     this.certificate = forge.pki.certificateFromPem(certPem);
     this.tsa = tsa;
+    this.padesStrict = padesStrict ?? false;
   }
 
   async sign(pdfBuffer: Buffer, signingTime?: Date): Promise<Buffer> {
@@ -92,21 +107,21 @@ export class PemSigner extends Signer {
     });
     p7.sign({ detached: true });
 
-    // No timestamp requested → original CAdES-B path, byte-identical behavior.
+    // Add the ESS signing-certificate-v2 signed attribute (binds THIS cert into
+    // the signed data — required for PAdES/CAdES baseline) and re-sign the
+    // modified signed-attributes set. forge cannot encode this attribute in its
+    // authenticatedAttributes list, so we splice it in and recompute the RSA
+    // signature over the exact bytes. Returns the NEW signatureValue.
+    const p7Asn1 = p7.toAsn1();
+    const sigValue = this.addSigningCertV2AndResign(p7Asn1);
+
+    // No timestamp requested → CAdES-B (now cert-bound).
     if (!this.tsa) {
-      return Buffer.from(forge.asn1.toDer(p7.toAsn1()).getBytes(), "binary");
+      return Buffer.from(forge.asn1.toDer(p7Asn1).getBytes(), "binary");
     }
 
-    // CAdES-T: request a TimeStampToken over the SignerInfo signatureValue.
-    const p7Asn1 = p7.toAsn1();
+    // CAdES-T: request a TimeStampToken over the (final) SignerInfo signatureValue.
     try {
-      // node-forge sets `.signature` on each signer object after sign().
-      const signers = (p7 as unknown as { signers: Array<{ signature?: string }> }).signers;
-      const sigValue = signers?.[0]?.signature;
-      if (!sigValue) {
-        throw new Error("forge produced no SignerInfo signatureValue");
-      }
-
       const reqDer = buildTimeStampReq(sigValue);
       const respBytes = await this.tsa.fetch(derStringToUint8(reqDer));
       const { token } = parseTimeStampResp(uint8ToDerString(respBytes));
@@ -141,6 +156,131 @@ export class PemSigner extends Signer {
 
     return Buffer.from(forge.asn1.toDer(p7Asn1).getBytes(), "binary");
   }
+
+  /**
+   * Insert the ESS signing-certificate-v2 signed attribute into the first
+   * SignerInfo's signed-attributes set and recompute the RSA signature over the
+   * modified set. In `padesStrict` mode the PAdES-forbidden signing-time
+   * attribute is also removed. Returns the new signatureValue (forge binary
+   * string) so the caller can timestamp the FINAL signature.
+   */
+  private addSigningCertV2AndResign(p7Asn1: forge.asn1.Asn1): string {
+    const signerInfo = firstSignerInfoSeq(p7Asn1);
+    const siChildren = signerInfo.value as forge.asn1.Asn1[];
+
+    // signedAttrs = the [0] IMPLICIT context node; encryptedDigest = the
+    // UNIVERSAL OCTET STRING (the signature to overwrite).
+    let signedAttrs: forge.asn1.Asn1 | undefined;
+    let sigOctet: forge.asn1.Asn1 | undefined;
+    for (const child of siChildren) {
+      if (child.tagClass === asn1.Class.CONTEXT_SPECIFIC && child.type === 0) {
+        signedAttrs = child;
+      }
+      if (child.tagClass === asn1.Class.UNIVERSAL && child.type === asn1.Type.OCTETSTRING) {
+        sigOctet = child;
+      }
+    }
+    if (!signedAttrs || !Array.isArray(signedAttrs.value) || !sigOctet) {
+      throw new Error("PemSigner: could not locate signed attributes to add signing-certificate-v2");
+    }
+
+    let attrs = signedAttrs.value as forge.asn1.Asn1[];
+    if (this.padesStrict) {
+      attrs = attrs.filter((a) => {
+        const oidNode = Array.isArray(a.value) ? (a.value[0] as forge.asn1.Asn1) : undefined;
+        return !(oidNode && oidNode.type === asn1.Type.OID && safeOid(oidNode.value as string) === OID_SIGNING_TIME);
+      });
+    }
+    attrs.push(buildSigningCertV2Attr(this.certificate));
+    signedAttrs.value = attrs;
+
+    // Re-sign: RSA over DER(signedAttrs re-tagged as SET OF), SHA-256.
+    const setDer = asn1.toDer(
+      asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SET, true, attrs),
+    ).getBytes();
+    const md = forge.md.sha256.create();
+    md.update(setDer);
+    const newSig = this.privateKey.sign(md); // RSASSA-PKCS1-V1_5 (forge default)
+    sigOctet.value = newSig;
+    return newSig;
+  }
+}
+
+/**
+ * Build the ESS signing-certificate-v2 signed attribute (RFC 5035) binding the
+ * signer certificate into the signed data:
+ *   Attribute { OID id-aa-signingCertificateV2, SET { SigningCertificateV2 } }
+ *   SigningCertificateV2 ::= SEQUENCE { certs SEQUENCE OF ESSCertIDv2 }
+ *   ESSCertIDv2 ::= SEQUENCE { certHash OCTET STRING, issuerSerial IssuerSerial }
+ * hashAlgorithm defaults to SHA-256 and is omitted (DEFAULT).
+ */
+function buildSigningCertV2Attr(cert: forge.pki.Certificate): forge.asn1.Asn1 {
+  const certDer = asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes();
+  const md = forge.md.sha256.create();
+  md.update(certDer);
+  const certHash = md.digest().getBytes();
+
+  // IssuerSerial ::= SEQUENCE { issuer GeneralNames, serialNumber INTEGER }
+  const issuerName = forge.pki.distinguishedNameToAsn1(cert.issuer);
+  const generalName = asn1.create(asn1.Class.CONTEXT_SPECIFIC, 4, true, [issuerName]); // directoryName [4]
+  const generalNames = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [generalName]);
+  let serialBytes = forge.util.hexToBytes(cert.serialNumber);
+  if (serialBytes.length > 0 && (serialBytes.charCodeAt(0) & 0x80) !== 0) {
+    serialBytes = "\x00" + serialBytes; // keep the INTEGER positive
+  }
+  const serial = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.INTEGER, false, serialBytes);
+  const issuerSerial = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [generalNames, serial]);
+
+  const essCertId = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
+    asn1.create(asn1.Class.UNIVERSAL, asn1.Type.OCTETSTRING, false, certHash),
+    issuerSerial,
+  ]);
+  const certsSeq = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [essCertId]);
+  const signingCertV2 = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [certsSeq]);
+
+  return asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
+    asn1.create(asn1.Class.UNIVERSAL, asn1.Type.OID, false, asn1.oidToDer(OID_SIGNING_CERT_V2).getBytes()),
+    asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SET, true, [signingCertV2]),
+  ]);
+}
+
+/** OID decode that never throws (returns "" on malformed input). */
+function safeOid(der: string): string {
+  try {
+    return asn1.derToOid(der);
+  } catch {
+    return "";
+  }
+}
+
+/** Locate the first SignerInfo SEQUENCE inside a PKCS#7 SignedData ASN.1 tree. */
+function firstSignerInfoSeq(contentInfo: forge.asn1.Asn1): forge.asn1.Asn1 {
+  if (!Array.isArray(contentInfo.value)) {
+    throw new Error("PemSigner: ContentInfo has no children");
+  }
+  let signedData: forge.asn1.Asn1 | undefined;
+  for (const child of contentInfo.value as forge.asn1.Asn1[]) {
+    if (child.tagClass === asn1.Class.CONTEXT_SPECIFIC && Array.isArray(child.value)) {
+      signedData = child.value[0] as forge.asn1.Asn1;
+    }
+  }
+  if (!signedData || !Array.isArray(signedData.value)) {
+    throw new Error("PemSigner: SignedData not found");
+  }
+  let signerInfos: forge.asn1.Asn1 | undefined;
+  for (const child of signedData.value as forge.asn1.Asn1[]) {
+    if (child.tagClass === asn1.Class.UNIVERSAL && child.type === asn1.Type.SET && Array.isArray(child.value)) {
+      signerInfos = child; // last UNIVERSAL SET = signerInfos
+    }
+  }
+  if (!signerInfos || !Array.isArray(signerInfos.value) || signerInfos.value.length === 0) {
+    throw new Error("PemSigner: signerInfos SET not found");
+  }
+  const si = signerInfos.value[0] as forge.asn1.Asn1;
+  if (!Array.isArray(si.value)) {
+    throw new Error("PemSigner: SignerInfo SEQUENCE malformed");
+  }
+  return si;
 }
 
 /**

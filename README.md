@@ -12,9 +12,9 @@ Extracted from the Opendelphi production pipeline (live since 2026-05).
 
 | Package | What | Stack |
 |---|---|---|
-| **`@vmvtech/esig-core`** | The engine: `renderHtmlToPdf` → `signPdf` (+TSA) → `verifyPdfStructure`, self-signed cert issuance, the `CertStore`/`AuditLogStore`/`PdfStorageStore` interfaces, `ensureActiveCert`, and the end-to-end `signDocument()` orchestrator. | Node, stack-agnostic |
-| **`@vmvtech/esig-supabase`** | Reference adapters: `SupabaseCertStore`, `SupabaseAuditLogStore`, `SupabasePdfStorageStore`. | Supabase (Postgres + Storage) |
-| **`@vmvtech/esig-react`** | UI: `SignaturePadCanvas` (draw-to-sign), `SelfSignFlow`, `SelfSignedReceipt`. | React 18/19 |
+| **`@e-sig/core`** | The engine: `renderHtmlToPdf` → `signPdf` (+TSA) → `verifyPdfStructure`, self-signed cert issuance, the `CertStore`/`AuditLogStore`/`PdfStorageStore` interfaces, `ensureActiveCert`, and the end-to-end `signDocument()` orchestrator. | Node, stack-agnostic |
+| **`@e-sig/supabase`** | Reference adapters: `SupabaseCertStore`, `SupabaseAuditLogStore`, `SupabasePdfStorageStore`. | Supabase (Postgres + Storage) |
+| **`@e-sig/react`** | UI: `SignaturePadCanvas` (draw-to-sign), `SelfSignFlow`, `SelfSignedReceipt`. | React 18/19 |
 
 Plus **`migrations/`** (a `tenant_id`-keyed schema bundle) and a **Next.js +
 Supabase starter** under `examples/nextjs-supabase`.
@@ -22,10 +22,8 @@ Supabase starter** under `examples/nextjs-supabase`.
 ## Quickstart (Next.js + Supabase)
 
 ```bash
-npm i @vmvtech/esig-core @vmvtech/esig-supabase @vmvtech/esig-react
+npm i @e-sig/core @e-sig/supabase @e-sig/react
 ```
-(Add `@vmvtech:registry=https://npm.pkg.github.com` to a project-local `.npmrc`
-+ a GitHub token with `read:packages`.)
 
 1. **Migrate** — apply `migrations/0001_esig_self_contained.sql` and replace the
    `esig_tenant_member()` stub with your tenant-membership check. (See
@@ -33,8 +31,8 @@ npm i @vmvtech/esig-core @vmvtech/esig-supabase @vmvtech/esig-react
 2. **Wire the sign route** — load your document, compose the signature-embedded
    HTML, call `signDocument()` over the three Supabase stores, persist the result:
    ```ts
-   import { signDocument } from "@vmvtech/esig-core";
-   import { SupabaseCertStore, SupabaseAuditLogStore, SupabasePdfStorageStore } from "@vmvtech/esig-supabase";
+   import { signDocument } from "@e-sig/core";
+   import { SupabaseCertStore, SupabaseAuditLogStore, SupabasePdfStorageStore } from "@e-sig/supabase";
 
    const result = await signDocument({
      html, signatureImage: { bytes, contentType: "image/png" },
@@ -56,7 +54,7 @@ The full wiring is in `examples/nextjs-supabase/`.
 ## Bring your own stack
 
 `signDocument()` depends only on the three interfaces in
-`@vmvtech/esig-core/adapters` — implement them against any DB/storage (the
+`@e-sig/core/adapters` — implement them against any DB/storage (the
 Supabase package is just the reference). The React components take a `signEndpoint`
 + callbacks and have no Next/Supabase coupling. The migration is `tenant_id`-keyed
 with a single tenant-access predicate to replace.

@@ -1,6 +1,6 @@
 // examples/nextjs-supabase — POST /api/esign/sign
 //
-// Reference wiring of @vmvtech/esig-core + @vmvtech/esig-supabase. Replace the
+// Reference wiring of @e-sig/core + @e-sig/supabase. Replace the
 // `documents` table + auth/authorize bits with your own domain. The generic
 // signDocument() orchestrator does render→cert→sign→store→audit; you only
 // supply the HTML, signer, tenant, stores, and persist the result on your row.
@@ -10,12 +10,12 @@
 // src/lib/supabase/{server,service-role}.ts for a reference.
 
 import { NextRequest, NextResponse } from "next/server";
-import { signDocument } from "@vmvtech/esig-core";
+import { signDocument } from "@e-sig/core";
 import {
   SupabaseCertStore,
   SupabaseAuditLogStore,
   SupabasePdfStorageStore,
-} from "@vmvtech/esig-supabase";
+} from "@e-sig/supabase";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceRoleClient } from "@/lib/supabase/service-role";
 

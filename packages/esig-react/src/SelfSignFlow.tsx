@@ -1,6 +1,6 @@
 "use client";
 
-// @vmvtech/esig-react — SelfSignFlow
+// @e-sig/react — SelfSignFlow
 //
 // Self-contained signing flow: optional document `preview` + SignaturePadCanvas
 // + consent checkbox + Sign button. POSTs { document_id, signature_image_data_url }

@@ -21,6 +21,15 @@ export interface RenderHtmlToPdfOptions {
   executablePath?: string;
   /** Override puppeteer launch args. Default: --no-sandbox --disable-setuid-sandbox. */
   launchArgs?: string[];
+  /**
+   * Enable JavaScript execution in the rendered document. Default FALSE:
+   * document templates are static HTML, and executing untrusted/interpolated
+   * HTML with JS enabled is an SSRF / data-exfiltration surface. Set true only
+   * if your templates genuinely need in-page scripting.
+   */
+  javascriptEnabled?: boolean;
+  /** Max ms to wait for content + subresources to load. Default 30000. */
+  timeoutMs?: number;
 }
 
 async function resolveExecutablePath(opts: RenderHtmlToPdfOptions): Promise<string> {
@@ -63,11 +72,27 @@ async function resolveLaunchArgs(opts: RenderHtmlToPdfOptions): Promise<string[]
 export async function renderHtmlToPdf(opts: RenderHtmlToPdfOptions): Promise<Buffer> {
   const executablePath = await resolveExecutablePath(opts);
   const args = await resolveLaunchArgs(opts);
+  const jsEnabled = opts.javascriptEnabled ?? false;
+  const timeout = opts.timeoutMs ?? 30_000;
   let browser: Browser | undefined;
   try {
     browser = await puppeteer.launch({ args, executablePath, headless: true });
     const page = await browser.newPage();
-    await page.setContent(opts.html, { waitUntil: "domcontentloaded" });
+    if (!jsEnabled) await page.setJavaScriptEnabled(false);
+    // "load" (not domcontentloaded) so embedded images and logos finish loading
+    // before the snapshot — otherwise page.pdf() can capture a blank signature
+    // image. The load event waits for all referenced subresources.
+    await page.setContent(opts.html, { waitUntil: "load", timeout });
+    if (jsEnabled) {
+      // Belt-and-suspenders: wait for web fonts to settle (only meaningful when
+      // scripting is enabled; reached via globalThis to avoid a DOM-lib dep).
+      await page
+        .evaluate(() => {
+          const d = (globalThis as { document?: { fonts?: { ready?: Promise<unknown> } } }).document;
+          return d?.fonts?.ready;
+        })
+        .catch(() => undefined);
+    }
     const pdfBuf = await page.pdf({
       format: opts.format ?? "Letter",
       margin: opts.margin ?? {

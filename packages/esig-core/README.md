@@ -1,4 +1,4 @@
-# `@opendelphi/esig-core` — Portable In-Platform E-Signature
+# `@e-sig/core` — Portable In-Platform E-Signature
 
 > Self-contained PKCS#7 PDF signing — no SaaS, no metering, no per-doc fees.
 > Battle-tested in production at [opendelphi.org](https://opendelphi.org).
@@ -11,10 +11,12 @@ This directory is the **portable core** of the Opendelphi e-signature pipeline. 
 
 Given an HTML document and a person who wants to sign it, this library:
 
-1. Renders the HTML to a PDF (headless Chromium via `puppeteer-core`).
+1. Renders the HTML to a PDF (headless Chromium via `puppeteer-core`; scripting disabled by default).
 2. Generates or reuses a self-signed RSA-2048 X.509 cert for the signing tenant.
-3. Embeds a PKCS#7 detached signature into the PDF using the modern **ETSI.CAdES.detached** subfilter (PAdES B-B baseline).
-4. Produces a PDF that opens cleanly in Preview / Adobe Reader with a valid signature panel — any post-signing edit invalidates the signature.
+3. Embeds a PKCS#7 detached signature under the **ETSI.CAdES.detached** subfilter, with the ESS **signing-certificate-v2** attribute binding the signer cert into the signed data. Pass `padesStrict: true` for strict **PAdES B-B** (also drops the PAdES-forbidden `signing-time` attribute).
+4. Produces a PDF that opens cleanly in Preview / Adobe Reader with a valid signature panel — any post-signing edit invalidates the signature. `verifyPdfSignature()` checks this cryptographically (recomputes the digest over the signed ByteRange and RSA-verifies the signature).
+
+> **Trust vs. validity.** The signature is cryptographically *valid*, but the cert is *self-issued* — stock Adobe Reader shows "validity unknown" until the cert is trusted (org trust-store import, or plug in an AATL/CA signer). This verifies the signature math and integrity, not third-party trust. See the compliance notes below.
 
 That's the **whole thing**. It's ~600 lines of TypeScript with zero runtime dependencies on Supabase, Next.js, or any SaaS.
 
@@ -95,7 +97,7 @@ import {
   renderHtmlToPdf,
   signPdf,
   verifyPdfStructure,
-} from "./core";
+} from "@e-sig/core";
 
 // 1. Issue a one-off cert (in real life, persist + reuse).
 const cert = generateSelfSignedCert({ subjectName: "Acme Corp" });
@@ -116,10 +118,12 @@ const { signedPdf } = await signPdf({
   name: "Jane Doe",
 });
 
-// 4. Verify the result (optional — sanity-check before persistence).
+// 4. Verify the result cryptographically (also exported as verifyPdfSignature).
+//    ok === true only when structure + document digest + RSA signature all pass;
+//    a single flipped byte under the signature makes ok=false / digestValid=false.
 const verify = verifyPdfStructure(signedPdf);
-console.log(verify.ok, verify.signerCommonName);
-// → true, "E-sig (Acme Corp)"
+console.log(verify.ok, verify.digestValid, verify.signatureValid, verify.signerCommonName);
+// → true, true, true, "E-sig (Acme Corp)"
 
 // 5. Persist + serve. Up to you.
 require("fs").writeFileSync("./signed.pdf", signedPdf);
@@ -141,7 +145,7 @@ stays dependency-free. The TSA only ever receives a **SHA-256 hash**, never the
 document or any PHI:
 
 ```ts
-import type { TsaTransport } from "@vmvtech/esig-core";
+import type { TsaTransport } from "@e-sig/core";
 
 const tsa: TsaTransport = {
   required: false, // false = degrade to CAdES-B on TSA failure; true = throw

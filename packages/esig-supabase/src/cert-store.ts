@@ -1,4 +1,4 @@
-// @vmvtech/esig-supabase — SupabaseCertStore
+// @e-sig/supabase — SupabaseCertStore
 //
 // CertStore backed by a Postgres table (default `org_signing_certs`) via
 // supabase-js. Matches the schema in migrations/0001_esig_self_contained.sql.
@@ -6,7 +6,7 @@
 // `tenantColumn` if yours differs (Opendelphi uses `org_id`).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CertStore, StoredCert, GeneratedCert } from "@vmvtech/esig-core";
+import type { CertStore, StoredCert, GeneratedCert } from "@e-sig/core";
 
 interface RawCertRow {
   id: string;

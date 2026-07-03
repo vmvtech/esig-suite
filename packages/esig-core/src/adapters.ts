@@ -5,7 +5,7 @@
 // required (CertStore + AuditLogStore); PdfStorageStore is optional but lets the
 // `signDocument()` orchestrator persist the signed PDF for you.
 //
-// A Supabase reference implementation ships as `@vmvtech/esig-supabase`.
+// A Supabase reference implementation ships as `@e-sig/supabase`.
 
 import type { GeneratedCert } from "./cert-issuer.js";
 

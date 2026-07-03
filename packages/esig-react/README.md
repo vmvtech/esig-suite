@@ -1,14 +1,14 @@
-# @vmvtech/esig-react
+# @e-sig/react
 
 Framework-agnostic React UI for the self-contained PDF e-sign flow. No Next.js /
 Supabase / design-system coupling — pass a `signEndpoint` + callbacks.
 
 ```bash
-npm i @vmvtech/esig-react react react-dom
+npm i @e-sig/react react react-dom
 ```
 
 ```tsx
-import { SelfSignFlow, SelfSignedReceipt, SignaturePadCanvas } from "@vmvtech/esig-react";
+import { SelfSignFlow, SelfSignedReceipt, SignaturePadCanvas } from "@e-sig/react";
 
 <SelfSignFlow
   documentId={doc.id}

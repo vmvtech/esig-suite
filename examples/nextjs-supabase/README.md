@@ -17,10 +17,8 @@ them into a Next.js (App Router) project that already has a Supabase SSR client
 ## Setup
 1. Install:
    ```bash
-   npm i @vmvtech/esig-core @vmvtech/esig-supabase @vmvtech/esig-react
+   npm i @e-sig/core @e-sig/supabase @e-sig/react
    ```
-   (Add a project-local `.npmrc` with `@vmvtech:registry=https://npm.pkg.github.com`
-   and a GitHub token with `read:packages`.)
 2. Apply `../../migrations/0001_esig_self_contained.sql` to your Supabase DB, then
    **replace the `esig_tenant_member()` stub** with your tenant-membership check.
 3. Create a demo `documents` table:

@@ -1,4 +1,4 @@
-// scripts/smoke.mjs — Chrome-free runtime smoke against the BUILT @vmvtech/esig-core.
+// scripts/smoke.mjs — Chrome-free runtime smoke against the BUILT @e-sig/core.
 //
 // Exercises the moved/added code paths without needing a browser (renderHtmlToPdf
 // is the only Chrome-dependent piece — that path is exercised by the starter's
@@ -20,7 +20,7 @@ import {
   verifyPdfStructure,
   generateSelfSignedCert,
   encryptKeyPem,
-} from "@vmvtech/esig-core";
+} from "@e-sig/core";
 
 const here = dirname(fileURLToPath(import.meta.url));
 let passed = 0;
@@ -29,7 +29,7 @@ const ok = (name) => {
   console.log(`  ✓ ${name}`);
 };
 
-// ---- In-memory CertStore (implements the @vmvtech/esig-core CertStore iface) ----
+// ---- In-memory CertStore (implements the @e-sig/core CertStore iface) ----
 function memoryCertStore() {
   const rows = [];
   return {
@@ -92,14 +92,25 @@ async function main() {
   });
   assert.ok(signedPdf.length > unsigned.length, "signed PDF is larger than the unsigned input");
   const verdict = verifyPdfStructure(signedPdf);
-  assert.ok(verdict, "verifyPdfStructure returned a verdict");
-  ok(`signPdf → verifyPdfStructure round-trip (signed ${signedPdf.length} bytes)`);
+  assert.equal(verdict.ok, true, "signature verifies");
+  assert.equal(verdict.digestValid, true, "document digest matches");
+  assert.equal(verdict.signatureValid, true, "RSA signature verifies");
+  ok(`signPdf → verifyPdfStructure round-trip (signed ${signedPdf.length} bytes, cryptographically valid)`);
+
+  // 2b. Tamper detection: flip a byte inside the signed region → verify must fail.
+  const [ra, rb] = verdict.byteRange;
+  const tampered = Buffer.from(signedPdf);
+  tampered[ra + Math.min(80, rb - 1)] ^= 0xff;
+  const tv = verifyPdfStructure(tampered);
+  assert.equal(tv.ok, false, "tampered PDF is rejected");
+  assert.equal(tv.digestValid, false, "tampered digest is detected");
+  ok("tampered PDF is rejected (digest mismatch)");
 
   // 3. signDocument orchestration with fakes + a stubbed renderer (avoids Chrome).
   //    We can't easily stub the built module's internal renderHtmlToPdf from here,
   //    so this asserts the orchestrator is exported + typed; the full render→sign
   //    path is exercised by the Next.js starter's dev-server verify.
-  const mod = await import("@vmvtech/esig-core");
+  const mod = await import("@e-sig/core");
   assert.equal(typeof mod.signDocument, "function", "signDocument is exported");
   ok("signDocument orchestrator is exported");
 

@@ -1,11 +1,11 @@
-// @vmvtech/esig-core
+// @e-sig/core
 //
 // Portable, self-contained PDF e-signature engine. Zero database / storage /
 // auth / framework assumptions: render HTML→PDF, issue a self-signed org cert,
 // PKCS#7-detached sign (optional RFC-3161 TSA → CAdES-T), verify.
 //
 // - Bring-your-own persistence via the CertStore / AuditLogStore / PdfStorageStore
-//   interfaces (./adapters). A Supabase reference impl ships as @vmvtech/esig-supabase.
+//   interfaces (./adapters). A Supabase reference impl ships as @e-sig/supabase.
 // - `signDocument()` is the optional end-to-end orchestrator over those stores.
 
 // ---- Crypto primitives ----
@@ -19,7 +19,7 @@ export {
 } from "./cert-issuer.js";
 export { renderHtmlToPdf, type RenderHtmlToPdfOptions } from "./render-pdf.js";
 export { signPdf, type SignPdfInput, type SignPdfResult } from "./sign-pdf.js";
-export { verifyPdfStructure, type VerifyResult } from "./verify-pdf.js";
+export { verifyPdfStructure, verifyPdfSignature, type VerifyResult } from "./verify-pdf.js";
 export {
   buildTimeStampReq,
   parseTimeStampResp,
@@ -33,7 +33,7 @@ export type {
   TsaTransport,
 } from "./types.js";
 
-// ---- Persistence interfaces (bring-your-own; see @vmvtech/esig-supabase) ----
+// ---- Persistence interfaces (bring-your-own; see @e-sig/supabase) ----
 export type {
   StoredCert,
   CertStore,

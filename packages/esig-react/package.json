@@ -1,5 +1,5 @@
 {
-  "name": "@vmvtech/esig-react",
+  "name": "@e-sig/react",
   "version": "0.1.1",
   "description": "React UI for self-contained PDF e-signing — draw-to-sign canvas, sign flow, and signed-receipt components. Framework-agnostic (no Next/Supabase coupling).",
   "license": "MIT",
@@ -57,7 +57,7 @@
     "typescript": "^5.4.0"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   }
 }

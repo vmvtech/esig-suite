@@ -1,6 +1,6 @@
 "use client";
 
-// @vmvtech/esig-react — SignaturePadCanvas
+// @e-sig/react — SignaturePadCanvas
 //
 // Wraps szimek/signature_pad in a React component with an imperative handle
 // (getImageDataURL + clear + isEmpty). Mouse + touch + pen input. Retina-aware.

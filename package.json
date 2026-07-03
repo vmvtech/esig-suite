@@ -2,15 +2,16 @@
   "name": "esig-suite",
   "version": "0.0.0",
   "private": true,
-  "description": "Self-contained PDF e-signature SDK suite: @vmvtech/esig-core (engine + interfaces + signDocument), @vmvtech/esig-supabase (adapters), @vmvtech/esig-react (UI) + a Next.js starter.",
+  "description": "Self-contained PDF e-signature SDK suite: @e-sig/core (engine + interfaces + signDocument), @e-sig/supabase (adapters), @e-sig/react (UI) + a Next.js starter.",
   "license": "MIT",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @vmvtech/esig-core && npm run build -w @vmvtech/esig-supabase && npm run build -w @vmvtech/esig-react",
-    "clean": "npm run clean -w @vmvtech/esig-core && npm run clean -w @vmvtech/esig-supabase && npm run clean -w @vmvtech/esig-react",
+    "build": "npm run build -w @e-sig/core && npm run build -w @e-sig/supabase && npm run build -w @e-sig/react",
+    "clean": "npm run clean -w @e-sig/core && npm run clean -w @e-sig/supabase && npm run clean -w @e-sig/react",
     "smoke": "node scripts/smoke.mjs",
+    "test": "npm run test -w @e-sig/core",
     "typecheck": "npm run build"
   },
   "devDependencies": {

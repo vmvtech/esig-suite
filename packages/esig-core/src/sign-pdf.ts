@@ -50,6 +50,13 @@ export interface SignPdfInput {
    * never PHI.
    */
   tsa?: TsaTransport;
+  /**
+   * Strict PAdES baseline mode: drop the PAdES-forbidden `signing-time` signed
+   * attribute (claimed time then comes from the TSA / verifier context). The ESS
+   * `signing-certificate-v2` attribute is always added regardless. Default false
+   * (keeps `signing-time` for backward compatibility).
+   */
+  padesStrict?: boolean;
 }
 
 export interface SignPdfResult {
@@ -80,6 +87,7 @@ export async function signPdf(input: SignPdfInput): Promise<SignPdfResult> {
     keyPem: input.keyPem,
     certPem: input.certPem,
     tsa: input.tsa,
+    padesStrict: input.padesStrict,
   });
   const signed = await signpdfInstance.sign(withPlaceholder, signer, input.signingTime);
 
