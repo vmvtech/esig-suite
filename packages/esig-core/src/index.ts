@@ -47,6 +47,25 @@ export type {
 // ---- Cert lifecycle (stack-agnostic; interface-only) ----
 export { ensureActiveCert, type EnsureCertResult } from "./cert-lifecycle.js";
 
+// ---- Multi-signer envelopes + tokenized signing links ----
+export {
+  createEnvelope,
+  resolveSigningToken,
+  recordSignature,
+  declineEnvelope,
+  voidEnvelope,
+  composeEnvelopeHtml,
+  EnvelopeError,
+  type Envelope,
+  type EnvelopeSigner,
+  type EnvelopeStatus,
+  type EnvelopeSignerStatus,
+  type EnvelopeStore,
+  type CreateEnvelopeInput,
+  type CreateEnvelopeResult,
+  type TokenResolution,
+} from "./envelope.js";
+
 // ---- End-to-end orchestrator ----
 export {
   signDocument,

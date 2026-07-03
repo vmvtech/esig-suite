@@ -65,7 +65,12 @@ export type EsigAuditAction =
   | "pdf.rendered"
   | "pdf.signed"
   | "pdf.verified"
-  | "consent.recorded";
+  | "consent.recorded"
+  | "envelope.created"
+  | "envelope.signed"
+  | "envelope.declined"
+  | "envelope.voided"
+  | "envelope.completed";
 
 export interface AuditLogEntry {
   tenantId: string;
