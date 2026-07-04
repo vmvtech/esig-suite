@@ -3,8 +3,10 @@
 // @e-sig/react — SelfSignFlow
 //
 // Self-contained signing flow: optional document `preview` + SignaturePadCanvas
-// + consent checkbox + Sign button. POSTs { document_id, signature_image_data_url }
-// to `signEndpoint` and calls `onSigned(result)` on success. No framework
+// + consent checkbox + Sign button. POSTs { document_id, signature_image_data_url,
+// consent_given, consent_text_shown } to `signEndpoint` — consent_text_shown is
+// the exact string rendered next to the checkbox, so the server can audit what
+// the signer actually saw — and calls `onSigned(result)` on success. No framework
 // coupling (no next/navigation) and no design-system dependency — Tailwind
 // classes are used but degrade gracefully.
 
@@ -27,10 +29,14 @@ export interface SelfSignFlowProps {
   signer: { name: string; email: string };
   /** Rendered above the signing card (your document/agreement preview). */
   preview?: ReactNode;
-  /** Sign endpoint. Default "/api/esign/sign". POSTs { document_id, signature_image_data_url }. */
+  /**
+   * Sign endpoint. Default "/api/esign/sign". POSTs
+   * { document_id, signature_image_data_url, consent_given, consent_text_shown }.
+   */
   signEndpoint?: string;
   /** Extra fields merged into the POST body. */
   extraBody?: Record<string, unknown>;
+  /** Consent statement rendered next to the checkbox; sent verbatim as `consent_text_shown`. */
   consentText?: string;
   title?: string;
   description?: string;
@@ -84,6 +90,9 @@ export function SelfSignFlow({
         body: JSON.stringify({
           document_id: documentId,
           signature_image_data_url: dataUrl,
+          // Consent evidence: the exact text rendered to the signer (ESIGN/UETA).
+          consent_given: true,
+          consent_text_shown: consentText,
           ...(extraBody ?? {}),
         }),
       });
@@ -101,7 +110,7 @@ export function SelfSignFlow({
     } finally {
       setPending(false);
     }
-  }, [documentId, signer.name, signer.email, agreed, signEndpoint, extraBody, onSigned]);
+  }, [documentId, signer.name, signer.email, agreed, consentText, signEndpoint, extraBody, onSigned]);
 
   return (
     <div className="space-y-6">
