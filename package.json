@@ -13,7 +13,7 @@
     "clean": "npm run clean -w @e-sig/core && npm run clean -w @e-sig/supabase && npm run clean -w @e-sig/react",
     "smoke": "node scripts/smoke.mjs",
     "quickstart": "npm start -w esig-quickstart",
-    "test": "npm run test -w @e-sig/core",
+    "test": "npm run test -w @e-sig/core && npm run test -w @e-sig/supabase",
     "typecheck": "npm run build"
   },
   "devDependencies": {

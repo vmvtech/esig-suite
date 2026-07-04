@@ -118,6 +118,7 @@
   <a href="#timestamps">Trusted timestamps</a>
   <a href="#verification">Verification</a>
   <a href="#orchestrator">signDocument()</a>
+  <a href="#envelopes">Envelopes (multi-signer)</a>
   <div class="grp">Integrations</div>
   <a href="#adapters">Storage adapters</a>
   <a href="#react">React UI</a>
@@ -330,6 +331,41 @@ const result = await signDocument({
     <p class="mut">You bring the three store implementations; <code>@e-sig/supabase</code> is a ready reference set.</p>
   </section>
 
+  <section id="envelopes">
+    <h2>Envelopes — multi-signer + signing links</h2>
+    <p>An <b>envelope</b> tracks N signers over one document. Each signer gets an opaque single-use <b>signing token</b> (32-byte CSPRNG) minted at creation and returned exactly once — only its SHA-256 hash is persisted, so a leaked store cannot forge signing links. Signing order is a 1-based integer: equal order signs in parallel, lower orders gate higher ones. A decline voids the envelope.</p>
+    <pre><code>import {
+  createEnvelope, resolveSigningToken, recordSignature,
+  composeEnvelopeHtml, signDocument,
+} from "@e-sig/core";
+
+// 1. Create — returns each signer's raw token ONCE. Email them as links.
+const { envelope, signingTokens } = await createEnvelope({
+  store,                                  // your EnvelopeStore (or FsEnvelopeStore)
+  tenantId: "acme",
+  title: "Master Service Agreement",
+  html: agreementHtml,
+  signers: [
+    { name: "Ada Lovelace",  email: "ada@acme.example",  roleLabel: "CEO",     order: 1 },
+    { name: "Grace Hopper",  email: "grace@acme.example", roleLabel: "Witness", order: 2 },
+  ],
+  expiresAt: new Date(Date.now() + 14 * 864e5),
+});
+
+// 2. Signing surface: resolve the token from the link…
+const res = await resolveSigningToken({ store, token });
+// res.status: "ok" | "not_your_turn" | "already_signed" | "expired" | "voided" | "completed" | "invalid"
+
+// 3. …record the drawn signature (single-use; order-gated).
+const updated = await recordSignature({ store, token, signatureImageDataUrl });
+
+// 4. When updated.status === "completed": compose + apply the cryptographic seal.
+const finalHtml = composeEnvelopeHtml(updated, { platformLabel: "Acme sign" });
+await signDocument({ html: finalHtml, /* stores, tenant, passphrase, … */ });</code></pre>
+    <div class="note"><p><b>One seal, not N.</b> Signatures are collected as drawn images per signer; the completed envelope receives a single PKCS#7 seal over the composed document. Sequential <em>PDF</em> re-signing (one CMS signature per signer) is deliberately out of scope — the signer/verifier pair handles a single <code>/ByteRange</code>.</p></div>
+    <p class="mut">Persistence is one small <code>EnvelopeStore</code> interface (<code>insert</code>, <code>update</code>, <code>findById</code>, <code>findByTokenHash</code>). A filesystem implementation ships in <code>@e-sig/core/fs</code>.</p>
+  </section>
+
   <section id="adapters">
     <h2>Storage adapters</h2>
     <p>e-sig keeps persistence, auth, and UI out of the core. You implement three small interfaces (or use <code>@e-sig/supabase</code>):</p>
@@ -341,12 +377,21 @@ const result = await signDocument({
         <tr><td><code>PdfStorageStore</code></td><td>Store the signed PDF bytes (<code>upload</code>) and return a locator.</td></tr>
       </tbody>
     </table></div>
-    <pre><code>import {
+    <pre><code>// Postgres + Storage (multi-tenant production)
+import {
   SupabaseCertStore,
   SupabaseAuditLogStore,
   SupabasePdfStorageStore,
-} from "@e-sig/supabase";</code></pre>
-    <p class="mut">Apply <code>migrations/0001_esig_self_contained.sql</code> (tenant-keyed <code>org_signing_certs</code> + <code>esig_audit_log</code> tables) and replace the <code>esig_tenant_member()</code> stub with your membership check.</p>
+} from "@e-sig/supabase";
+
+// …or a bare directory (dev, demos, CLIs, single-node) — no services at all:
+import {
+  FsCertStore,
+  FsAuditLogStore,     // append-only NDJSON
+  FsPdfStorageStore,
+  FsEnvelopeStore,
+} from "@e-sig/core/fs";</code></pre>
+    <p class="mut">For Supabase: apply <code>migrations/0001_esig_self_contained.sql</code> (tenant-keyed <code>org_signing_certs</code> + <code>esig_audit_log</code> tables) and replace the <code>esig_tenant_member()</code> stub with your membership check. The fs adapters are single-process (atomic-replace JSON state) — reach for Supabase (or your own implementation) when multiple processes sign concurrently.</p>
   </section>
 
   <section id="react">
@@ -401,7 +446,9 @@ const result = await signDocument({
         <tr><td><code>verifyPdfStructure</code> / <code>verifyPdfSignature</code></td><td>Verification</td></tr>
         <tr><td><code>buildTimeStampReq</code>, <code>parseTimeStampResp</code>, <code>parseTstInfo</code>, <code>OID_TIMESTAMP_TOKEN</code></td><td>RFC-3161 timestamps</td></tr>
         <tr><td><code>signDocument</code></td><td>End-to-end orchestrator</td></tr>
-        <tr><td><code>CertStore</code>, <code>AuditLogStore</code>, <code>PdfStorageStore</code></td><td>Adapter interfaces (types)</td></tr>
+        <tr><td><code>createEnvelope</code>, <code>resolveSigningToken</code>, <code>recordSignature</code>, <code>declineEnvelope</code>, <code>voidEnvelope</code>, <code>composeEnvelopeHtml</code>, <code>EnvelopeError</code></td><td>Multi-signer envelopes</td></tr>
+        <tr><td><code>CertStore</code>, <code>AuditLogStore</code>, <code>PdfStorageStore</code>, <code>EnvelopeStore</code></td><td>Adapter interfaces (types)</td></tr>
+        <tr><td><code>FsCertStore</code>, <code>FsAuditLogStore</code>, <code>FsPdfStorageStore</code>, <code>FsEnvelopeStore</code></td><td>Filesystem adapters (<code>@e-sig/core/fs</code>)</td></tr>
         <tr><td><code>Signer</code>, <code>SigningCertPem</code>, <code>SignedPdfMetadata</code>, <code>TsaTransport</code></td><td>Shared types</td></tr>
       </tbody>
     </table></div>

@@ -12,7 +12,7 @@ Extracted from the Opendelphi production pipeline (live since 2026-05).
 
 | Package | What | Stack |
 |---|---|---|
-| **`@e-sig/core`** | The engine: `renderHtmlToPdf` → `signPdf` (+TSA) → `verifyPdfStructure`, self-signed cert issuance, the `CertStore`/`AuditLogStore`/`PdfStorageStore` interfaces, `ensureActiveCert`, and the end-to-end `signDocument()` orchestrator. | Node, stack-agnostic |
+| **`@e-sig/core`** | The engine: `renderHtmlToPdf` → `signPdf` (+TSA) → `verifyPdfSignature`, self-signed cert issuance, multi-signer **envelopes** with single-use tokenized signing links, the `CertStore`/`AuditLogStore`/`PdfStorageStore`/`EnvelopeStore` interfaces, filesystem adapters (`@e-sig/core/fs`), `ensureActiveCert`, and the end-to-end `signDocument()` orchestrator. | Node, stack-agnostic |
 | **`@e-sig/supabase`** | Reference adapters: `SupabaseCertStore`, `SupabaseAuditLogStore`, `SupabasePdfStorageStore`. | Supabase (Postgres + Storage) |
 | **`@e-sig/react`** | UI: `SignaturePadCanvas` (draw-to-sign), `SelfSignFlow`, `SelfSignedReceipt`. | React 18/19 |
 

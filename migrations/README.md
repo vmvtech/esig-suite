@@ -4,14 +4,24 @@
 self-contained signing pipeline: `org_signing_certs`, the append-only
 `esig_audit_log`, and a private `signed-documents` Supabase Storage bucket.
 
+`0002_esig_audit_hashchain.sql` makes the audit log tamper-evident: per-tenant
+`seq` + SHA-256 hash chain computed by a `BEFORE INSERT` trigger, hard
+UPDATE/DELETE/TRUNCATE guards (they fire even for `service_role`, which
+bypasses RLS), a backfill of existing rows in `(created_at, id)` order, and a
+relaxed action CHECK admitting `envelope.*` / `verify.*` actions. Verify a
+tenant's chain from JS with `verifyAuditChain()` from `@e-sig/supabase`.
+
 ## Apply it
 
-- **Supabase:** copy into `supabase/migrations/<timestamp>_esig_self_contained.sql`
-  and `supabase db push` (or `supabase db reset` locally). The Storage section
-  uses `storage.buckets` / `storage.objects`, which exist on Supabase.
-- **Plain Postgres:** `psql "$DATABASE_URL" -f 0001_esig_self_contained.sql`.
-  Drop the storage section and implement your own `PdfStorageStore` if you
-  aren't on Supabase Storage.
+- **Supabase:** copy each file into
+  `supabase/migrations/<timestamp>_<name>.sql` (0001 before 0002) and
+  `supabase db push` (or `supabase db reset` locally). The Storage section of
+  0001 uses `storage.buckets` / `storage.objects`, which exist on Supabase.
+- **Plain Postgres:** `psql -1 "$DATABASE_URL" -f 0001_esig_self_contained.sql`
+  then `psql -1 "$DATABASE_URL" -f 0002_esig_audit_hashchain.sql` (`-1` wraps
+  the run in one transaction — apply 0002 in a low-write window so the backfill
+  and `SET NOT NULL` see a quiet table). Drop the storage section of 0001 and
+  implement your own `PdfStorageStore` if you aren't on Supabase Storage.
 
 ## You MUST do two things
 
@@ -27,7 +37,7 @@ self-contained signing pipeline: `org_signing_certs`, the append-only
    ```
 2. **Wire `tenant_id`** to your org/tenant key. The tables key on `tenant_id`;
    `@e-sig/supabase` defaults to that column. If your column is different
-   (Opendelphi uses `org_id`), pass `{ tenantColumn: 'org_id' }` to the store
+   (e.g. an existing `org_id`), pass `{ tenantColumn: 'org_id' }` to the store
    constructors instead of renaming.
 
 ## Notes

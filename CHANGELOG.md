@@ -5,6 +5,37 @@ All notable changes to the `@e-sig/*` packages. This project follows
 
 ## [Unreleased]
 
+### `@e-sig/core` 0.5.0 — envelopes, fs adapters, verifier fix
+
+**Multi-signer envelopes + tokenized signing links.** New storage-agnostic
+envelope model (`createEnvelope`, `resolveSigningToken`, `recordSignature`,
+`declineEnvelope`, `voidEnvelope`, `composeEnvelopeHtml`, `EnvelopeStore`
+interface): N ordered signers over one document, each addressed by an opaque
+single-use 32-byte token returned exactly once — only SHA-256 hashes are
+persisted. Equal order signs in parallel; lower orders gate higher ones; a
+decline voids the envelope; expiry applies lazily. Completion composes all
+signature blocks for the single cryptographic seal via `signDocument()`.
+Sequential *PDF* re-signing remains deliberately out of scope (single
+/ByteRange signer+verifier) and is documented as such. Audit vocabulary gains
+`envelope.*` actions.
+
+**Filesystem adapters (`@e-sig/core/fs`).** `FsCertStore`, `FsAuditLogStore`
+(append-only NDJSON), `FsPdfStorageStore` (traversal-guarded), and
+`FsEnvelopeStore` run the entire pipeline on a bare directory — no Supabase,
+no database. Single-process semantics, atomic-replace JSON state.
+
+**Verifier fix (false rejection).** `/Contents` placeholder padding is now
+stripped by slicing at the DER's TLV-declared length instead of trimming
+trailing `00` hex pairs, which truncated any PKCS#7 blob whose final byte was
+legitimately `0x00` (~1/256 of RSA signatures) and rejected valid documents.
+Could never false-accept — a truncated DER never parses.
+
+**Signature block.** The audit footer no longer hardcodes an origin-project
+name, and the caller-supplied `platformLabel` is HTML-escaped like every other
+interpolation.
+
+## 0.4.0 — 2026-07-03
+
 ### `@e-sig/core` 0.4.0 — cryptographic hardening
 
 Security- and correctness-focused release. Signature output changed (an extra
