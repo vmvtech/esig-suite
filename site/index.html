@@ -129,10 +129,11 @@
   <div class="grid" style="margin-top:26px">
     <div class="card"><h3><span class="ic">🔏</span>Real cryptography</h3><p>PKCS#7 detached signatures under the ETSI.CAdES.detached subfilter, with the ESS signing-certificate-v2 binding. Verification recomputes the document digest and checks the RSA signature — a single altered byte fails.</p></div>
     <div class="card"><h3><span class="ic">⏱️</span>Trusted timestamps</h3><p>Optional RFC-3161 timestamps upgrade a signature to CAdES-T. The package performs no egress — the TSA only ever receives a SHA-256 hash, never your document.</p></div>
-    <div class="card"><h3><span class="ic">🧩</span>Bring your own stack</h3><p>Pluggable CertStore / AuditLogStore / storage interfaces. A Supabase reference adapter ships in the box; implement the three interfaces against any database or object store.</p></div>
-    <div class="card"><h3><span class="ic">🖊️</span>Drop-in signing UI</h3><p>React components — a draw-to-sign canvas, a consent-gated sign flow, and a signed receipt — with no framework coupling.</p></div>
+    <div class="card"><h3><span class="ic">✉️</span>Multi-signer envelopes</h3><p>N ordered signers over one document, each addressed by a single-use tokenized signing link — only token hashes are ever stored. Equal order signs in parallel; a decline voids the envelope.</p></div>
+    <div class="card"><h3><span class="ic">🧩</span>Bring your own stack</h3><p>Pluggable CertStore / AuditLogStore / storage / EnvelopeStore interfaces. Supabase reference adapters ship in the box — or run the whole pipeline on a bare directory with the built-in filesystem adapters.</p></div>
+    <div class="card"><h3><span class="ic">🖊️</span>Drop-in signing UI</h3><p>React components — a draw-to-sign canvas, a consent-gated sign flow, a signed receipt, and a verification panel — with no framework coupling.</p></div>
     <div class="card"><h3><span class="ic">🏥</span>Zero PHI egress</h3><p>Everything runs inside your boundary. Nothing but a hash leaves your servers, so no signing-vendor BAA is needed and the whole thing sits inside your own SOC 2 scope.</p></div>
-    <div class="card"><h3><span class="ic">📜</span>ESIGN / UETA-oriented</h3><p>Intent (consent), attribution (append-only audit log — actor, IP, UA, cert fingerprint), and integrity (cryptographic signature + optional timestamp).</p></div>
+    <div class="card"><h3><span class="ic">📜</span>ESIGN / UETA-oriented</h3><p>Intent (recorded consent), attribution (append-only, <em>hash-chained</em> audit log — actor, IP, UA, cert fingerprint), and integrity (cryptographic signature + optional timestamp). Tampering with any audit row breaks the chain.</p></div>
   </div>
 </div></section>
 

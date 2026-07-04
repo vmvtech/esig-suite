@@ -1,6 +1,6 @@
 {
   "name": "@e-sig/supabase",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Supabase adapters (CertStore / AuditLogStore / PdfStorageStore) for @e-sig/core — self-contained PDF e-signature persistence on Supabase Postgres + Storage.",
   "license": "MIT",
   "type": "module",
@@ -48,12 +48,12 @@
   "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-supabase#readme",
   "peerDependencies": {
     "@supabase/supabase-js": ">=2",
-    "@e-sig/core": "^0.4.0"
+    "@e-sig/core": "^0.4.0 || ^0.5.0"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.98.0",
     "@types/node": "^22.0.0",
-    "@e-sig/core": "^0.4.0",
+    "@e-sig/core": "^0.5.0",
     "typescript": "^5.4.0",
     "vitest": "^2.1.9"
   },

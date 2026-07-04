@@ -3,7 +3,7 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
-## [Unreleased]
+## 0.5.0 — 2026-07-03
 
 ### `@e-sig/core` 0.5.0 — envelopes, fs adapters, verifier fix
 
@@ -33,6 +33,29 @@ Could never false-accept — a truncated DER never parses.
 **Signature block.** The audit footer no longer hardcodes an origin-project
 name, and the caller-supplied `platformLabel` is HTML-escaped like every other
 interpolation.
+
+### `@e-sig/supabase` 0.2.0 — tamper-evident audit chain
+
+Migration `0002_esig_audit_hashchain.sql` chains `esig_audit_log` per tenant
+(SHA-256 linkage computed by a `BEFORE INSERT` trigger under an advisory lock)
+and blocks UPDATE/DELETE/TRUNCATE even for `service_role`; existing rows are
+backfilled. New `verifyAuditChain()` re-derives the chain client-side,
+cross-checks each row's columns against its canonical payload, and fails loudly
+when a server row cap truncates pages. The audit action CHECK now admits
+`envelope.*` / `verify.*`. Vitest suite added and wired into root `npm test`.
+Peer range widened to `@e-sig/core ^0.4.0 || ^0.5.0`.
+
+### `@e-sig/react` 0.2.0 — VerifyPanel + honest consent evidence
+
+New `VerifyPanel` component: verdict badge, structure/digest/signature rows,
+signer and RFC-3161 timestamp details, failure list, and a fixed scope caveat
+(embedded-cert validation, first signature only, no chain/revocation). Zero
+dependency on core (structural `VerifyResult` mirror).
+
+`SelfSignFlow` now POSTs `consent_given` plus the exact consent text it
+rendered (`consent_text_shown`), so servers can record what the signer actually
+saw instead of a hardcoded string. Servers should require these fields — the
+example app's sign route now does.
 
 ## 0.4.0 — 2026-07-03
 
