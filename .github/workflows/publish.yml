@@ -1,13 +1,18 @@
 name: Publish to npm
 
-# Publishes @e-sig/core, @e-sig/supabase, @e-sig/react to the public npm registry
-# with build provenance (Sigstore) on a GitHub Release.
+# Publishes @e-sig/core, @e-sig/supabase, @e-sig/react to the public npm
+# registry via OIDC Trusted Publishing — no npm token, no repo secret. npm
+# mints short-lived credentials from the workflow's OIDC identity, and
+# provenance (Sigstore) is generated automatically once the repo is public.
 #
-# One-time setup (owner):
-#   1. Create the free npm org "e-sig" (npmjs.com → add org → Free for public packages).
-#   2. Create an npm Automation access token and add it as the repo secret NPM_TOKEN.
-#   3. Bump the package versions, then publish a GitHub Release (or run this workflow
-#      manually via "Run workflow"). Provenance requires this to run from GitHub Actions.
+# One-time setup (owner), per package on npmjs.com → package → Settings →
+# Trusted Publisher → GitHub Actions:
+#   Organization or user: vmvtech
+#   Repository:           esig-suite
+#   Workflow filename:    publish.yml
+#   Environment:          (leave blank)
+# Then bump versions and publish a GitHub Release (or run this workflow
+# manually via "Run workflow").
 
 on:
   release:
@@ -16,7 +21,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write   # required for npm provenance (OIDC → Sigstore)
+  id-token: write # OIDC — required for trusted publishing + provenance
 
 jobs:
   publish:
@@ -27,18 +32,15 @@ jobs:
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
+      # Trusted publishing needs npm >= 11.5.1 (Node 22 bundles npm 10).
+      - run: npm install -g npm@^11.5.1
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - run: npm run smoke
       - name: Publish @e-sig/core
-        run: npm publish -w @e-sig/core --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish -w @e-sig/core --access public
       - name: Publish @e-sig/supabase
-        run: npm publish -w @e-sig/supabase --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish -w @e-sig/supabase --access public
       - name: Publish @e-sig/react
-        run: npm publish -w @e-sig/react --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish -w @e-sig/react --access public
