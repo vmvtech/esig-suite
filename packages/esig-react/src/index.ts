@@ -4,6 +4,7 @@
 //  - SignaturePadCanvas — draw-to-sign canvas (PNG data URL out)
 //  - SelfSignFlow       — preview + canvas + consent + POST to your sign endpoint
 //  - SelfSignedReceipt  — post-sign receipt (download + signature + crypto metadata)
+//  - VerifyPanel        — verification report for core's verifyPdfSignature() output
 //
 // No Next.js / Supabase / design-system coupling. Tailwind utility classes are
 // used but degrade gracefully; restyle via className / props. Pair the sign
@@ -23,3 +24,8 @@ export {
   SelfSignedReceipt,
   type SelfSignedReceiptProps,
 } from "./SelfSignedReceipt.js";
+export {
+  VerifyPanel,
+  type VerifyPanelProps,
+  type VerifyPanelResult,
+} from "./VerifyPanel.js";
