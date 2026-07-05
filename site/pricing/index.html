@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing — e-sig</title>
+<meta name="description" content="MIT SDK free forever. Managed Cloud from $19/mo. Self-hosted Business tier from $299/mo. Enterprise + regulated add-ons available.">
+<meta property="og:title" content="Pricing — e-sig">
+<meta property="og:description" content="MIT SDK free forever. Managed Cloud from $19/mo. $0.20/envelope overage — the cheapest on the market.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%8D%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0b0d10; --bg2:#111418; --card:#151a20; --line:#232a33;
+    --fg:#e8edf2; --mut:#93a1b0; --dim:#68757f;
+    --accent:#5b9dff; --accent2:#8affc1; --ink:#e8edf2;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:light){
+    :root{--bg:#fbfcfe;--bg2:#f2f5f9;--card:#ffffff;--line:#e4e9f0;--fg:#141a21;--mut:#54636f;--dim:#8494a0;--accent:#1f6feb;--accent2:#0e9f6e;--ink:#141a21;}
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;font-size:16px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+  .mono{font-family:var(--mono)}
+
+  header{padding:20px 0;border-bottom:1px solid var(--line);position:sticky;top:0;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);z-index:10}
+  header .wrap{display:flex;align-items:center;gap:24px}
+  header .brand{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--ink)}
+  header .brand .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  header nav{margin-left:auto;display:flex;gap:22px;flex-wrap:wrap}
+  header nav a{color:var(--mut);font-size:14.5px}
+  header nav a:hover{color:var(--ink);text-decoration:none}
+  header nav a.active{color:var(--ink)}
+
+  section{padding:56px 0;border-bottom:1px solid var(--line)}
+  section:last-of-type{border-bottom:none}
+  h1{font-size:44px;letter-spacing:-0.02em;line-height:1.1;margin:0 0 14px}
+  h1 .hl{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  h2{font-size:24px;letter-spacing:-0.01em;margin:36px 0 14px}
+  h3{font-size:16px;margin:0 0 6px;color:var(--ink)}
+  .lead{color:var(--mut);font-size:18px;max-width:780px;margin:0 0 28px}
+  .disc{color:var(--dim);font-size:13.5px}
+
+  /* Toggle */
+  .toggle{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;margin:6px 0 32px}
+  .toggle button{background:transparent;color:var(--mut);border:0;padding:8px 16px;border-radius:999px;font-size:14px;cursor:pointer;font-family:inherit}
+  .toggle button.active{background:var(--bg2);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+  .toggle .save{color:var(--accent2);font-size:12px;margin-left:6px}
+
+  /* Cards */
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  @media (max-width:960px){.grid4{grid-template-columns:1fr 1fr}}
+  @media (max-width:520px){.grid4{grid-template-columns:1fr}}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  @media (max-width:760px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px;display:flex;flex-direction:column}
+  .card.featured{border-color:var(--accent2);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent2) 40%,transparent)}
+  .card .name{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:0.09em;font-weight:600;margin-bottom:10px}
+  .card .price{font-size:34px;font-weight:700;letter-spacing:-0.02em;margin:0 0 2px;color:var(--ink)}
+  .card .price small{font-size:14px;color:var(--mut);font-weight:400;margin-left:4px}
+  .card .sub{color:var(--mut);font-size:13.5px;margin-bottom:16px;min-height:36px}
+  .card ul{list-style:none;padding:0;margin:0 0 20px;color:var(--fg)}
+  .card ul li{padding:5px 0;padding-left:20px;position:relative;font-size:14px}
+  .card ul li::before{content:"✓";position:absolute;left:0;color:var(--accent2);font-weight:700}
+  .card ul li.dim{color:var(--mut)}
+  .card ul li.dim::before{content:"·";color:var(--dim)}
+  .cta{display:inline-block;margin-top:auto;padding:11px 18px;border-radius:9px;font-weight:600;font-size:14.5px;text-align:center;transition:transform .1s ease}
+  .cta:hover{text-decoration:none;transform:translateY(-1px)}
+  .cta.primary{background:var(--accent2);color:#0b0d10}
+  .cta.ghost{background:var(--bg2);color:var(--ink);border:1px solid var(--line)}
+
+  /* Trust bar */
+  .trust{display:flex;flex-wrap:wrap;gap:22px;margin-top:32px;padding:22px;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--mut);font-size:14px}
+  .trust b{color:var(--ink)}
+
+  /* Compare */
+  .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;margin-top:10px}
+  table.cmp{width:100%;border-collapse:collapse;font-size:14px;background:var(--card)}
+  table.cmp th,table.cmp td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line)}
+  table.cmp th{background:var(--bg2);color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:0.06em}
+  table.cmp tr:last-child td{border-bottom:none}
+  table.cmp td.us{color:var(--accent2);font-weight:600}
+
+  /* FAQ */
+  .faq{padding:14px 0;border-bottom:1px solid var(--line)}
+  .faq:last-child{border-bottom:none}
+  .faq h3{font-size:15.5px;margin:0 0 6px}
+  .faq p{color:var(--mut);margin:0;font-size:14px}
+
+  footer{padding:28px 0}
+  footer .row{display:flex;flex-wrap:wrap;gap:14px;align-items:center;color:var(--mut);font-size:14px}
+  footer .row a{color:var(--mut)}
+  footer .row a:hover{color:var(--ink)}
+  footer .brand{color:var(--ink);font-weight:600;display:flex;align-items:center;gap:8px}
+  footer .brand .dot{width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  footer .spacer{flex:1}
+</style>
+</head>
+<body>
+
+<header><div class="wrap">
+  <span class="brand"><span class="dot"></span>e-sig</span>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/pricing" class="active">Pricing</a>
+    <a href="/why-vmv">Why VMV</a>
+    <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
+    <a href="https://docs.e-sig.org">Docs</a>
+  </nav>
+</div></header>
+
+<main>
+
+<section id="lede"><div class="wrap">
+  <h1><span class="hl">Own your signatures.</span><br />Pay only for what you don't want to run yourself.</h1>
+  <p class="lead">The SDK is <a href="https://github.com/vmvtech/esig-suite">MIT-licensed</a> and free forever. When you don't want to run Postgres, rotate certs, chase deliverability, or answer auditors — Cloud starts at $19/mo. Per-envelope overage is $0.20, the cheapest on the market.</p>
+
+  <div class="toggle" role="tablist" aria-label="Billing interval">
+    <button class="active" data-interval="monthly">Monthly</button>
+    <button data-interval="yearly">Yearly <span class="save">save ~17%</span></button>
+  </div>
+
+  <div class="grid4">
+    <div class="card">
+      <div class="name">Open Source</div>
+      <div class="price">$0<small>/ forever</small></div>
+      <div class="sub">MIT SDK. Self-host anything, anywhere.</div>
+      <ul>
+        <li><span class="mono">@e-sig/core</span>, React UI, Supabase adapters</li>
+        <li>PKCS#7 + RFC-3161 + PAdES</li>
+        <li>Multi-signer envelopes, tokenized links</li>
+        <li>Tamper-evident audit hash-chain</li>
+        <li>Filesystem adapters — zero services</li>
+        <li class="dim">Community support (GitHub Discussions)</li>
+        <li class="dim">No warranty, no SLA</li>
+      </ul>
+      <a class="cta ghost" href="https://github.com/vmvtech/esig-suite">Clone on GitHub</a>
+    </div>
+
+    <div class="card featured">
+      <div class="name">Cloud Starter</div>
+      <div class="price" data-price-monthly="$19" data-price-yearly="$190">$19<small>/ mo</small></div>
+      <div class="sub">Managed hosting for individuals.</div>
+      <ul>
+        <li><b>100 envelopes/mo</b> · 1 user</li>
+        <li>Managed Postgres audit chain</li>
+        <li>S3 storage + verify page</li>
+        <li>Postmark email (at cost)</li>
+        <li>REST API + TypeScript SDK</li>
+        <li>Webhooks, tokenized links</li>
+        <li>$0.20/envelope overage</li>
+        <li>Email support · 24h response</li>
+      </ul>
+      <a class="cta primary" href="mailto:sales@e-sig.org?subject=Cloud%20Starter%20trial">Start free trial</a>
+    </div>
+
+    <div class="card">
+      <div class="name">Cloud Team</div>
+      <div class="price" data-price-monthly="$49" data-price-yearly="$490">$49<small>/ mo</small></div>
+      <div class="sub">Managed hosting for growing teams.</div>
+      <ul>
+        <li><b>500 envelopes/mo</b> · 5 users</li>
+        <li>Everything in Starter</li>
+        <li>Higher rate limits (300 req/min)</li>
+        <li>Custom subdomain</li>
+        <li>$0.20/envelope overage</li>
+        <li>Priority email · 12h response</li>
+      </ul>
+      <a class="cta ghost" href="mailto:sales@e-sig.org?subject=Cloud%20Team">Choose Team</a>
+    </div>
+
+    <div class="card">
+      <div class="name">Cloud Scale</div>
+      <div class="price" data-price-monthly="$79" data-price-yearly="$790">$79<small>/ mo</small></div>
+      <div class="sub">Managed hosting at volume.</div>
+      <ul>
+        <li><b>1,500 envelopes/mo</b> · 15 users</li>
+        <li>Everything in Team</li>
+        <li>1,000 req/min rate limit</li>
+        <li>Priority queue on signing</li>
+        <li>$0.20/envelope overage</li>
+        <li>Priority email · 4h response</li>
+      </ul>
+      <a class="cta ghost" href="mailto:sales@e-sig.org?subject=Cloud%20Scale">Choose Scale</a>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="name">Business (self-hosted)</div>
+      <div class="price" data-price-monthly="$299" data-price-yearly="$2,990">$299<small>/ mo per production deployment</small></div>
+      <div class="sub">Self-host the OSS SDK with a real vendor relationship.</div>
+      <ul>
+        <li>Priority email + Slack Connect support · 8-business-hour response</li>
+        <li>Signed commercial invoice + W-9 + insurance certificate</li>
+        <li>Vendor security questionnaire pack (CAIQ, SIG Core, DPA)</li>
+        <li>Quarterly security patches · 90-day breaking-change notice</li>
+        <li>DPA and BAA available (BAA is an add-on)</li>
+        <li>Non-public <span class="mono">@e-sig/enterprise</span> adapters (SSO/SAML, LDAP audit sink, S3 Object-Lock, HSM)</li>
+        <li>Named contact (a founder, not a queue)</li>
+      </ul>
+      <a class="cta ghost" href="mailto:sales@e-sig.org?subject=Business%20tier">Talk to us</a>
+    </div>
+
+    <div class="card">
+      <div class="name">Enterprise</div>
+      <div class="price">from $18k<small>/ yr</small></div>
+      <div class="sub">Signed MSA, negotiated indemnity, SOC 2, HSM, BAA, 99.99% SLA.</div>
+      <ul>
+        <li>Everything in Business</li>
+        <li>Signed MSA (Common Paper base, redlined)</li>
+        <li>Air-gapped / on-prem via Helm chart + installer</li>
+        <li>HSM signer (CloudHSM / YubiHSM / on-prem PKCS#11)</li>
+        <li>WORM archival (S3 Object-Lock or Glacier Vault Lock)</li>
+        <li>SSO/SAML + SCIM</li>
+        <li>Custom SLA (99.95% / 99.99% with credits)</li>
+        <li>24×7 Sev-1 · dedicated Slack Connect</li>
+        <li>Volume-tiered per-envelope pricing above 100k/mo</li>
+      </ul>
+      <a class="cta ghost" href="mailto:sales@e-sig.org?subject=Enterprise">Talk to us</a>
+    </div>
+  </div>
+
+  <div class="trust">
+    <div><b>MIT-licensed.</b> No AGPL, no rug-pulls, ever.</div>
+    <div><b>$0.20 / envelope</b> overage — vs Dropbox Sign $1.00+, BoldSign $0.75, DocuSign $2–$4.</div>
+    <div><b>Or self-host for $0.</b> Truly. The Cloud tier exists because operations aren't free — not because the SDK is crippled.</div>
+  </div>
+</div></section>
+
+<section id="addons"><div class="wrap">
+  <h2>Vertical add-ons (Business + Enterprise)</h2>
+  <p class="lead">Priced separately so they never inflate the base. Turn on the ones you need, leave the rest off.</p>
+  <div class="tblwrap"><table class="cmp">
+    <thead>
+      <tr><th>Add-on</th><th>Monthly</th><th>Who buys it</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><b>HIPAA BAA + Healthcare Runbook</b></td><td>$500 / mo</td><td>Clinical trials, EHR, telehealth</td></tr>
+      <tr><td><b>HSM Signer (PKCS#11)</b></td><td>$800 / mo</td><td>Regulated finance, notary, government</td></tr>
+      <tr><td><b>eIDAS QES Integration</b></td><td>$1,500 / mo</td><td>EU legal, real-estate, insurance</td></tr>
+      <tr><td><b>21 CFR Part 11</b></td><td>$1,200 / mo</td><td>Pharma, medical devices</td></tr>
+      <tr><td><b>UUAID Enterprise (agent-signed docs)</b></td><td>$500 / mo</td><td>AI agent platforms</td></tr>
+      <tr><td><b>WORM Archival (Object-Lock)</b></td><td>$300 / mo</td><td>SEC / FINRA, legal discovery</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section id="compare"><div class="wrap">
+  <h2>How we price vs the market</h2>
+  <div class="tblwrap"><table class="cmp">
+    <thead>
+      <tr>
+        <th>Provider</th>
+        <th>Entry paid</th>
+        <th>Volume plan</th>
+        <th>Per-envelope overage</th>
+        <th>Self-host?</th>
+        <th>License</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="us">
+        <td><b>e-sig Cloud</b></td>
+        <td><b>$19/mo (100 env)</b></td>
+        <td><b>$79/mo (1,500 env)</b></td>
+        <td><b>$0.20</b></td>
+        <td><b>Yes, free</b></td>
+        <td><b>MIT</b></td>
+      </tr>
+      <tr><td>DocuSign</td><td>$10/mo (5 env)</td><td>$40/user/mo (Business Pro)</td><td>$2.00–$4.00</td><td>No</td><td>Closed</td></tr>
+      <tr><td>Dropbox Sign</td><td>$15/mo (Essentials)</td><td>$300/mo API (Standard)</td><td>$1.00–$1.20</td><td>No</td><td>Closed</td></tr>
+      <tr><td>BoldSign</td><td>$5/user/mo (Growth)</td><td>$30/mo Enterprise API (40 env)</td><td>$0.75</td><td>No</td><td>Closed</td></tr>
+      <tr><td>PandaDoc API</td><td>$40/mo (40 docs)</td><td>Custom</td><td>$2.00–$4.00</td><td>No</td><td>Closed</td></tr>
+      <tr><td>DocuSeal</td><td>$20/user/mo (Pro)</td><td>Pro only</td><td>—</td><td>Yes</td><td>AGPL-3.0</td></tr>
+      <tr><td>Documenso Cloud</td><td>$30/user/mo</td><td>$30/user/mo</td><td>—</td><td>Yes</td><td>AGPL-3.0</td></tr>
+    </tbody>
+  </table></div>
+  <p class="disc">Comparison reflects publicly available offerings as of 2026 and is intended as guidance for procurement conversations, not a marketing claim about named competitors. Check each vendor for current terms.</p>
+</div></section>
+
+<section id="faq"><div class="wrap">
+  <h2>Common questions</h2>
+  <div class="faq">
+    <h3>Why is the SDK free but the Cloud isn't?</h3>
+    <p>The SDK is MIT and always will be. You pay us when you don't want to run Postgres, rotate certs, chase deliverability, and respond to auditors yourself.</p>
+  </div>
+  <div class="faq">
+    <h3>Do I need Business if I self-host?</h3>
+    <p>No. Business exists for teams whose procurement needs an invoice, a DPA, and a named contact. If you're a solo developer, self-host free.</p>
+  </div>
+  <div class="faq">
+    <h3>What counts as an envelope?</h3>
+    <p>One document, any number of signers. Same definition as DocuSign, BoldSign, and Dropbox Sign. Verifications, downloads, and reminders are free.</p>
+  </div>
+  <div class="faq">
+    <h3>What about SSO / SAML?</h3>
+    <p>Available on Business and Enterprise. We don't put SSO behind a $50k+ tax like some vendors — it's a $299/mo Business feature.</p>
+  </div>
+  <div class="faq">
+    <h3>Is signing legally binding?</h3>
+    <p>The signing path targets ESIGN and UETA in the US: intent (explicit consent + rendered text captured), attribution (actor, IP, UA, cert fingerprint), integrity (PKCS#7 + optional RFC-3161 timestamp). You remain responsible for your own compliance review.</p>
+  </div>
+  <div class="faq">
+    <h3>What are your uptime commitments?</h3>
+    <p>Cloud is a 99.9% target (not contractually credited). Business is 99.95% credited. Enterprise negotiates 99.99% with credits, up to 30% of monthly fees.</p>
+  </div>
+  <div class="faq">
+    <h3>What if I outgrow Cloud Scale?</h3>
+    <p>Talk to us. Above ~5,000 envelopes/mo it usually makes more sense to self-host and buy Business, or negotiate a volume-tiered Enterprise contract at $0.05–$0.10/envelope.</p>
+  </div>
+</div></section>
+
+</main>
+
+<footer><div class="wrap">
+  <div class="row">
+    <span class="brand"><span class="dot"></span>e-sig</span>
+    <span class="spacer"></span>
+    <a href="/">Home</a>
+    <a href="/why-vmv">Why VMV</a>
+    <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
+    <a href="https://uuaid.foundation">UUAID Foundation</a>
+    <a href="https://app.dsalvus.com">DSalvus</a>
+    <span class="mono" style="color:var(--dim)">MIT</span>
+  </div>
+  <p class="disc">© 2026 VMVTech, Ltd. (US), a subsidiary of VMVCorporation (US). esig-suite is a product of VMVTech, Ltd. (US). <a href="https://uuaid.foundation">UUAID Foundation</a> and IAASO are independent public-interest institutions.</p>
+  <p class="disc" style="color:var(--dim)">e-sig is signing-infrastructure software, not legal advice. It provides technical controls that support ESIGN/UETA (intent, attribution, integrity); your compliance posture, certificate trust, and record-retention remain your responsibility.</p>
+</div></footer>
+
+<script>
+  var toggle = document.querySelector('.toggle');
+  toggle.addEventListener('click', function(e){
+    if (e.target.tagName !== 'BUTTON') return;
+    Array.prototype.forEach.call(toggle.querySelectorAll('button'), function(b){ b.classList.remove('active'); });
+    e.target.classList.add('active');
+    var interval = e.target.dataset.interval;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-price-monthly]'), function(el){
+      var v = (interval === 'yearly') ? el.dataset.priceYearly : el.dataset.priceMonthly;
+      el.firstChild.nodeValue = v;
+      el.querySelector('small').textContent = (interval === 'yearly') ? '/ yr' : '/ mo';
+    });
+  });
+</script>
+</body>
+</html>
