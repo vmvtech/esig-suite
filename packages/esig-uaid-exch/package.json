@@ -1,0 +1,68 @@
+{
+  "name": "@e-sig/uaid-exch",
+  "version": "0.1.0-preview.0",
+  "description": "Preview implementation of the IAASO Exchange Profile (ADR-006, under review). Wraps @e-sig/core envelopes as per-transaction signed authorizations on the UUAID Network with subject + issuer proofs and Polygon-anchored batch receipts. Wire format will be finalized when ADR-006 is Accepted.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "uuaid",
+    "uap-exch-1",
+    "verifiable-credentials",
+    "agent-signing",
+    "ai-agent",
+    "exchange",
+    "network",
+    "polygon",
+    "pdf",
+    "esignature",
+    "self-contained"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vmvtech/esig-suite.git",
+    "directory": "packages/esig-uaid-exch"
+  },
+  "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-uaid-exch#readme",
+  "dependencies": {
+    "@uuaid/sdk": "^0.1.0"
+  },
+  "peerDependencies": {
+    "@e-sig/core": "^0.5.0"
+  },
+  "devDependencies": {
+    "@e-sig/core": "^0.5.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.9"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  }
+}
