@@ -9,124 +9,72 @@
 <meta property="og:description" content="MIT free forever. Cloud from $19/mo. Business $299/mo. Enterprise from $18k/yr.">
 <meta property="og:url" content="https://e-sig.org/pricing">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%8D%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css">
+<script defer src="/assets/site.js"></script>
 <style>
-  :root{
-    --bg:#0b0d10; --bg2:#111418; --card:#151a20; --line:#232a33;
-    --fg:#e8edf2; --mut:#93a1b0; --dim:#68757f;
-    --accent:#5b9dff; --accent2:#8affc1; --ink:#e8edf2;
-    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
-  }
-  @media (prefers-color-scheme:light){
-    :root{--bg:#fbfcfe;--bg2:#f2f5f9;--card:#ffffff;--line:#e4e9f0;--fg:#141a21;--mut:#54636f;--dim:#8494a0;--accent:#1f6feb;--accent2:#0e9f6e;--ink:#141a21;}
-  }
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;font-size:16.5px}
-  a{color:var(--accent);text-decoration:none}
-  a:hover{text-decoration:underline}
-  .wrap{max-width:1040px;margin:0 auto;padding:0 24px}
-  .mono{font-family:var(--mono)}
-
-  header{position:sticky;top:0;z-index:10;backdrop-filter:blur(10px);background:color-mix(in srgb,var(--bg) 82%,transparent);border-bottom:1px solid var(--line)}
-  nav{display:flex;align-items:center;gap:20px;height:60px}
-  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.02em;font-size:18px;color:var(--fg)}
-  .brand .dot{width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
-  nav .spacer{flex:1}
-  nav a{color:var(--mut);font-size:14.5px;font-weight:500}
-  nav a:hover{color:var(--fg);text-decoration:none}
-  nav a.active{color:var(--fg)}
-  .ghbtn{border:1px solid var(--line);padding:6px 13px;border-radius:8px;color:var(--fg)!important}
-
   .hero{padding:64px 0 40px}
-  .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);color:var(--mut);font-size:13px;padding:5px 12px;border-radius:999px;margin-bottom:18px}
-  .pill b{color:var(--accent2);font-weight:600}
-  h1{font-size:clamp(30px,5vw,48px);line-height:1.06;letter-spacing:-.03em;margin:0 0 14px;font-weight:800}
-  .sub{font-size:clamp(16px,2.1vw,19px);color:var(--mut);max-width:720px;margin:0 0 24px}
-
-  .toggle{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;margin:0 0 26px}
-  .toggle button{background:transparent;color:var(--mut);border:0;padding:7px 15px;border-radius:999px;font-size:13.5px;cursor:pointer;font-family:inherit;font-weight:500}
-  .toggle button.active{background:var(--bg2);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line)}
-  .save{color:var(--accent2);font-size:11.5px;margin-left:5px;font-weight:600}
+  h1{font-size:clamp(32px,5vw,54px)}
+  .sub{max-width:720px;font-size:clamp(16px,2.1vw,19px);margin:0 0 24px}
 
   section{padding:52px 0;border-top:1px solid var(--line)}
-  h2{font-size:clamp(22px,3.5vw,28px);letter-spacing:-.02em;margin:0 0 8px;font-weight:750}
-  .lead{color:var(--mut);max-width:660px;margin:0 0 28px}
+
+  .toggle{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;margin:0 0 26px}
+  .toggle button{background:transparent;color:var(--mut);border:0;padding:7px 15px;border-radius:999px;font-size:13.5px;cursor:pointer;font-family:inherit;font-weight:500;transition:color .15s ease-out}
+  .toggle button.active{background:var(--bg2);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line)}
+  .save{color:var(--accent2);font-size:11.5px;margin-left:5px;font-weight:600}
 
   .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
   @media(max-width:960px){.grid4{grid-template-columns:1fr 1fr}}
   @media(max-width:520px){.grid4{grid-template-columns:1fr}}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
   @media(max-width:760px){.grid2{grid-template-columns:1fr}}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;display:flex;flex-direction:column}
+  .card{padding:22px;display:flex;flex-direction:column}
   .card.featured{border-color:color-mix(in srgb,var(--accent) 60%,var(--line))}
   .card .name{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.09em;font-weight:600;margin-bottom:10px}
-  .card .price{font-size:32px;font-weight:800;letter-spacing:-.02em;margin:0 0 2px;color:var(--fg)}
-  .card .price small{font-size:13.5px;color:var(--mut);font-weight:400;margin-left:4px}
+  .card .price{font-family:var(--head);font-size:34px;font-weight:900;letter-spacing:-.01em;margin:0 0 2px;color:var(--fg)}
+  .card .price small{font-family:var(--sans);font-size:13.5px;color:var(--mut);font-weight:400;margin-left:4px}
   .card .sub-line{color:var(--mut);font-size:13.5px;margin:0 0 16px;min-height:36px}
   .card ul{list-style:none;padding:0;margin:0 0 18px;color:var(--fg)}
   .card ul li{padding:5px 0;padding-left:20px;position:relative;font-size:14px}
   .card ul li::before{content:"✓";position:absolute;left:0;color:var(--accent2);font-weight:700}
   .card ul li.dim{color:var(--mut)}
   .card ul li.dim::before{content:"·";color:var(--dim)}
-
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:10px;font-weight:600;font-size:15px;border:1px solid transparent}
-  .btn.primary{background:var(--accent);color:#fff}
-  .btn.primary:hover{text-decoration:none;filter:brightness(1.07)}
-  .btn.ghost{border-color:var(--line);color:var(--fg);background:var(--card)}
-  .btn.ghost:hover{text-decoration:none;border-color:var(--mut)}
   .card .btn{margin-top:auto}
 
   .trust{display:flex;flex-wrap:wrap;gap:22px;margin-top:28px;padding:22px;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--mut);font-size:14px}
   .trust b{color:var(--fg)}
-
-  .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;margin-top:10px}
-  table.cmp{width:100%;border-collapse:collapse;font-size:14px;background:var(--card)}
-  table.cmp th,table.cmp td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line)}
-  table.cmp th{background:var(--bg2);color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
-  table.cmp tr:last-child td{border-bottom:none}
-  table.cmp td.us{color:var(--accent2);font-weight:700}
-  table.cmp tr.me{background:color-mix(in srgb,var(--accent) 9%,transparent)}
-
-  .faq{padding:14px 0;border-bottom:1px solid var(--line)}
-  .faq:last-child{border-bottom:none}
-  .faq h3{font-size:15.5px;margin:0 0 6px}
-  .faq p{color:var(--mut);margin:0;font-size:14.5px}
-
-  footer{border-top:1px solid var(--line);padding:40px 0;color:var(--dim);font-size:14px}
-  footer .row{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
-  footer .row a{color:var(--dim)}
-  footer .row a:hover{color:var(--fg)}
-  footer .spacer{flex:1}
-  .disc{margin-top:14px;font-size:12.5px;color:var(--dim);max-width:720px}
 </style>
 </head>
 <body>
 
 <header><div class="wrap"><nav>
-  <span class="brand"><span class="dot"></span>e-sig</span>
+  <a class="brand" href="/"><span class="dot"></span>e-sig</a>
   <span class="spacer"></span>
-  <a href="/">Home</a>
+  <a href="/#how">How it works</a>
   <a href="/pricing" class="active">Pricing</a>
   <a href="/why-vmv">Why VMV</a>
-  <a href="/#start">Quickstart</a>
+  <a href="https://docs.e-sig.org">Docs</a>
   <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
 </nav></div></header>
 
 <main>
 
 <section class="hero" style="border-top:0"><div class="wrap">
-  <span class="pill">MIT-licensed SDK · <b>free forever</b> · pay only for hosting</span>
-  <h1>Pricing.</h1>
-  <p class="sub">The SDK is <a href="https://github.com/vmvtech/esig-suite">MIT-licensed</a> and free forever. When you don't want to run Postgres, rotate certs, chase deliverability, or answer auditors — Cloud starts at $19/mo. Per-envelope overage is $0.20, the cheapest on the market.</p>
+  <div data-stagger="90">
+  <span class="pill rv">MIT-licensed SDK · <b>free forever</b> · pay only for hosting</span>
+  <h1 class="rv">Pricing<span class="accent-serif">.</span></h1>
+  <p class="sub rv">The SDK is <a href="https://github.com/vmvtech/esig-suite">MIT-licensed</a> and free forever. When you don't want to run Postgres, rotate certs, chase deliverability, or answer auditors — Cloud starts at $19/mo. Per-envelope overage is $0.20, the cheapest on the market.</p>
 
-  <div class="toggle" role="tablist" aria-label="Billing interval">
+  <div class="toggle rv" role="tablist" aria-label="Billing interval">
     <button class="active" data-interval="monthly" aria-selected="true">Monthly</button>
     <button data-interval="yearly" aria-selected="false">Yearly<span class="save">save ~17%</span></button>
   </div>
+  </div>
 
-  <div class="grid4">
-    <div class="card">
+  <div class="grid4" data-stagger="80">
+    <div class="card rv">
       <div class="name">Open Source</div>
       <div class="price">$0<small>/ forever</small></div>
       <div class="sub-line">MIT SDK. Self-host anything, anywhere.</div>
@@ -142,7 +90,7 @@
       <a class="btn ghost" href="https://github.com/vmvtech/esig-suite">Clone on GitHub</a>
     </div>
 
-    <div class="card featured">
+    <div class="card featured rv">
       <div class="name">Cloud Starter</div>
       <div class="price" data-price-monthly="$19" data-price-yearly="$190">$19<small>/ mo</small></div>
       <div class="sub-line">Managed hosting for individuals.</div>
@@ -159,7 +107,7 @@
       <a class="btn primary" data-checkout="cloud_starter" href="/api/checkout?plan=cloud_starter">Start free trial</a>
     </div>
 
-    <div class="card">
+    <div class="card rv">
       <div class="name">Cloud Team</div>
       <div class="price" data-price-monthly="$49" data-price-yearly="$490">$49<small>/ mo</small></div>
       <div class="sub-line">Managed hosting for growing teams.</div>
@@ -174,7 +122,7 @@
       <a class="btn ghost" data-checkout="cloud_team" href="/api/checkout?plan=cloud_team">Choose Team</a>
     </div>
 
-    <div class="card">
+    <div class="card rv">
       <div class="name">Cloud Scale</div>
       <div class="price" data-price-monthly="$79" data-price-yearly="$790">$79<small>/ mo</small></div>
       <div class="sub-line">Managed hosting at volume.</div>
@@ -190,8 +138,8 @@
     </div>
   </div>
 
-  <div class="grid2">
-    <div class="card">
+  <div class="grid2" data-stagger="80">
+    <div class="card rv">
       <div class="name">Business (self-hosted)</div>
       <div class="price" data-price-monthly="$299" data-price-yearly="$2,990">$299<small>/ mo per production deployment</small></div>
       <div class="sub-line">Self-host the OSS SDK with a real vendor relationship.</div>
@@ -207,7 +155,7 @@
       <a class="btn ghost" href="mailto:sales@e-sig.org?subject=Business%20tier">Talk to us</a>
     </div>
 
-    <div class="card">
+    <div class="card rv">
       <div class="name">Enterprise</div>
       <div class="price">from $18k<small>/ yr</small></div>
       <div class="sub-line">Signed MSA, indemnity, SOC 2, HSM, BAA, 99.99% SLA.</div>
@@ -226,7 +174,7 @@
     </div>
   </div>
 
-  <div class="trust">
+  <div class="trust rv">
     <div><b>MIT-licensed.</b> No AGPL, no rug-pulls, ever.</div>
     <div><b>$0.20 / envelope</b> overage — vs Dropbox Sign $1+, BoldSign $0.75, DocuSign $2–$4.</div>
     <div><b>Or self-host for $0.</b> The Cloud tier exists because operations aren't free — not because the SDK is crippled.</div>
@@ -234,9 +182,9 @@
 </div></section>
 
 <section id="addons"><div class="wrap">
-  <h2>Vertical add-ons</h2>
-  <p class="lead">Available on Business + Enterprise. Priced separately so they never inflate the base — turn on the ones you need, leave the rest off.</p>
-  <div class="tblwrap"><table class="cmp">
+  <h2 class="rv">Vertical add-ons</h2>
+  <p class="lead rv">Available on Business + Enterprise. Priced separately so they never inflate the base — turn on the ones you need, leave the rest off.</p>
+  <div class="tblwrap rv"><table class="cmp">
     <thead><tr><th>Add-on</th><th>Monthly</th><th>Who buys it</th></tr></thead>
     <tbody>
       <tr><td><b>HIPAA BAA + Healthcare Runbook</b></td><td>$500 / mo</td><td>Clinical trials, EHR, telehealth</td></tr>
@@ -250,8 +198,8 @@
 </div></section>
 
 <section id="compare"><div class="wrap">
-  <h2>How we price vs the market</h2>
-  <div class="tblwrap"><table class="cmp">
+  <h2 class="rv">How we price vs the market</h2>
+  <div class="tblwrap rv"><table class="cmp">
     <thead>
       <tr>
         <th>Provider</th>
@@ -279,34 +227,36 @@
       <tr><td>Documenso Cloud</td><td>$30/user/mo</td><td>$30/user/mo</td><td>—</td><td>Yes</td><td>AGPL-3.0</td></tr>
     </tbody>
   </table></div>
-  <p class="disc">Comparison reflects publicly available offerings as of 2026 and is intended as guidance for procurement conversations. Check each vendor for current terms.</p>
+  <p class="disc">Comparison reflects publicly available offerings as of 2026 and is intended as guidance for procurement conversations. Check each vendor for current terms. See our <a href="/legal">legal notices</a>.</p>
 </div></section>
 
 <section id="faq"><div class="wrap">
-  <h2>Common questions</h2>
-  <div class="faq">
+  <h2 class="rv">Common questions</h2>
+  <div data-stagger="60">
+  <div class="faq rv">
     <h3>Why is the SDK free but the Cloud isn't?</h3>
     <p>The SDK is MIT and always will be. You pay us when you don't want to run Postgres, rotate certs, chase deliverability, and respond to auditors yourself.</p>
   </div>
-  <div class="faq">
+  <div class="faq rv">
     <h3>Do I need Business if I self-host?</h3>
     <p>No. Business exists for teams whose procurement needs an invoice, a DPA, and a named contact. If you're a solo developer, self-host free.</p>
   </div>
-  <div class="faq">
+  <div class="faq rv">
     <h3>What counts as an envelope?</h3>
     <p>One document, any number of signers. Same definition as DocuSign, BoldSign, Dropbox Sign. Verifications, downloads, and reminders are free.</p>
   </div>
-  <div class="faq">
+  <div class="faq rv">
     <h3>What about SSO / SAML?</h3>
     <p>Available on Business and Enterprise. We don't put SSO behind a $50k+ tax — it's a $299/mo Business feature.</p>
   </div>
-  <div class="faq">
+  <div class="faq rv">
     <h3>Is signing legally binding?</h3>
     <p>The signing path targets ESIGN and UETA in the US: intent (explicit consent), attribution (actor, IP, UA, cert fingerprint), integrity (PKCS#7 + optional RFC-3161 timestamp). You remain responsible for your own compliance review.</p>
   </div>
-  <div class="faq">
+  <div class="faq rv">
     <h3>What are your uptime commitments?</h3>
     <p>Cloud is a 99.9% target (not contractually credited). Business is 99.95% credited. Enterprise negotiates 99.99% with credits, up to 30% of monthly fees.</p>
+  </div>
   </div>
 </div></section>
 
@@ -314,17 +264,25 @@
 
 <footer><div class="wrap">
   <div class="row">
-    <span class="brand"><span class="dot"></span>e-sig</span>
+    <a class="brand" href="/"><span class="dot"></span>e-sig</a>
     <span class="spacer"></span>
-    <a href="/">Home</a>
+    <a href="/pricing">Pricing</a>
     <a href="/why-vmv">Why VMV</a>
+    <a href="https://docs.e-sig.org">Docs</a>
     <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
+    <a href="https://www.npmjs.com/package/@e-sig/core">npm</a>
     <a href="https://uuaid.foundation">UUAID Foundation</a>
     <a href="https://app.dsalvus.com">DSalvus</a>
-    <span class="mono" style="color:var(--dim)">MIT</span>
   </div>
-  <p class="disc">© 2026 VMVTech, Ltd. (US), a subsidiary of VMVCorporation (US). esig-suite is a product of VMVTech, Ltd. (US). <a href="https://uuaid.foundation">UUAID Foundation</a> and IAASO are independent public-interest institutions.</p>
+  <div class="row legalrow">
+    <a href="/terms">Terms of Use</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/legal">Legal</a>
+    <span class="spacer"></span>
+    <span class="mono" style="color:var(--dim)">MIT-licensed SDK</span>
+  </div>
   <p class="disc">e-sig is signing-infrastructure software, not legal advice. It provides technical controls that support ESIGN/UETA (intent, attribution, integrity); your compliance posture, certificate trust, and record-retention remain your responsibility.</p>
+  <p class="disc" style="color:var(--dim)">© 2026 VMVTech, Ltd. (US), a subsidiary of VMVCorporation (US). esig-suite is a product of VMVTech, Ltd. (US). UUAID Foundation and IAASO are independent public-interest institutions.</p>
 </div></footer>
 
 <script>
@@ -333,8 +291,9 @@
   toggle.addEventListener('click', function(e){
     if (e.target.tagName !== 'BUTTON') return;
     var btns = toggle.querySelectorAll('button');
-    for (var i=0;i<btns.length;i++) btns[i].classList.remove('active');
+    for (var i=0;i<btns.length;i++){ btns[i].classList.remove('active'); btns[i].setAttribute('aria-selected','false'); }
     e.target.classList.add('active');
+    e.target.setAttribute('aria-selected','true');
     var interval = e.target.dataset.interval;
     var priced = document.querySelectorAll('[data-price-monthly]');
     for (var j=0;j<priced.length;j++){
