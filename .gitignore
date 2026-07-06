@@ -7,3 +7,21 @@ dist/
 packages/esig-react/npmrc.publish
 examples/quickstart/signed.pdf
 .claude/
+
+# Local secrets — never commit
+npmkey.txt
+.mcp.json
+
+# One-off working artifacts from planning sessions (not source)
+esig-monetize.zip
+esig-suite-monetization-rollout.md
+esig-suite-viral-launch-plan.md
+pricing-preview.png
+vmv-parallel-4.zip
+vmv-stack-corrected-plan.md
+
+# Local agent tooling (not source)
+.maestro/
+.vexp/
+_stage/
+vexp.toml
