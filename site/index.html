@@ -9,7 +9,7 @@
 <meta property="og:description" content="Self-hosted PDF e-signature SDK. No per-document fees, no SaaS, no copyleft. Your certs, your database, your storage.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://e-sig.org">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%8D%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="/assets/e-sig.svg">
 <link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/vmvoneSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
@@ -36,13 +36,24 @@
   pre{background:#0a0c0f;border:1px solid var(--line);border-radius:14px;padding:20px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.7;margin:0}
   @media (prefers-color-scheme:light){pre{background:#0d1117;color:#e6edf3}}
   pre .k{color:#c98bff}pre .s{color:#8affc1}pre .c{color:#6b7785}pre .f{color:#5b9dff}pre .n{color:#ffc38a}
+
+  /* Post-quantum verify readout */
+  .pqverify{margin:22px 0 4px;border:1px solid var(--line);border-radius:14px;background:var(--bg2);overflow:hidden;max-width:664px}
+  .pqverify .row{display:flex;align-items:center;gap:14px;padding:15px 18px}
+  .pqverify .row+.row{border-top:1px solid var(--line)}
+  .pqverify .tag{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:3px 8px;white-space:nowrap}
+  .pqverify .tag.pq{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 48%,var(--line))}
+  .pqverify .lbl{flex:1;font-family:var(--mono);font-size:14px;font-weight:600;color:var(--fg)}
+  .pqverify .lbl small{display:block;font-family:var(--sans);font-weight:400;color:var(--mut);font-size:12.5px;margin-top:3px}
+  .pqverify .ok{color:var(--accent2);font-weight:700;font-size:14px;white-space:nowrap}
 </style>
 </head>
 <body>
 <header><div class="wrap"><nav>
-  <a class="brand" href="/"><span class="dot"></span>e-sig</a>
+  <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
   <span class="spacer"></span>
   <a href="#how">How it works</a>
+  <a href="#pq">Post-quantum</a>
   <a href="/pricing">Pricing</a>
   <a href="/why-vmv">Why VMV</a>
   <a href="https://docs.e-sig.org">Docs</a>
@@ -80,6 +91,22 @@
     <div class="card rv"><h3><span class="ic">🖊️</span>Drop-in signing UI</h3><p>React components — a draw-to-sign canvas, a consent-gated sign flow, a signed receipt, and a verification panel — with no framework coupling.</p></div>
     <div class="card rv"><h3><span class="ic">🏥</span>Zero PHI egress</h3><p>Everything runs inside your boundary. Nothing but a hash leaves your servers, so no signing-vendor BAA is needed and the whole thing sits inside your own SOC 2 scope.</p></div>
     <div class="card rv"><h3><span class="ic">📜</span>ESIGN / UETA-oriented</h3><p>Intent (recorded consent), attribution (append-only, <em>hash-chained</em> audit log — actor, IP, UA, cert fingerprint), and integrity (cryptographic signature + optional timestamp). Tampering with any audit row breaks the chain.</p></div>
+  </div>
+</div></section>
+
+<section id="pq"><div class="wrap" data-stagger="80">
+  <span class="pill rv"><b>NEW</b> · post-quantum ready · FIPS 204</span>
+  <h2 class="rv">Signatures built to <span class="accent-serif">outlast</span> the quantum threat</h2>
+  <p class="lead rv">Attach a hybrid <b>Ed25519 + ML-DSA-65</b> seal — NIST's FIPS 204 post-quantum signature standard — <em>underneath</em> the classical signature. The PDF still validates in Adobe Acrobat today, and it's protected against a "harvest-now, decrypt-later" adversary with a quantum computer tomorrow. Alter one byte and <em>both</em> layers fail.</p>
+  <div class="pqverify rv">
+    <div class="row"><span class="tag">classical</span><span class="lbl">PAdES · PKCS#7 RSA<small>Opens valid in every PDF reader, including Adobe Acrobat.</small></span><span class="ok">✓ valid</span></div>
+    <div class="row"><span class="tag pq">post-quantum</span><span class="lbl">ML-DSA-65 · FIPS 204<small>Quantum-resistant hybrid seal — Ed25519 + ML-DSA-65.</small></span><span class="ok">✓ verified</span></div>
+  </div>
+  <div class="grid" style="margin-top:28px" data-stagger="70">
+    <div class="card rv"><h3><span class="ic">🛡️</span>Hybrid, not either-or</h3><p>Both a classical Ed25519 <em>and</em> a post-quantum ML-DSA-65 signature must verify — the NIST / CNSA 2.0 migration path. Breaking the seal means breaking both schemes at once.</p></div>
+    <div class="card rv"><h3><span class="ic">📄</span>Still opens in Acrobat</h3><p>No reader validates ML-DSA in PAdES yet, so the seal rides <em>under</em> the RSA signature the reader already trusts. Zero disruption for the people signing and receiving your documents.</p></div>
+    <div class="card rv"><h3><span class="ic">🆔</span>Standards-shaped identity</h3><p>Publish a self-signed <b>ML-DSA-65 X.509 certificate</b> (RFC 9881) — it parses and verifies in OpenSSL 3.5+. Pin the signer in-band, or require post-quantum protection outright.</p></div>
+    <div class="card rv"><h3><span class="ic">🔑</span>Managed keys, rotatable</h3><p>Per-tenant hybrid key bundles, AES-256-GCM-wrapped at rest, generated on first use and rotatable on demand. Documents already sealed keep verifying under their embedded key.</p></div>
   </div>
 </div></section>
 
@@ -130,7 +157,7 @@
 
 <footer><div class="wrap">
   <div class="row">
-    <a class="brand" href="/"><span class="dot"></span>e-sig</a>
+    <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
     <span class="spacer"></span>
     <a href="/pricing">Pricing</a>
     <a href="/why-vmv">Why VMV</a>
