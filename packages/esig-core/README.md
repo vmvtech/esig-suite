@@ -15,6 +15,7 @@ Given an HTML document and a person who wants to sign it, this library:
 2. Generates or reuses a self-signed RSA-2048 X.509 cert for the signing tenant.
 3. Embeds a PKCS#7 detached signature under the **ETSI.CAdES.detached** subfilter, with the ESS **signing-certificate-v2** attribute binding the signer cert into the signed data. Pass `padesStrict: true` for strict **PAdES B-B** (also drops the PAdES-forbidden `signing-time` attribute).
 4. Produces a PDF that opens cleanly in Preview / Adobe Reader with a valid signature panel — any post-signing edit invalidates the signature. `verifyPdfSignature()` checks this cryptographically (recomputes the digest over the signed ByteRange and RSA-verifies the signature).
+5. *(Optional)* Adds a **post-quantum hybrid seal** — **Ed25519 + ML-DSA-65 (FIPS 204)** — embedded under the classical signature so the PDF stays Acrobat-valid while gaining quantum resistance. See [Post-quantum seal](#post-quantum-seal--ml-dsa-65-fips-204).
 
 > **Trust vs. validity.** The signature is cryptographically *valid*, but the cert is *self-issued* — stock Adobe Reader shows "validity unknown" until the cert is trusted (org trust-store import, or plug in an AATL/CA signer). This verifies the signature math and integrity, not third-party trust. See the compliance notes below.
 
@@ -45,6 +46,10 @@ The library gives you **crypto + rendering**. You bring **persistence + UI + aut
 | `render-pdf.ts` | HTML → PDF via puppeteer-core; auto-detects Lambda vs local Chrome | ✅ |
 | `sign-pdf.ts` | Combine placeholder injection + PKCS#7 sign (ETSI.CAdES) | ✅ |
 | `verify-pdf.ts` | Structural verifier (parses /ByteRange + PKCS#7 blob, returns diagnostics) | ✅ |
+| `pq-seal.ts` | Hybrid **Ed25519 + ML-DSA-65 (FIPS 204)** post-quantum seal — keygen, sign, verify | ✅ |
+| `pq-embed.ts` | Embed/extract the seal in a PDF as an append-only incremental update | ✅ |
+| `pq-verify.ts` | `verifyPqSeal` + `verifyDocument` (classical **and** post-quantum verdict) | ✅ |
+| `pq-lifecycle.ts` | `ensureActivePqKeys` / `rotatePqKeys` over a bring-your-own `PqKeyStore` | ✅ |
 | `signature-block.ts` | HTML helper to render N signature blocks for multi-party flows | ✅ |
 | `types.ts` | Shared TS types (`Signer`, `SigningCertPem`, …) | ✅ |
 | `index.ts` | Public re-export barrel | ✅ |
@@ -184,6 +189,93 @@ Notes:
   `messageImprint` must equal `sha256(SignerInfo.signature)`, else `ok:false`.
 
 See `CONSUMING.md` for the full consumer guide.
+
+---
+
+## Post-quantum seal — ML-DSA-65 (FIPS 204)
+
+Harvest-now-decrypt-later is a real threat to long-lived signed documents: a
+signature that is only RSA/ECDSA today is forgeable the day a cryptographically
+relevant quantum computer exists. `@e-sig/core` can add a **hybrid post-quantum
+seal** — **Ed25519 + ML-DSA-65** (the FIPS 204 module-lattice signature, née
+Dilithium) — to any signed PDF, without giving up compatibility.
+
+**How it stays compatible:** the seal does **not** replace the PKCS#7/PAdES RSA
+signature (no mainstream PDF reader validates ML-DSA in PAdES yet). The seal is
+embedded *first*, as an append-only incremental update, and the classical RSA
+signature is applied on top — so it **cryptographically covers the seal**. Adobe
+Acrobat still shows a valid signature; your verifier additionally confirms the
+quantum-resistant layer. This is the hybrid migration path NIST/CNSA 2.0 
+recommend over a hard cutover.
+
+```ts
+import {
+  generateSelfSignedCert,
+  generatePqKeyBundle,
+  loadPqSigningKeys,
+  signPdf,
+  verifyDocument,
+} from "@e-sig/core";
+
+const cert = generateSelfSignedCert({ subjectName: "Acme Corp" });
+
+// One hybrid key bundle per signer/tenant (persist wrapPqKeyBundle(...) at rest;
+// or use ensureActivePqKeys with a PqKeyStore — see below).
+const pqKeys = loadPqSigningKeys(generatePqKeyBundle().bundle);
+
+const { signedPdf } = await signPdf({
+  pdf: unsigned,
+  keyPem: cert.keyPem,
+  certPem: cert.certPem,
+  reason: "Service Agreement acceptance",
+  location: "",
+  contactInfo: "jane@example.com",
+  name: "Jane Doe",
+  pqSeal: { keys: pqKeys },   // ← adds the post-quantum seal
+});
+
+// One call, two verdicts:
+const v = verifyDocument(signedPdf);
+console.log("classical (PAdES/RSA):", v.classical.ok);          // → true (Acrobat-grade)
+console.log("post-quantum (ML-DSA-65):", v.postQuantum.ok);     // → true
+console.log("PQ signer fingerprint:", v.postQuantum.mldsa65Fpr);
+// v.ok === true only when BOTH layers verify AND the seal lies inside the
+// RSA-signed region. Tampering with one byte of the document fails BOTH.
+```
+
+**Managed keys.** `ensureActivePqKeys({ store, tenantId, passphrase })` mints +
+wraps a bundle on first use and reuses it thereafter (implement the small
+`PqKeyStore` interface against your DB, same pattern as `CertStore`);
+`rotatePqKeys(...)` rolls to a fresh key while old documents keep verifying
+against the public key embedded in each seal. `signDocument({ pq: { keys } })`
+threads it through the end-to-end orchestrator and records the PQ key id +
+ML-DSA fingerprint in the audit row.
+
+**Trust model (v1).** The seal carries the raw ML-DSA-65 public key + its
+SHA-256 fingerprint; a relying party pins/publishes the expected fingerprint
+(TOFU). Assert it in-band:
+
+```ts
+verifyDocument(signedPdf, {
+  expectedMldsa65Fpr: "<the signer's published fingerprint>", // fails if it differs
+  requirePq: true,                                            // fails if no seal present (no silent downgrade)
+});
+```
+
+**X.509 identity (RFC 9881).** For an enterprise-shaped identity, issue a
+self-signed **ML-DSA-65 X.509 certificate** (OID `2.16.840.1.101.3.4.3.18`) —
+its SubjectPublicKeyInfo *and* signature are ML-DSA-65, so it parses and verifies
+in OpenSSL 3.5+ (validated against 3.6). Bind it to a seal at verify time:
+
+```ts
+const cert = issueMlDsaCertificate({ keys, subjectName: "Acme Inc" }); // publish cert.certPem
+verifyDocument(signedPdf, { signerCert: cert.certPem }); // fails unless the cert is valid AND owns the seal's key
+```
+
+`verifyMlDsaCertificate()` checks the self-signature, algorithm, and validity
+window; `certMatchesPqSeal()` ties it to a seal by public-key fingerprint. Both
+seal signatures are required — if either Ed25519 **or** ML-DSA-65 fails (or the
+seal's `fingerprint`/`keyId` don't match its keys), the seal fails.
 
 ---
 

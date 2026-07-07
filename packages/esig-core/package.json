@@ -27,6 +27,11 @@
       "types": "./dist/fs-adapters.d.ts",
       "import": "./dist/fs-adapters.js",
       "default": "./dist/fs-adapters.js"
+    },
+    "./pq-seal": {
+      "types": "./dist/pq-seal.d.ts",
+      "import": "./dist/pq-seal.js",
+      "default": "./dist/pq-seal.js"
     }
   },
   "files": [
@@ -69,6 +74,7 @@
   },
   "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-core#readme",
   "dependencies": {
+    "@noble/post-quantum": "^0.6.1",
     "@signpdf/placeholder-plain": "^3.3.0",
     "@signpdf/signpdf": "^3.3.0",
     "@signpdf/utils": "^3.3.0",

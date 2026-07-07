@@ -8,11 +8,15 @@
 // cert chain, and an overflow guard rejects a result whose PKCS#7 exceeded the
 // placeholder (which @signpdf would otherwise silently truncate).
 
+import crypto from "node:crypto";
+
 import { SignPdf } from "@signpdf/signpdf";
 import { plainAddPlaceholder } from "@signpdf/placeholder-plain";
 import { PemSigner } from "./pem-signer.js";
 import { verifyPdfStructure } from "./verify-pdf.js";
 import type { TsaTransport } from "./types.js";
+import { buildPqSeal, publicMaterialForKeys, type PqSigningKeys } from "./pq-seal.js";
+import { embedPqSeal } from "./pq-embed.js";
 
 /** Default /Contents budget (bytes) when no timestamp is embedded. */
 const DEFAULT_SIGNATURE_LENGTH = 8192;
@@ -57,6 +61,20 @@ export interface SignPdfInput {
    * (keeps `signing-time` for backward compatibility).
    */
   padesStrict?: boolean;
+  /**
+   * Optional post-quantum hybrid seal (Ed25519 + ML-DSA-65, FIPS 204). When
+   * provided, a seal over SHA-256 of the pre-signature PDF is embedded FIRST (an
+   * append-only incremental update), so the classical RSA /ByteRange signature
+   * applied on top cryptographically covers it. The classical signature remains
+   * valid in every PDF reader; the seal is the quantum-resistant layer, verified
+   * by `verifyPqSeal` / `verifyDocument`.
+   */
+  pqSeal?: {
+    /** Hybrid signing keys (see generatePqKeyBundle / loadPqSigningKeys). */
+    keys: PqSigningKeys;
+    /** Seal timestamp. Defaults to `signingTime` or now. */
+    signedAt?: Date;
+  };
 }
 
 export interface SignPdfResult {
@@ -66,6 +84,12 @@ export interface SignPdfResult {
   timestamped: boolean;
   /** Present when a non-required TSA request failed (signature is CAdES-B). */
   tsaError?: string;
+  /** True when a post-quantum hybrid seal was embedded (and is RSA-covered). */
+  pqSealed: boolean;
+  /** Seal keyId (128-bit hex over both public keys), when sealed. */
+  pqKeyId?: string;
+  /** ML-DSA-65 public-key fingerprint (SHA-256 hex), when sealed. */
+  pqMldsa65Fpr?: string;
 }
 
 const signpdfInstance = new SignPdf();
@@ -74,8 +98,30 @@ export async function signPdf(input: SignPdfInput): Promise<SignPdfResult> {
   const budget =
     input.signatureLength ??
     (input.tsa ? TIMESTAMPED_SIGNATURE_LENGTH : DEFAULT_SIGNATURE_LENGTH);
+
+  // Post-quantum seal FIRST (append-only), so the classical /ByteRange signature
+  // applied below cryptographically covers it. The seal signs SHA-256 of the
+  // pre-seal PDF (P0); coveredBytes = P0.length locates that region in the final
+  // file (incremental updates never rewrite prior bytes).
+  let basePdf = input.pdf;
+  let pqKeyId: string | undefined;
+  let pqMldsa65Fpr: string | undefined;
+  if (input.pqSeal) {
+    const digestHex = crypto.createHash("sha256").update(input.pdf).digest("hex");
+    const seal = buildPqSeal({
+      digestHex,
+      coveredBytes: input.pdf.length,
+      keys: input.pqSeal.keys,
+      signedAt: input.pqSeal.signedAt ?? input.signingTime,
+    });
+    basePdf = embedPqSeal(input.pdf, seal);
+    const pub = publicMaterialForKeys(input.pqSeal.keys);
+    pqKeyId = pub.keyId;
+    pqMldsa65Fpr = pub.mldsa65Fpr;
+  }
+
   const withPlaceholder = plainAddPlaceholder({
-    pdfBuffer: input.pdf,
+    pdfBuffer: basePdf,
     reason: input.reason,
     contactInfo: input.contactInfo,
     name: input.name,
@@ -110,5 +156,8 @@ export async function signPdf(input: SignPdfInput): Promise<SignPdfResult> {
     placeholderBudget: budget,
     timestamped: signer.lastTimestamped,
     tsaError: signer.lastTsaError,
+    pqSealed: !!input.pqSeal,
+    pqKeyId,
+    pqMldsa65Fpr,
   };
 }
