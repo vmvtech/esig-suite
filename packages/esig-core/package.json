@@ -1,6 +1,6 @@
 {
   "name": "@e-sig/core",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Self-contained PKCS#7 PDF signing — no SaaS, no metering, no per-doc fees. Render→sign→verify engine + pluggable persistence interfaces + end-to-end signDocument() orchestrator.",
   "license": "MIT",
   "type": "module",

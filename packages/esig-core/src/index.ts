@@ -31,6 +31,8 @@ export type {
   SigningCertPem,
   SignedPdfMetadata,
   TsaTransport,
+  ExternalSigner,
+  ExternalSignerKeyType,
 } from "./types.js";
 
 // ---- Persistence interfaces (bring-your-own; see @e-sig/supabase) ----

@@ -36,6 +36,44 @@ export interface SignedPdfMetadata {
   signingTime?: Date;
 }
 
+/** RSA key sizes supported by the {@link ExternalSigner} seam. */
+export type ExternalSignerKeyType = "rsa-2048" | "rsa-3072" | "rsa-4096";
+
+/**
+ * Caller-injected signing seam — lets the RSA private key live OUTSIDE this
+ * process (HSM via PKCS#11, KMS, remote signing service…). The key material
+ * never touches @e-sig/core; only the certificate (public) and a sign callback
+ * are supplied. Pass it to `signPdf({ externalSigner })` or
+ * `new PemSigner({ externalSigner })` in place of `keyPem`.
+ *
+ * Design note (why a single raw-bytes callback is sufficient): the PKCS#7
+ * signature that ends up in the PDF is ALWAYS recomputed by `PemSigner` over
+ * the final signed-attributes SET (after the ESS signing-certificate-v2 splice)
+ * — node-forge's internal sync signing pass is discarded. That recomputation
+ * happens in our own async code with the exact to-be-signed bytes in hand, so
+ * the external signer is invoked exactly once, may be async (network HSMs),
+ * and needs no node-forge shim.
+ *
+ * A PKCS#11 reference adapter ships as `@e-sig/hsm-pkcs11`.
+ */
+export interface ExternalSigner {
+  /** RSA modulus size of the external key. Validated against `certificatePem`. */
+  keyType: ExternalSignerKeyType;
+  /**
+   * PEM-encoded X.509 certificate whose public key matches the external
+   * private key. Embedded in the PKCS#7 and used for structural validation.
+   */
+  certificatePem: string;
+  /**
+   * Sign `data` with RSASSA-PKCS1-v1_5 / SHA-256 — the signer hashes the raw
+   * bytes itself (PKCS#11 mechanism CKM_SHA256_RSA_PKCS does exactly this).
+   * This is byte-identical to what node-forge produces with `key.sign(md)` for
+   * the same key. Must return the raw signature, exactly modulus-sized
+   * (256/384/512 bytes for rsa-2048/3072/4096). Sync or async.
+   */
+  signRsaSha256(data: Uint8Array): Uint8Array | Promise<Uint8Array>;
+}
+
 /**
  * Caller-injected RFC 3161 timestamp transport.
  *

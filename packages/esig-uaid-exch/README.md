@@ -82,6 +82,46 @@ Per [UAP-EXCH-1 § 4](https://github.com/uuaid/spec/blob/main/docs/profiles/UAP-
 
 Counterparties enforce a minimum level; this SDK renders it into the Signing Credential and Exchange so verification is one JSON check.
 
+## Revocation
+
+Status-list style revocation for Signing Credentials (UAP-EXCH-1 § 9, draft). An issuer publishes an append-only `RevocationList` — `{ id, issuer, issued, revoked: [{ credentialId, revokedAt, reason? }], digest }` — whose `digest` is `sha256:<hex>` over the JCS (RFC 8785) canonicalization of the list body. Any mutation (removing an entry, backdating, issuer swap) fails integrity verification, and verifiers **fail closed**: a list that doesn't verify blocks the credential rather than silently allowing it.
+
+```ts
+import {
+  createRevocationList,
+  revokeCredential,
+  isRevoked,
+  verifyRevocationListIntegrity,
+  assertCredentialUsable,
+  CredentialRevokedError,
+  CredentialExpiredError,
+} from "@e-sig/uaid-exch";
+
+// Issuer side: cut a list, revoke a credential. Every call returns a NEW,
+// re-digested list — the input is never mutated, and double-revoking the
+// same id is idempotent.
+let list = await createRevocationList({ issuer: certifierUuaid });
+list = await revokeCredential(list, signingCredentialId, "key compromise");
+
+// Verifier side: gate every use of a Signing Credential.
+await isRevoked(list, signingCredentialId);           // → true; THROWS
+// RevocationListIntegrityError on a tampered list (fail-closed — a lookup
+// against an unverified list could be silently un-revoked by an attacker)
+await verifyRevocationListIntegrity(list);            // → true (false on ANY tamper)
+
+try {
+  await assertCredentialUsable(signingCredential, list); // checks validFrom,
+  // validUntil (malformed dates fail closed), AND the revocation list —
+  // throws typed errors: CredentialExpiredError | CredentialNotYetValidError |
+  // CredentialMalformedValidityError | CredentialRevokedError |
+  // RevocationListIntegrityError
+} catch (e) {
+  if (e instanceof CredentialRevokedError) console.error(e.entry.reason);
+}
+```
+
+**Note:** this module has no exchange-verification path to hook into (verification is network-side per § 8), so `assertCredentialUsable()` is exported standalone — call it before acting on a credential, i.e. before `createExchange()` / `UaidNetworkClient.submit()`.
+
 ## Strictly opt-in
 
 Absent `UUAID_API_KEY`, the package is a pure library — no network calls. `UaidNetworkClient.submit()` throws early rather than dropping data into a silent no-op. Reads (`get`, `getReceipt`) are unauthenticated per the spec.

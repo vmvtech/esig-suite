@@ -44,3 +44,17 @@ jobs:
         run: npm publish -w @e-sig/supabase --access public
       - name: Publish @e-sig/react
         run: npm publish -w @e-sig/react --access public
+      # NOTE: first-time publish of a NEW package name cannot use OIDC trusted
+      # publishing (npm only lets you configure a trusted publisher on an
+      # existing package). Publish each new package once manually (npm publish
+      # from the package dir with a granular token), configure its Trusted
+      # Publisher (vmvtech / esig-suite / publish.yml), then these steps
+      # take over.
+      - name: Publish @e-sig/uuaid
+        run: npm publish -w @e-sig/uuaid --access public
+      - name: Publish @e-sig/uaid-exch
+        run: npm publish -w @e-sig/uaid-exch --access public --tag preview
+      - name: Publish @e-sig/worm
+        run: npm publish -w @e-sig/worm --access public
+      - name: Publish @e-sig/hsm-pkcs11
+        run: npm publish -w @e-sig/hsm-pkcs11 --access public

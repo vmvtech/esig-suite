@@ -28,9 +28,16 @@ import {
   uint8ToDerString,
   OID_TIMESTAMP_TOKEN,
 } from "./timestamp.js";
-import type { TsaTransport } from "./types.js";
+import type { ExternalSigner, ExternalSignerKeyType, TsaTransport } from "./types.js";
 
 const asn1 = forge.asn1;
+
+/** Expected RSA modulus bit length per ExternalSigner keyType. */
+const EXTERNAL_KEY_BITS: Record<ExternalSignerKeyType, number> = {
+  "rsa-2048": 2048,
+  "rsa-3072": 3072,
+  "rsa-4096": 4096,
+};
 
 /** id-aa-signingCertificateV2 (ESS, RFC 5035) — binds the signer cert into the signed data. */
 const OID_SIGNING_CERT_V2 = "1.2.840.113549.1.9.16.2.47";
@@ -38,8 +45,20 @@ const OID_SIGNING_CERT_V2 = "1.2.840.113549.1.9.16.2.47";
 const OID_SIGNING_TIME = "1.2.840.113549.1.9.5";
 
 export interface PemSignerInput {
-  keyPem: string;
-  certPem: string;
+  /** PEM-encoded RSA private key. Required unless `externalSigner` is provided. */
+  keyPem?: string;
+  /**
+   * PEM-encoded X.509 certificate. Required on the `keyPem` path; on the
+   * `externalSigner` path it defaults to `externalSigner.certificatePem`.
+   */
+  certPem?: string;
+  /**
+   * External signing seam (HSM / KMS — see `ExternalSigner` in types.ts).
+   * Mutually exclusive with `keyPem`. The private key never enters this
+   * process; the PKCS#7 signature is produced by `signRsaSha256` (sync or
+   * async) over the final signed-attributes SET.
+   */
+  externalSigner?: ExternalSigner;
   /**
    * Optional RFC 3161 timestamp transport. When provided, each produced
    * signature is upgraded from CAdES-B to CAdES-T by embedding a
@@ -58,7 +77,9 @@ export interface PemSignerInput {
 }
 
 export class PemSigner extends Signer {
-  private privateKey: forge.pki.rsa.PrivateKey;
+  /** Present on the in-memory path; absent when an ExternalSigner is used. */
+  private privateKey?: forge.pki.rsa.PrivateKey;
+  private externalSigner?: ExternalSigner;
   private certificate: forge.pki.Certificate;
   private tsa?: TsaTransport;
   private padesStrict: boolean;
@@ -68,18 +89,50 @@ export class PemSigner extends Signer {
   /** Set when a non-required TSA call failed (signature falls back to CAdES-B). */
   public lastTsaError?: string;
 
-  constructor({ keyPem, certPem, tsa, padesStrict }: PemSignerInput) {
+  constructor({ keyPem, certPem, tsa, padesStrict, externalSigner }: PemSignerInput) {
     super();
-    if (!keyPem.includes("-----BEGIN")) {
-      throw new Error("PemSigner: keyPem must be PEM-encoded");
+    if (externalSigner) {
+      if (keyPem) {
+        throw new Error("PemSigner: pass either keyPem or externalSigner, not both");
+      }
+      const pem = certPem ?? externalSigner.certificatePem;
+      if (!pem || !pem.includes("-----BEGIN CERTIFICATE-----")) {
+        throw new Error("PemSigner: certPem must be a PEM-encoded X.509 certificate");
+      }
+      this.certificate = forge.pki.certificateFromPem(pem);
+      const expectedBits = EXTERNAL_KEY_BITS[externalSigner.keyType];
+      if (!expectedBits) {
+        throw new Error(
+          `PemSigner: unsupported externalSigner.keyType "${String(externalSigner.keyType)}"`,
+        );
+      }
+      const actualBits = (this.certificate.publicKey as forge.pki.rsa.PublicKey).n.bitLength();
+      if (actualBits !== expectedBits) {
+        throw new Error(
+          `PemSigner: externalSigner.keyType ${externalSigner.keyType} does not match the ` +
+            `certificate's RSA modulus (${actualBits} bits)`,
+        );
+      }
+      this.externalSigner = externalSigner;
+    } else {
+      if (!keyPem || !keyPem.includes("-----BEGIN")) {
+        throw new Error("PemSigner: keyPem must be PEM-encoded");
+      }
+      if (!certPem || !certPem.includes("-----BEGIN CERTIFICATE-----")) {
+        throw new Error("PemSigner: certPem must be a PEM-encoded X.509 certificate");
+      }
+      this.privateKey = forge.pki.privateKeyFromPem(keyPem) as forge.pki.rsa.PrivateKey;
+      this.certificate = forge.pki.certificateFromPem(certPem);
     }
-    if (!certPem.includes("-----BEGIN CERTIFICATE-----")) {
-      throw new Error("PemSigner: certPem must be a PEM-encoded X.509 certificate");
-    }
-    this.privateKey = forge.pki.privateKeyFromPem(keyPem) as forge.pki.rsa.PrivateKey;
-    this.certificate = forge.pki.certificateFromPem(certPem);
     this.tsa = tsa;
     this.padesStrict = padesStrict ?? false;
+  }
+
+  /** RSA modulus size in bytes (a PKCS1-v1_5 signature is exactly this long). */
+  private modulusBytes(): number {
+    return Math.ceil(
+      (this.certificate.publicKey as forge.pki.rsa.PublicKey).n.bitLength() / 8,
+    );
   }
 
   async sign(pdfBuffer: Buffer, signingTime?: Date): Promise<Buffer> {
@@ -90,11 +143,22 @@ export class PemSigner extends Signer {
     this.lastTimestamped = false;
     this.lastTsaError = undefined;
 
+    // Key handed to forge's synchronous p7.sign() pass. On the externalSigner
+    // path this is a placeholder shim: forge only needs an object with a
+    // sign(md) method, and the signature it produces here is ALWAYS discarded —
+    // addSigningCertV2AndResign() below recomputes the signature over the final
+    // (spliced) signed-attributes SET on BOTH paths. Doing the real external
+    // call there (in our own async code, with the raw to-be-signed bytes in
+    // hand) is what makes async HSM signers possible without a two-pass sign.
+    const forgeSigningKey =
+      this.privateKey ??
+      (placeholderForgeKey(this.modulusBytes()) as unknown as forge.pki.rsa.PrivateKey);
+
     const p7 = forge.pkcs7.createSignedData();
     p7.content = forge.util.createBuffer(pdfBuffer.toString("binary"));
     p7.addCertificate(this.certificate);
     p7.addSigner({
-      key: this.privateKey,
+      key: forgeSigningKey,
       certificate: this.certificate,
       digestAlgorithm: forge.pki.oids.sha256,
       authenticatedAttributes: [
@@ -113,7 +177,7 @@ export class PemSigner extends Signer {
     // authenticatedAttributes list, so we splice it in and recompute the RSA
     // signature over the exact bytes. Returns the NEW signatureValue.
     const p7Asn1 = p7.toAsn1();
-    const sigValue = this.addSigningCertV2AndResign(p7Asn1);
+    const sigValue = await this.addSigningCertV2AndResign(p7Asn1);
 
     // No timestamp requested → CAdES-B (now cert-bound).
     if (!this.tsa) {
@@ -163,8 +227,13 @@ export class PemSigner extends Signer {
    * modified set. In `padesStrict` mode the PAdES-forbidden signing-time
    * attribute is also removed. Returns the new signatureValue (forge binary
    * string) so the caller can timestamp the FINAL signature.
+   *
+   * This is the single point where the real signature is produced (the value
+   * forge computed during p7.sign() is overwritten unconditionally) — so it is
+   * also the ExternalSigner seam: on that path the raw DER of the SET is handed
+   * to `signRsaSha256` (awaited; sync or async), instead of the in-memory key.
    */
-  private addSigningCertV2AndResign(p7Asn1: forge.asn1.Asn1): string {
+  private async addSigningCertV2AndResign(p7Asn1: forge.asn1.Asn1): Promise<string> {
     const signerInfo = firstSignerInfoSeq(p7Asn1);
     const siChildren = signerInfo.value as forge.asn1.Asn1[];
 
@@ -198,12 +267,40 @@ export class PemSigner extends Signer {
     const setDer = asn1.toDer(
       asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SET, true, attrs),
     ).getBytes();
-    const md = forge.md.sha256.create();
-    md.update(setDer);
-    const newSig = this.privateKey.sign(md); // RSASSA-PKCS1-V1_5 (forge default)
+    let newSig: string;
+    if (this.externalSigner) {
+      // External seam: RSASSA-PKCS1-v1_5/SHA-256 over the same raw bytes —
+      // byte-identical to forge's key.sign(md) for the same key.
+      const sig = await this.externalSigner.signRsaSha256(derStringToUint8(setDer));
+      const expected = this.modulusBytes();
+      if (!(sig instanceof Uint8Array) || sig.length !== expected) {
+        throw new Error(
+          `PemSigner: externalSigner.signRsaSha256 returned ${sig instanceof Uint8Array ? sig.length : typeof sig
+          } bytes; expected exactly ${expected} (RSASSA-PKCS1-v1_5 signatures are modulus-sized)`,
+        );
+      }
+      newSig = uint8ToDerString(sig);
+    } else {
+      const md = forge.md.sha256.create();
+      md.update(setDer);
+      newSig = this.privateKey!.sign(md); // RSASSA-PKCS1-V1_5 (forge default)
+    }
     sigOctet.value = newSig;
     return newSig;
   }
+}
+
+/**
+ * Stand-in key for forge's internal (always-discarded) signing pass on the
+ * ExternalSigner path. node-forge accepts any object with a `sign(md)` method
+ * as a SignerInfo key; this one emits modulus-sized zero bytes so the ASN.1
+ * tree has a correctly-shaped signature OCTET STRING until
+ * addSigningCertV2AndResign() overwrites it with the real external signature.
+ */
+function placeholderForgeKey(modulusBytes: number): {
+  sign: (md: forge.md.MessageDigest, scheme?: unknown) => string;
+} {
+  return { sign: () => "\x00".repeat(modulusBytes) };
 }
 
 /**
