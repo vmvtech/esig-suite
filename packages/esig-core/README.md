@@ -262,10 +262,20 @@ verifyDocument(signedPdf, {
 });
 ```
 
-A self-signed ML-DSA-65 X.509 certificate (RFC 9881,
-OID `2.16.840.1.101.3.4.3.18`) is a planned fast-follow. Both seal signatures
-are required — if either Ed25519 **or** ML-DSA-65 fails (or the seal's
-`fingerprint`/`keyId` don't match its keys), the seal fails.
+**X.509 identity (RFC 9881).** For an enterprise-shaped identity, issue a
+self-signed **ML-DSA-65 X.509 certificate** (OID `2.16.840.1.101.3.4.3.18`) —
+its SubjectPublicKeyInfo *and* signature are ML-DSA-65, so it parses and verifies
+in OpenSSL 3.5+ (validated against 3.6). Bind it to a seal at verify time:
+
+```ts
+const cert = issueMlDsaCertificate({ keys, subjectName: "Acme Inc" }); // publish cert.certPem
+verifyDocument(signedPdf, { signerCert: cert.certPem }); // fails unless the cert is valid AND owns the seal's key
+```
+
+`verifyMlDsaCertificate()` checks the self-signature, algorithm, and validity
+window; `certMatchesPqSeal()` ties it to a seal by public-key fingerprint. Both
+seal signatures are required — if either Ed25519 **or** ML-DSA-65 fails (or the
+seal's `fingerprint`/`keyId` don't match its keys), the seal fails.
 
 ---
 

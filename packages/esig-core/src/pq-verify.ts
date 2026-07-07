@@ -17,6 +17,7 @@ import crypto from "node:crypto";
 import { verifyPdfSignature, type VerifyResult } from "./verify-pdf.js";
 import { verifyPqSealSignatures, type PqSeal } from "./pq-seal.js";
 import { extractPqSeal } from "./pq-embed.js";
+import { certMatchesPqSeal } from "./pq-cert.js";
 
 export interface PqSealVerdict {
   /** A seal was found and parsed. */
@@ -31,6 +32,8 @@ export interface PqSealVerdict {
   mldsa65?: boolean;
   /** Embedded ML-DSA fingerprint matches its public key. */
   fingerprintOk?: boolean;
+  /** A `signerCert` was supplied AND it is a valid ML-DSA-65 cert for this seal's key. */
+  certIdentityOk?: boolean;
   alg?: string;
   keyId?: string;
   /** ML-DSA-65 public-key fingerprint — the post-quantum signer identity to pin. */
@@ -49,6 +52,12 @@ export interface VerifyPqSealOptions {
    * or received out-of-band.
    */
   expectedMldsa65Fpr?: string;
+  /**
+   * A self-signed ML-DSA-65 X.509 certificate (PEM or DER) asserting the signer
+   * identity. When set, the cert must be valid AND its public key must be the one
+   * that produced the seal — the X.509 upgrade of `expectedMldsa65Fpr`.
+   */
+  signerCert?: string | Uint8Array;
 }
 
 /**
@@ -107,6 +116,16 @@ export function verifyPqSeal(pdf: Buffer, opts: VerifyPqSealOptions = {}): PqSea
     }
   }
 
+  // (4) Optional X.509 identity: a self-signed ML-DSA-65 cert bound to this key.
+  if (opts.signerCert) {
+    const certOk = certMatchesPqSeal(opts.signerCert, seal as PqSeal);
+    verdict.certIdentityOk = certOk;
+    if (!certOk) {
+      identityOk = false;
+      failures.push("signer certificate is invalid or does not match the seal's post-quantum key");
+    }
+  }
+
   verdict.ok = digestBinds && sigs.ok && identityOk;
   return verdict;
 }
@@ -144,7 +163,10 @@ export interface VerifyDocumentOptions extends VerifyPqSealOptions {
  */
 export function verifyDocument(pdf: Buffer, opts: VerifyDocumentOptions = {}): DocumentVerification {
   const classical = verifyPdfSignature(pdf);
-  const postQuantum = verifyPqSeal(pdf, { expectedMldsa65Fpr: opts.expectedMldsa65Fpr });
+  const postQuantum = verifyPqSeal(pdf, {
+    expectedMldsa65Fpr: opts.expectedMldsa65Fpr,
+    signerCert: opts.signerCert,
+  });
 
   let sealWithinSignedRegion = true;
   if (postQuantum.present && classical.byteRange && postQuantum.coveredBytes != null) {

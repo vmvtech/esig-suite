@@ -108,3 +108,14 @@ export {
   type StoredPqKeys,
   type EnsurePqKeysResult,
 } from "./pq-lifecycle.js";
+export {
+  issueMlDsaCertificate,
+  parseMlDsaCertificate,
+  verifyMlDsaCertificate,
+  certMatchesPqSeal,
+  ID_ML_DSA_65,
+  type IssueMlDsaCertOptions,
+  type MlDsaCertificate,
+  type ParsedMlDsaCertificate,
+  type MlDsaCertVerdict,
+} from "./pq-cert.js";
