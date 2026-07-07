@@ -9,11 +9,11 @@
     "examples/quickstart"
   ],
   "scripts": {
-    "build": "npm run build -w @e-sig/core && npm run build -w @e-sig/supabase && npm run build -w @e-sig/react && npm run build -w @e-sig/uuaid",
-    "clean": "npm run clean -w @e-sig/core && npm run clean -w @e-sig/supabase && npm run clean -w @e-sig/react && npm run clean -w @e-sig/uuaid",
+    "build": "npm run build -w @e-sig/core && npm run build -w @e-sig/supabase && npm run build -w @e-sig/react && npm run build -w @e-sig/uuaid && npm run build -w @e-sig/uaid-exch",
+    "clean": "npm run clean -w @e-sig/core && npm run clean -w @e-sig/supabase && npm run clean -w @e-sig/react && npm run clean -w @e-sig/uuaid && npm run clean -w @e-sig/uaid-exch",
     "smoke": "node scripts/smoke.mjs",
     "quickstart": "npm start -w esig-quickstart",
-    "test": "npm run test -w @e-sig/core && npm run test -w @e-sig/supabase && npm run test -w @e-sig/uuaid",
+    "test": "npm run test -w @e-sig/core && npm run test -w @e-sig/supabase && npm run test -w @e-sig/uuaid && npm run test -w @e-sig/uaid-exch",
     "typecheck": "npm run build"
   },
   "devDependencies": {
