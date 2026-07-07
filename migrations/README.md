@@ -11,6 +11,13 @@ bypasses RLS), a backfill of existing rows in `(created_at, id)` order, and a
 relaxed action CHECK admitting `envelope.*` / `verify.*` actions. Verify a
 tenant's chain from JS with `verifyAuditChain()` from `@e-sig/supabase`.
 
+`0003_esig_pq_keys.sql` adds `org_pq_keys` — managed persistence for the
+post-quantum hybrid key bundles (Ed25519 + ML-DSA-65, FIPS 204). One active
+bundle per tenant, RLS mirroring `org_signing_certs` (tenant-member read,
+`service_role` write). Driven by `ensureActivePqKeys` / `rotatePqKeys`
+(`@e-sig/core`) through `SupabasePqKeyStore` (`@e-sig/supabase`). Independent of
+0002 — apply any time after 0001.
+
 ## Apply it
 
 - **Supabase:** copy each file into
