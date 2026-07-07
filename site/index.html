@@ -9,59 +9,23 @@
 <meta property="og:description" content="Self-hosted PDF e-signature SDK. No per-document fees, no SaaS, no copyleft. Your certs, your database, your storage.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://e-sig.org">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%8D%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="/assets/e-sig.svg">
+<link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vmvoneSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css">
+<script defer src="/assets/site.js"></script>
 <style>
-  :root{
-    --bg:#0b0d10; --bg2:#111418; --card:#151a20; --line:#232a33;
-    --fg:#e8edf2; --mut:#93a1b0; --dim:#68757f;
-    --accent:#5b9dff; --accent2:#8affc1; --ink:#e8edf2;
-    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
-  }
-  @media (prefers-color-scheme:light){
-    :root{--bg:#fbfcfe;--bg2:#f2f5f9;--card:#ffffff;--line:#e4e9f0;--fg:#141a21;--mut:#54636f;--dim:#8494a0;--accent:#1f6feb;--accent2:#0e9f6e;--ink:#141a21;}
-  }
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;font-size:16.5px}
-  a{color:var(--accent);text-decoration:none}
-  a:hover{text-decoration:underline}
-  .wrap{max-width:1040px;margin:0 auto;padding:0 24px}
-  .mono{font-family:var(--mono)}
-
-  header{position:sticky;top:0;z-index:10;backdrop-filter:blur(10px);background:color-mix(in srgb,var(--bg) 82%,transparent);border-bottom:1px solid var(--line)}
-  nav{display:flex;align-items:center;gap:20px;height:60px}
-  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.02em;font-size:18px;color:var(--fg)}
-  .brand .dot{width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
-  nav .spacer{flex:1}
-  nav a{color:var(--mut);font-size:14.5px;font-weight:500}
-  nav a:hover{color:var(--fg);text-decoration:none}
-  .ghbtn{border:1px solid var(--line);padding:6px 13px;border-radius:8px;color:var(--fg)!important}
-
   .hero{padding:96px 0 60px;position:relative;overflow:hidden}
   .hero::before{content:"";position:absolute;inset:-40% 0 auto;height:520px;background:radial-gradient(60% 60% at 50% 0%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 70%);pointer-events:none}
-  .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);color:var(--mut);font-size:13px;padding:5px 12px;border-radius:999px;margin-bottom:22px}
-  .pill b{color:var(--accent2);font-weight:600}
-  h1{font-size:clamp(34px,6vw,60px);line-height:1.04;letter-spacing:-.035em;margin:0 0 18px;font-weight:800}
-  h1 .grad{background:linear-gradient(120deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .sub{font-size:clamp(17px,2.4vw,21px);color:var(--mut);max-width:640px;margin:0 0 30px}
-  .cta{display:flex;flex-wrap:wrap;gap:12px}
-  .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:10px;font-weight:600;font-size:15px;border:1px solid transparent}
-  .btn.primary{background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 60%,var(--accent2)));color:#fff}
-  .btn.primary:hover{text-decoration:none;filter:brightness(1.07)}
-  .btn.ghost{border-color:var(--line);color:var(--fg);background:var(--card)}
-  .btn.ghost:hover{text-decoration:none;border-color:var(--mut)}
   .soon{opacity:.55;pointer-events:none}
   .soontag{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:2px}
 
   section{padding:56px 0;border-top:1px solid var(--line)}
-  h2{font-size:clamp(22px,3.5vw,30px);letter-spacing:-.02em;margin:0 0 8px;font-weight:750}
-  .lead{color:var(--mut);max-width:660px;margin:0 0 32px}
 
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
   @media(max-width:820px){.grid{grid-template-columns:1fr}}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
-  .card h3{margin:0 0 6px;font-size:16px;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+  .card h3{margin:0 0 6px;font-size:16px;letter-spacing:-.01em;display:flex;align-items:center;gap:8px;font-family:var(--sans);font-weight:700}
   .card p{margin:0;color:var(--mut);font-size:14.5px}
   .card .ic{font-size:18px}
 
@@ -71,76 +35,85 @@
 
   pre{background:#0a0c0f;border:1px solid var(--line);border-radius:14px;padding:20px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.7;margin:0}
   @media (prefers-color-scheme:light){pre{background:#0d1117;color:#e6edf3}}
-  pre .k{color:#c98bff}.pre .s{}pre .s{color:#8affc1}pre .c{color:#6b7785}pre .f{color:#5b9dff}pre .n{color:#ffc38a}
+  pre .k{color:#c98bff}pre .s{color:#8affc1}pre .c{color:#6b7785}pre .f{color:#5b9dff}pre .n{color:#ffc38a}
 
-  .cmp{width:100%;border-collapse:collapse;font-size:14.5px;overflow:hidden;border-radius:12px;border:1px solid var(--line)}
-  .cmp th,.cmp td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line)}
-  .cmp thead th{background:var(--bg2);color:var(--mut);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.04em}
-  .cmp tbody tr:last-child td{border-bottom:0}
-  .cmp .yes{color:var(--accent2);font-weight:600}
-  .cmp .no{color:var(--dim)}
-  .cmp .me{background:color-mix(in srgb,var(--accent) 9%,transparent)}
-  .cmp .me td:first-child{font-weight:700}
-  .tblwrap{overflow-x:auto;border-radius:12px}
-
-  .price{display:flex;align-items:baseline;gap:6px;margin:4px 0 2px}
-  .price .big{font-size:30px;font-weight:800;letter-spacing:-.02em}
-  .price .u{color:var(--mut);font-size:14px}
-
-  footer{border-top:1px solid var(--line);padding:40px 0;color:var(--dim);font-size:14px}
-  footer .row{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
-  footer .spacer{flex:1}
-  .disc{margin-top:14px;font-size:12.5px;color:var(--dim);max-width:720px}
+  /* Post-quantum verify readout */
+  .pqverify{margin:22px 0 4px;border:1px solid var(--line);border-radius:14px;background:var(--bg2);overflow:hidden;max-width:664px}
+  .pqverify .row{display:flex;align-items:center;gap:14px;padding:15px 18px}
+  .pqverify .row+.row{border-top:1px solid var(--line)}
+  .pqverify .tag{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:3px 8px;white-space:nowrap}
+  .pqverify .tag.pq{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 48%,var(--line))}
+  .pqverify .lbl{flex:1;font-family:var(--mono);font-size:14px;font-weight:600;color:var(--fg)}
+  .pqverify .lbl small{display:block;font-family:var(--sans);font-weight:400;color:var(--mut);font-size:12.5px;margin-top:3px}
+  .pqverify .ok{color:var(--accent2);font-weight:700;font-size:14px;white-space:nowrap}
 </style>
 </head>
 <body>
 <header><div class="wrap"><nav>
-  <span class="brand"><span class="dot"></span>e-sig</span>
+  <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
   <span class="spacer"></span>
   <a href="#how">How it works</a>
-  <a href="#why">Why</a>
-  <a href="#start">Quickstart</a>
+  <a href="#pq">Post-quantum</a>
+  <a href="/pricing">Pricing</a>
+  <a href="/why-vmv">Why VMV</a>
+  <a href="https://docs.e-sig.org">Docs</a>
   <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
 </nav></div></header>
 
 <main>
-<section class="hero" style="border-top:0"><div class="wrap">
-  <span class="pill">MIT-licensed · <b>no per-document fees</b> · self-hosted</span>
-  <h1>Own your <span class="grad">signatures.</span></h1>
-  <p class="sub">A batteries-included PDF e-signature SDK you embed in your own product. Render, cryptographically sign, timestamp, verify, and audit — entirely inside your infrastructure. Your certs, your database, your storage. No SaaS in the loop.</p>
-  <div class="cta">
-    <a class="btn primary" href="#start">Get started</a>
+<section class="hero" style="border-top:0"><div class="wrap" data-stagger="90">
+  <span class="pill rv">MIT-licensed · <b>no per-document fees</b> · self-hosted</span>
+  <h1 class="rv">Own your <span class="accent-serif sigword">signatures.<svg class="sig-stroke" viewBox="0 0 220 24" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="sigGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" style="stop-color:var(--accent)"/><stop offset="1" style="stop-color:var(--accent2)"/></linearGradient></defs><path pathLength="230" stroke="url(#sigGrad)" d="M6 16 C 48 21, 92 7, 132 12 S 198 17, 214 9"/></svg></span></h1>
+  <p class="sub rv">A batteries-included PDF e-signature SDK you embed in your own product. Render, cryptographically sign, timestamp, verify, and audit — entirely inside your infrastructure. Your certs, your database, your storage. No SaaS in the loop.</p>
+  <div class="cta rv">
+    <a class="btn primary" href="/pricing">See pricing</a>
+    <a class="btn ghost" href="#start">Quickstart</a>
     <a class="btn ghost" href="https://github.com/vmvtech/esig-suite">View on GitHub</a>
     <a class="btn ghost" href="https://www.npmjs.com/package/@e-sig/core">npm ↗</a>
-    <a class="btn ghost soon" href="#">Live demo <span class="soontag">soon</span></a>
   </div>
 </div></section>
 
 <section id="how"><div class="wrap">
-  <h2>The whole pipeline, in your process</h2>
-  <p class="lead">One call takes an HTML document to a signed, tamper-evident PDF and an append-only attribution record — no external service ever touches the document.</p>
-  <div class="flow">
+  <h2 class="rv">The whole pipeline, in your process</h2>
+  <p class="lead rv">One call takes an HTML document to a signed, tamper-evident PDF and an append-only attribution record — no external service ever touches the document.</p>
+  <div class="flow rv">
     <span>renderHtmlToPdf</span><span class="arw">→</span>
     <span>signPdf (PKCS#7)</span><span class="arw">→</span>
     <span>RFC-3161 timestamp</span><span class="arw">→</span>
     <span>verifyPdfSignature</span><span class="arw">→</span>
     <span>store + audit</span>
   </div>
-  <div class="grid" style="margin-top:26px">
-    <div class="card"><h3><span class="ic">🔏</span>Real cryptography</h3><p>PKCS#7 detached signatures under the ETSI.CAdES.detached subfilter, with the ESS signing-certificate-v2 binding. Verification recomputes the document digest and checks the RSA signature — a single altered byte fails.</p></div>
-    <div class="card"><h3><span class="ic">⏱️</span>Trusted timestamps</h3><p>Optional RFC-3161 timestamps upgrade a signature to CAdES-T. The package performs no egress — the TSA only ever receives a SHA-256 hash, never your document.</p></div>
-    <div class="card"><h3><span class="ic">✉️</span>Multi-signer envelopes</h3><p>N ordered signers over one document, each addressed by a single-use tokenized signing link — only token hashes are ever stored. Equal order signs in parallel; a decline voids the envelope.</p></div>
-    <div class="card"><h3><span class="ic">🧩</span>Bring your own stack</h3><p>Pluggable CertStore / AuditLogStore / storage / EnvelopeStore interfaces. Supabase reference adapters ship in the box — or run the whole pipeline on a bare directory with the built-in filesystem adapters.</p></div>
-    <div class="card"><h3><span class="ic">🖊️</span>Drop-in signing UI</h3><p>React components — a draw-to-sign canvas, a consent-gated sign flow, a signed receipt, and a verification panel — with no framework coupling.</p></div>
-    <div class="card"><h3><span class="ic">🏥</span>Zero PHI egress</h3><p>Everything runs inside your boundary. Nothing but a hash leaves your servers, so no signing-vendor BAA is needed and the whole thing sits inside your own SOC 2 scope.</p></div>
-    <div class="card"><h3><span class="ic">📜</span>ESIGN / UETA-oriented</h3><p>Intent (recorded consent), attribution (append-only, <em>hash-chained</em> audit log — actor, IP, UA, cert fingerprint), and integrity (cryptographic signature + optional timestamp). Tampering with any audit row breaks the chain.</p></div>
+  <div class="grid" style="margin-top:26px" data-stagger="70">
+    <div class="card rv"><h3><span class="ic">🔏</span>Real cryptography</h3><p>PKCS#7 detached signatures under the ETSI.CAdES.detached subfilter, with the ESS signing-certificate-v2 binding. Verification recomputes the document digest and checks the RSA signature — a single altered byte fails.</p></div>
+    <div class="card rv"><h3><span class="ic">⏱️</span>Trusted timestamps</h3><p>Optional RFC-3161 timestamps upgrade a signature to CAdES-T. The package performs no egress — the TSA only ever receives a SHA-256 hash, never your document.</p></div>
+    <div class="card rv"><h3><span class="ic">✉️</span>Multi-signer envelopes</h3><p>N ordered signers over one document, each addressed by a single-use tokenized signing link — only token hashes are ever stored. Equal order signs in parallel; a decline voids the envelope.</p></div>
+    <div class="card rv"><h3><span class="ic">🧩</span>Bring your own stack</h3><p>Pluggable CertStore / AuditLogStore / storage / EnvelopeStore interfaces. Supabase reference adapters ship in the box — or run the whole pipeline on a bare directory with the built-in filesystem adapters.</p></div>
+    <div class="card rv"><h3><span class="ic">🖊️</span>Drop-in signing UI</h3><p>React components — a draw-to-sign canvas, a consent-gated sign flow, a signed receipt, and a verification panel — with no framework coupling.</p></div>
+    <div class="card rv"><h3><span class="ic">🏥</span>Zero PHI egress</h3><p>Everything runs inside your boundary. Nothing but a hash leaves your servers, so no signing-vendor BAA is needed and the whole thing sits inside your own SOC 2 scope.</p></div>
+    <div class="card rv"><h3><span class="ic">📜</span>ESIGN / UETA-oriented</h3><p>Intent (recorded consent), attribution (append-only, <em>hash-chained</em> audit log — actor, IP, UA, cert fingerprint), and integrity (cryptographic signature + optional timestamp). Tampering with any audit row breaks the chain.</p></div>
+  </div>
+</div></section>
+
+<section id="pq"><div class="wrap" data-stagger="80">
+  <span class="pill rv"><b>NEW</b> · post-quantum ready · FIPS 204</span>
+  <h2 class="rv">Signatures built to <span class="accent-serif">outlast</span> the quantum threat</h2>
+  <p class="lead rv">Attach a hybrid <b>Ed25519 + ML-DSA-65</b> seal — NIST's FIPS 204 post-quantum signature standard — <em>underneath</em> the classical signature. The PDF still validates in Adobe Acrobat today, and it's protected against a "harvest-now, decrypt-later" adversary with a quantum computer tomorrow. Alter one byte and <em>both</em> layers fail.</p>
+  <div class="pqverify rv">
+    <div class="row"><span class="tag">classical</span><span class="lbl">PAdES · PKCS#7 RSA<small>Opens valid in every PDF reader, including Adobe Acrobat.</small></span><span class="ok">✓ valid</span></div>
+    <div class="row"><span class="tag pq">post-quantum</span><span class="lbl">ML-DSA-65 · FIPS 204<small>Quantum-resistant hybrid seal — Ed25519 + ML-DSA-65.</small></span><span class="ok">✓ verified</span></div>
+  </div>
+  <div class="grid" style="margin-top:28px" data-stagger="70">
+    <div class="card rv"><h3><span class="ic">🛡️</span>Hybrid, not either-or</h3><p>Both a classical Ed25519 <em>and</em> a post-quantum ML-DSA-65 signature must verify — the NIST / CNSA 2.0 migration path. Breaking the seal means breaking both schemes at once.</p></div>
+    <div class="card rv"><h3><span class="ic">📄</span>Still opens in Acrobat</h3><p>No reader validates ML-DSA in PAdES yet, so the seal rides <em>under</em> the RSA signature the reader already trusts. Zero disruption for the people signing and receiving your documents.</p></div>
+    <div class="card rv"><h3><span class="ic">🆔</span>Standards-shaped identity</h3><p>Publish a self-signed <b>ML-DSA-65 X.509 certificate</b> (RFC 9881) — it parses and verifies in OpenSSL 3.5+. Pin the signer in-band, or require post-quantum protection outright.</p></div>
+    <div class="card rv"><h3><span class="ic">🔑</span>Managed keys, rotatable</h3><p>Per-tenant hybrid key bundles, AES-256-GCM-wrapped at rest, generated on first use and rotatable on demand. Documents already sealed keep verifying under their embedded key.</p></div>
   </div>
 </div></section>
 
 <section id="start"><div class="wrap">
-  <h2>Sign a document in a few lines</h2>
-  <p class="lead">Compose your HTML, hand it to the orchestrator over your three stores, get back a stored URL, an audit id, and a cert fingerprint.</p>
-<pre><span class="c">// one call: render → issue/rotate cert → sign (+timestamp) → store → audit</span>
+  <h2 class="rv">Sign a document in a few lines</h2>
+  <p class="lead rv">Compose your HTML, hand it to the orchestrator over your three stores, get back a stored URL, an audit id, and a cert fingerprint.</p>
+<pre class="rv"><span class="c">// one call: render → issue/rotate cert → sign (+timestamp) → store → audit</span>
 <span class="k">import</span> { <span class="f">signDocument</span> } <span class="k">from</span> <span class="s">"@e-sig/core"</span>;
 
 <span class="k">const</span> result = <span class="k">await</span> <span class="f">signDocument</span>({
@@ -157,9 +130,9 @@
 </div></section>
 
 <section id="why"><div class="wrap">
-  <h2>The per-signature meter, deleted</h2>
-  <p class="lead">Every incumbent re-introduces a fee at exactly the moment you embed signing into your product. e-sig doesn't — it runs in your process, on your infrastructure, forever, for free.</p>
-  <div class="tblwrap"><table class="cmp">
+  <h2 class="rv">The per-signature meter, deleted</h2>
+  <p class="lead rv">Every incumbent re-introduces a fee at exactly the moment you embed signing into your product. e-sig doesn't — it runs in your process, on your infrastructure, forever, for free.</p>
+  <div class="tblwrap rv"><table class="cmp">
     <thead><tr><th>Model</th><th>Per-document cost</th><th>Runs in your app</th><th>Own your certs &amp; data</th></tr></thead>
     <tbody>
       <tr class="me"><td>e-sig</td><td class="yes">$0 — no meter</td><td class="yes">Yes (in-process SDK)</td><td class="yes">Yes</td></tr>
@@ -169,13 +142,13 @@
       <tr><td>Documenso</td><td class="no">$250/mo embed license →</td><td class="no">Beside your app (AGPL)</td><td class="no">Its own</td></tr>
     </tbody>
   </table></div>
-  <p class="disc">Pricing figures are indicative public rates as of 2026 and vary by plan and volume; check each vendor for current terms.</p>
+  <p class="disc">Pricing figures are indicative public rates as of 2026 and vary by plan and volume; check each vendor for current terms. See our <a href="/legal">legal notices</a>.</p>
 </div></section>
 
 <section id="get"><div class="wrap">
-  <h2>Open source, self-hosted, yours</h2>
-  <p class="lead">The full engine, adapters, and UI are MIT-licensed. Clone it, read every line of the signing path, run it inside your own walls.</p>
-  <div class="cta">
+  <h2 class="rv">Open source, self-hosted, yours</h2>
+  <p class="lead rv">The full engine, adapters, and UI are MIT-licensed. Clone it, read every line of the signing path, run it inside your own walls.</p>
+  <div class="cta rv">
     <a class="btn primary" href="https://github.com/vmvtech/esig-suite">GitHub repository ↗</a>
     <a class="btn ghost" href="https://docs.e-sig.org">Docs ↗</a>
   </div>
@@ -184,14 +157,25 @@
 
 <footer><div class="wrap">
   <div class="row">
-    <span class="brand"><span class="dot"></span>e-sig</span>
+    <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
     <span class="spacer"></span>
+    <a href="/pricing">Pricing</a>
+    <a href="/why-vmv">Why VMV</a>
+    <a href="https://docs.e-sig.org">Docs</a>
     <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
-    <a href="#start">Quickstart</a>
-    <span class="mono" style="color:var(--dim)">MIT</span>
+    <a href="https://www.npmjs.com/package/@e-sig/core">npm</a>
+    <a href="https://uuaid.foundation">UUAID Foundation</a>
+    <a href="https://app.dsalvus.com">DSalvus</a>
+  </div>
+  <div class="row legalrow">
+    <a href="/terms">Terms of Use</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/legal">Legal</a>
+    <span class="spacer"></span>
+    <span class="mono" style="color:var(--dim)">MIT-licensed SDK</span>
   </div>
   <p class="disc">e-sig is signing-infrastructure software, not legal advice. It provides technical controls that support ESIGN/UETA (intent, attribution, integrity); your compliance posture, certificate trust, and record-retention remain your responsibility. Self-issued certificates are cryptographically valid but not trusted by default in stock PDF readers.</p>
-  <p class="disc" style="color:var(--dim)">© 2026 · e-sig.org</p>
+  <p class="disc" style="color:var(--dim)">© 2026 VMVTech, Ltd. (US), a subsidiary of VMVCorporation (US). esig-suite is a product of VMVTech, Ltd. (US). UUAID Foundation and IAASO are independent public-interest institutions.</p>
 </div></footer>
 </body>
 </html>

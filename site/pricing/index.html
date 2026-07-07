@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing — e-sig</title>
+<meta name="description" content="MIT SDK free forever. Managed Cloud from $19/mo. Business (self-hosted) $299/mo. Enterprise from $18k/yr. $0.20/envelope overage — the cheapest on the market.">
+<meta property="og:title" content="Pricing — e-sig">
+<meta property="og:description" content="MIT free forever. Cloud from $19/mo. Business $299/mo. Enterprise from $18k/yr.">
+<meta property="og:url" content="https://e-sig.org/pricing">
+<link rel="icon" type="image/svg+xml" href="/assets/e-sig.svg">
+<link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css">
+<script defer src="/assets/site.js"></script>
+<style>
+  .hero{padding:64px 0 40px}
+  h1{font-size:clamp(32px,5vw,54px)}
+  .sub{max-width:720px;font-size:clamp(16px,2.1vw,19px);margin:0 0 24px}
+
+  section{padding:52px 0;border-top:1px solid var(--line)}
+
+  .toggle{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;margin:0 0 26px}
+  .toggle button{background:transparent;color:var(--mut);border:0;padding:7px 15px;border-radius:999px;font-size:13.5px;cursor:pointer;font-family:inherit;font-weight:500;transition:color .15s ease-out}
+  .toggle button.active{background:var(--bg2);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line)}
+  .save{color:var(--accent2);font-size:11.5px;margin-left:5px;font-weight:600}
+
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  @media(max-width:960px){.grid4{grid-template-columns:1fr 1fr}}
+  @media(max-width:520px){.grid4{grid-template-columns:1fr}}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .card{padding:22px;display:flex;flex-direction:column}
+  .card.featured{border-color:color-mix(in srgb,var(--accent) 60%,var(--line))}
+  .card .name{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.09em;font-weight:600;margin-bottom:10px}
+  .card .price{font-family:var(--head);font-size:34px;font-weight:900;letter-spacing:-.01em;margin:0 0 2px;color:var(--fg)}
+  .card .price small{font-family:var(--sans);font-size:13.5px;color:var(--mut);font-weight:400;margin-left:4px}
+  .card .sub-line{color:var(--mut);font-size:13.5px;margin:0 0 16px;min-height:36px}
+  .card ul{list-style:none;padding:0;margin:0 0 18px;color:var(--fg)}
+  .card ul li{padding:5px 0;padding-left:20px;position:relative;font-size:14px}
+  .card ul li::before{content:"✓";position:absolute;left:0;color:var(--accent2);font-weight:700}
+  .card ul li.dim{color:var(--mut)}
+  .card ul li.dim::before{content:"·";color:var(--dim)}
+  .card .btn{margin-top:auto}
+
+  .trust{display:flex;flex-wrap:wrap;gap:22px;margin-top:28px;padding:22px;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--mut);font-size:14px}
+  .trust b{color:var(--fg)}
+</style>
+</head>
+<body>
+
+<header><div class="wrap"><nav>
+  <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+  <span class="spacer"></span>
+  <a href="/#how">How it works</a>
+  <a href="/pricing" class="active">Pricing</a>
+  <a href="/why-vmv">Why VMV</a>
+  <a href="https://docs.e-sig.org">Docs</a>
+  <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+</nav></div></header>
+
+<main>
+
+<section class="hero" style="border-top:0"><div class="wrap">
+  <div data-stagger="90">
+  <span class="pill rv">MIT-licensed SDK · <b>free forever</b> · pay only for hosting</span>
+  <h1 class="rv">Pricing<span class="accent-serif">.</span></h1>
+  <p class="sub rv">The SDK is <a href="https://github.com/vmvtech/esig-suite">MIT-licensed</a> and free forever. When you don't want to run Postgres, rotate certs, chase deliverability, or answer auditors — Cloud starts at $19/mo. Per-envelope overage is $0.20, the cheapest on the market.</p>
+
+  <div class="toggle rv" role="tablist" aria-label="Billing interval">
+    <button class="active" data-interval="monthly" aria-selected="true">Monthly</button>
+    <button data-interval="yearly" aria-selected="false">Yearly<span class="save">save ~17%</span></button>
+  </div>
+  </div>
+
+  <div class="grid4" data-stagger="80">
+    <div class="card rv">
+      <div class="name">Open Source</div>
+      <div class="price">$0<small>/ forever</small></div>
+      <div class="sub-line">MIT SDK. Self-host anything, anywhere.</div>
+      <ul>
+        <li><span class="mono">@e-sig/core</span>, React UI, Supabase adapters</li>
+        <li>PKCS#7 + RFC-3161 + PAdES</li>
+        <li><b>Post-quantum seal</b> — ML-DSA-65 (FIPS 204)</li>
+        <li>Multi-signer envelopes</li>
+        <li>Tamper-evident audit hash-chain</li>
+        <li>Filesystem adapters — zero services</li>
+        <li class="dim">Community support (GitHub Discussions)</li>
+        <li class="dim">No warranty, no SLA</li>
+      </ul>
+      <a class="btn ghost" href="https://github.com/vmvtech/esig-suite">Clone on GitHub</a>
+    </div>
+
+    <div class="card featured rv">
+      <div class="name">Cloud Starter</div>
+      <div class="price" data-price-monthly="$19" data-price-yearly="$190">$19<small>/ mo</small></div>
+      <div class="sub-line">Managed hosting for individuals.</div>
+      <ul>
+        <li><b>100 envelopes/mo</b> · 1 user</li>
+        <li>Managed Postgres audit chain</li>
+        <li>S3 storage + verify page</li>
+        <li>Postmark email (at cost)</li>
+        <li>REST API + TypeScript SDK</li>
+        <li>Webhooks, tokenized links</li>
+        <li>$0.20/envelope overage</li>
+        <li>Email support · 24h response</li>
+      </ul>
+      <a class="btn primary" data-checkout="cloud_starter" href="/api/checkout?plan=cloud_starter">Start free trial</a>
+    </div>
+
+    <div class="card rv">
+      <div class="name">Cloud Team</div>
+      <div class="price" data-price-monthly="$49" data-price-yearly="$490">$49<small>/ mo</small></div>
+      <div class="sub-line">Managed hosting for growing teams.</div>
+      <ul>
+        <li><b>500 envelopes/mo</b> · 5 users</li>
+        <li>Everything in Starter</li>
+        <li>Higher rate limits (300 req/min)</li>
+        <li>Custom subdomain</li>
+        <li>$0.20/envelope overage</li>
+        <li>Priority email · 12h response</li>
+      </ul>
+      <a class="btn ghost" data-checkout="cloud_team" href="/api/checkout?plan=cloud_team">Choose Team</a>
+    </div>
+
+    <div class="card rv">
+      <div class="name">Cloud Scale</div>
+      <div class="price" data-price-monthly="$79" data-price-yearly="$790">$79<small>/ mo</small></div>
+      <div class="sub-line">Managed hosting at volume.</div>
+      <ul>
+        <li><b>1,500 envelopes/mo</b> · 15 users</li>
+        <li>Everything in Team</li>
+        <li>1,000 req/min rate limit</li>
+        <li>Priority queue on signing</li>
+        <li>$0.20/envelope overage</li>
+        <li>Priority email · 4h response</li>
+      </ul>
+      <a class="btn ghost" data-checkout="cloud_scale" href="/api/checkout?plan=cloud_scale">Choose Scale</a>
+    </div>
+  </div>
+
+  <div class="grid2" data-stagger="80">
+    <div class="card rv">
+      <div class="name">Business (self-hosted)</div>
+      <div class="price" data-price-monthly="$299" data-price-yearly="$2,990">$299<small>/ mo per production deployment</small></div>
+      <div class="sub-line">Self-host the OSS SDK with a real vendor relationship.</div>
+      <ul>
+        <li>Priority email + Slack Connect · 8-business-hour response</li>
+        <li>Signed commercial invoice + W-9 + insurance certificate</li>
+        <li>Vendor security questionnaire pack (CAIQ, SIG Core, DPA)</li>
+        <li>Quarterly security patches · 90-day breaking-change notice</li>
+        <li>DPA and BAA available</li>
+        <li>Non-public <span class="mono">@e-sig/enterprise</span> adapters (SSO/SAML, LDAP audit sink, S3 Object-Lock, HSM)</li>
+        <li>Named contact — a founder, not a queue</li>
+      </ul>
+      <a class="btn ghost" href="mailto:sales@e-sig.org?subject=Business%20tier">Talk to us</a>
+    </div>
+
+    <div class="card rv">
+      <div class="name">Enterprise</div>
+      <div class="price">from $18k<small>/ yr</small></div>
+      <div class="sub-line">Signed MSA, indemnity, SOC 2, HSM, BAA, 99.99% SLA.</div>
+      <ul>
+        <li>Everything in Business</li>
+        <li>Signed MSA (Common Paper base, redlined)</li>
+        <li>Air-gapped / on-prem via Helm chart + installer</li>
+        <li>HSM signer (CloudHSM / YubiHSM / on-prem PKCS#11)</li>
+        <li>WORM archival (S3 Object-Lock or Glacier Vault Lock)</li>
+        <li>SSO/SAML + SCIM</li>
+        <li>Custom SLA (99.95% / 99.99% with credits)</li>
+        <li>24×7 Sev-1 · dedicated Slack Connect</li>
+        <li>Volume-tiered per-envelope pricing above 100k/mo</li>
+      </ul>
+      <a class="btn ghost" href="mailto:sales@e-sig.org?subject=Enterprise">Talk to us</a>
+    </div>
+  </div>
+
+  <div class="trust rv">
+    <div><b>MIT-licensed.</b> No AGPL, no rug-pulls, ever.</div>
+    <div><b>$0.20 / envelope</b> overage — vs Dropbox Sign $1+, BoldSign $0.75, DocuSign $2–$4.</div>
+    <div><b>Or self-host for $0.</b> The Cloud tier exists because operations aren't free — not because the SDK is crippled.</div>
+  </div>
+</div></section>
+
+<section id="addons"><div class="wrap">
+  <h2 class="rv">Vertical add-ons</h2>
+  <p class="lead rv">Available on Business + Enterprise. Priced separately so they never inflate the base — turn on the ones you need, leave the rest off.</p>
+  <div class="tblwrap rv"><table class="cmp">
+    <thead><tr><th>Add-on</th><th>Monthly</th><th>Who buys it</th></tr></thead>
+    <tbody>
+      <tr><td><b>HIPAA BAA + Healthcare Runbook</b></td><td>$500 / mo</td><td>Clinical trials, EHR, telehealth</td></tr>
+      <tr><td><b>HSM Signer (PKCS#11)</b></td><td>$800 / mo</td><td>Regulated finance, notary, government</td></tr>
+      <tr><td><b>eIDAS QES Integration</b></td><td>$1,500 / mo</td><td>EU legal, real-estate, insurance</td></tr>
+      <tr><td><b>21 CFR Part 11</b></td><td>$1,200 / mo</td><td>Pharma, medical devices</td></tr>
+      <tr><td><b>UUAID Enterprise (agent-signed docs)</b></td><td>$500 / mo</td><td>AI agent platforms</td></tr>
+      <tr><td><b>WORM Archival (Object-Lock)</b></td><td>$300 / mo</td><td>SEC / FINRA, legal discovery</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section id="compare"><div class="wrap">
+  <h2 class="rv">How we price vs the market</h2>
+  <div class="tblwrap rv"><table class="cmp">
+    <thead>
+      <tr>
+        <th>Provider</th>
+        <th>Entry paid</th>
+        <th>Volume plan</th>
+        <th>Overage / env</th>
+        <th>Self-host?</th>
+        <th>License</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="me">
+        <td><b>e-sig Cloud</b></td>
+        <td class="us">$19/mo (100 env)</td>
+        <td class="us">$79/mo (1,500 env)</td>
+        <td class="us">$0.20</td>
+        <td class="us">Yes, free</td>
+        <td class="us">MIT</td>
+      </tr>
+      <tr><td>DocuSign</td><td>$10/mo (5 env)</td><td>$40/user/mo</td><td>$2.00–$4.00</td><td>No</td><td>Closed</td></tr>
+      <tr><td>Dropbox Sign</td><td>$15/mo</td><td>$300/mo API</td><td>$1.00–$1.20</td><td>No</td><td>Closed</td></tr>
+      <tr><td>BoldSign</td><td>$5/user/mo</td><td>$30/mo API (40 env)</td><td>$0.75</td><td>No</td><td>Closed</td></tr>
+      <tr><td>PandaDoc API</td><td>$40/mo (40 docs)</td><td>Custom</td><td>$2.00–$4.00</td><td>No</td><td>Closed</td></tr>
+      <tr><td>DocuSeal</td><td>$20/user/mo</td><td>Pro only</td><td>—</td><td>Yes</td><td>AGPL-3.0</td></tr>
+      <tr><td>Documenso Cloud</td><td>$30/user/mo</td><td>$30/user/mo</td><td>—</td><td>Yes</td><td>AGPL-3.0</td></tr>
+    </tbody>
+  </table></div>
+  <p class="disc">Comparison reflects publicly available offerings as of 2026 and is intended as guidance for procurement conversations. Check each vendor for current terms. See our <a href="/legal">legal notices</a>.</p>
+</div></section>
+
+<section id="faq"><div class="wrap">
+  <h2 class="rv">Common questions</h2>
+  <div data-stagger="60">
+  <div class="faq rv">
+    <h3>Why is the SDK free but the Cloud isn't?</h3>
+    <p>The SDK is MIT and always will be. You pay us when you don't want to run Postgres, rotate certs, chase deliverability, and respond to auditors yourself.</p>
+  </div>
+  <div class="faq rv">
+    <h3>Do I need Business if I self-host?</h3>
+    <p>No. Business exists for teams whose procurement needs an invoice, a DPA, and a named contact. If you're a solo developer, self-host free.</p>
+  </div>
+  <div class="faq rv">
+    <h3>What counts as an envelope?</h3>
+    <p>One document, any number of signers. Same definition as DocuSign, BoldSign, Dropbox Sign. Verifications, downloads, and reminders are free.</p>
+  </div>
+  <div class="faq rv">
+    <h3>What about SSO / SAML?</h3>
+    <p>Available on Business and Enterprise. We don't put SSO behind a $50k+ tax — it's a $299/mo Business feature.</p>
+  </div>
+  <div class="faq rv">
+    <h3>Is signing legally binding?</h3>
+    <p>The signing path targets ESIGN and UETA in the US: intent (explicit consent), attribution (actor, IP, UA, cert fingerprint), integrity (PKCS#7 + optional RFC-3161 timestamp). You remain responsible for your own compliance review.</p>
+  </div>
+  <div class="faq rv">
+    <h3>What are your uptime commitments?</h3>
+    <p>Cloud is a 99.9% target (not contractually credited). Business is 99.95% credited. Enterprise negotiates 99.99% with credits, up to 30% of monthly fees.</p>
+  </div>
+  </div>
+</div></section>
+
+</main>
+
+<footer><div class="wrap">
+  <div class="row">
+    <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+    <span class="spacer"></span>
+    <a href="/pricing">Pricing</a>
+    <a href="/why-vmv">Why VMV</a>
+    <a href="https://docs.e-sig.org">Docs</a>
+    <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
+    <a href="https://www.npmjs.com/package/@e-sig/core">npm</a>
+    <a href="https://uuaid.foundation">UUAID Foundation</a>
+    <a href="https://app.dsalvus.com">DSalvus</a>
+  </div>
+  <div class="row legalrow">
+    <a href="/terms">Terms of Use</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/legal">Legal</a>
+    <span class="spacer"></span>
+    <span class="mono" style="color:var(--dim)">MIT-licensed SDK</span>
+  </div>
+  <p class="disc">e-sig is signing-infrastructure software, not legal advice. It provides technical controls that support ESIGN/UETA (intent, attribution, integrity); your compliance posture, certificate trust, and record-retention remain your responsibility.</p>
+  <p class="disc" style="color:var(--dim)">© 2026 VMVTech, Ltd. (US), a subsidiary of VMVCorporation (US). esig-suite is a product of VMVTech, Ltd. (US). UUAID Foundation and IAASO are independent public-interest institutions.</p>
+</div></footer>
+
+<script>
+  // Yearly/monthly toggle
+  var toggle = document.querySelector('.toggle');
+  toggle.addEventListener('click', function(e){
+    if (e.target.tagName !== 'BUTTON') return;
+    var btns = toggle.querySelectorAll('button');
+    for (var i=0;i<btns.length;i++){ btns[i].classList.remove('active'); btns[i].setAttribute('aria-selected','false'); }
+    e.target.classList.add('active');
+    e.target.setAttribute('aria-selected','true');
+    var interval = e.target.dataset.interval;
+    var priced = document.querySelectorAll('[data-price-monthly]');
+    for (var j=0;j<priced.length;j++){
+      var el = priced[j];
+      var v = (interval === 'yearly') ? el.dataset.priceYearly : el.dataset.priceMonthly;
+      el.firstChild.nodeValue = v;
+      el.querySelector('small').textContent = (interval === 'yearly') ? '/ yr' : '/ mo';
+    }
+    // Also append &interval= on checkout links so the Lambda picks up the right price
+    var ctas = document.querySelectorAll('[data-checkout]');
+    for (var k=0;k<ctas.length;k++){
+      var plan = ctas[k].dataset.checkout;
+      ctas[k].href = '/api/checkout?plan=' + plan + '&interval=' + interval;
+    }
+  });
+</script>
+</body>
+</html>
