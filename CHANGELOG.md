@@ -3,6 +3,40 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
+## 0.6.0 — 2026-07-06
+
+### `@e-sig/core` 0.6.0 — post-quantum hybrid seal + ML-DSA-65 X.509
+
+**Post-quantum signing (FIPS 204).** New optional hybrid **Ed25519 + ML-DSA-65**
+seal, embedded *under* the classical PKCS#7/PAdES RSA signature so signed PDFs
+stay valid in every reader (Adobe Acrobat included) while gaining quantum
+resistance — the NIST / CNSA 2.0 migration path. `signPdf` / `signDocument`
+accept a `pqSeal` / `pq` option; `verifyDocument` returns both the classical and
+post-quantum verdicts, with optional in-band fingerprint pinning
+(`expectedMldsa65Fpr`) and `requirePq` (no silent downgrade). The seal covers
+SHA-256 of the pre-seal PDF and is embedded append-only so the classical
+`/ByteRange` protects it — tampering the document breaks **both** layers. Managed
+keys via `ensureActivePqKeys` / `rotatePqKeys` over a bring-your-own `PqKeyStore`.
+
+**ML-DSA-65 X.509 identity (RFC 9881).** `issueMlDsaCertificate` mints a
+self-signed ML-DSA-65 certificate (SubjectPublicKeyInfo *and* signature both
+`id-ml-dsa-65`, OID `2.16.840.1.101.3.4.3.18`) — parses and verifies in
+OpenSSL 3.5+. `verifyDocument({ signerCert })` binds a certificate to a seal by
+public-key fingerprint; `verifyMlDsaCertificate` / `certMatchesPqSeal` are also
+exported. Fully backward compatible — the seal is opt-in and unsealed documents
+verify exactly as before.
+
+### `@e-sig/supabase` 0.3.0 — managed post-quantum keys
+
+`SupabasePqKeyStore` implements the core `PqKeyStore` over a new `org_pq_keys`
+table (migration `0003_esig_pq_keys.sql`): one active hybrid bundle per tenant,
+AES-256-GCM-wrapped at rest, RLS mirroring `org_signing_certs`. Peer dependency
+widened to allow `@e-sig/core` `^0.6.0`.
+
+### `@e-sig/react` 0.2.1
+
+Version bump for the coordinated 0.6.0 release; no code changes.
+
 ## 0.5.0 — 2026-07-03
 
 ### `@e-sig/core` 0.5.0 — envelopes, fs adapters, verifier fix
