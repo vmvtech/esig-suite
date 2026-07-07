@@ -15,6 +15,7 @@ Extracted from the Opendelphi production pipeline (live since 2026-05).
 | **`@e-sig/core`** | The engine: `renderHtmlToPdf` → `signPdf` (+TSA) → `verifyPdfSignature`, self-signed cert issuance, multi-signer **envelopes** with single-use tokenized signing links, the `CertStore`/`AuditLogStore`/`PdfStorageStore`/`EnvelopeStore` interfaces, filesystem adapters (`@e-sig/core/fs`), `ensureActiveCert`, and the end-to-end `signDocument()` orchestrator. | Node, stack-agnostic |
 | **`@e-sig/supabase`** | Reference adapters: `SupabaseCertStore`, `SupabaseAuditLogStore`, `SupabasePdfStorageStore`. | Supabase (Postgres + Storage) |
 | **`@e-sig/react`** | UI: `SignaturePadCanvas` (draw-to-sign), `SelfSignFlow`, `SelfSignedReceipt`. | React 18/19 |
+| **`@e-sig/uuaid`** | **Opt-in**: `withUuaidActor` stamps the acting agent's [UUAID](https://uuaid.org) into the audit log; `anchorChainHead` anchors the audit hash-chain head to UUAID's Polygon-anchored ledger (encrypted, hash-only — no document content leaves your infra). Core stays SaaS-free without it. | UUAID (optional) |
 
 Plus **`migrations/`** (a `tenant_id`-keyed schema bundle) and a **Next.js +
 Supabase starter** under `examples/nextjs-supabase`.
