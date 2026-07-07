@@ -98,6 +98,8 @@ table.cmp .no{color:var(--dim)}
 table.cmp td.us{color:var(--accent2);font-weight:700}
 table.cmp tr.me{background:color-mix(in srgb,var(--accent) 9%,transparent)}
 table.cmp tr.me td:first-child{font-weight:700}
+a.addlink{color:var(--accent);font-weight:600;font-size:13px;text-decoration:none;white-space:nowrap}
+a.addlink:hover{text-decoration:underline}
 
 /* ── FAQ ─────────────────────────────────────────────────────────────── */
 .faq{padding:14px 0;border-bottom:1px solid var(--line)}
