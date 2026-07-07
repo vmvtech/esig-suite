@@ -72,3 +72,50 @@ export {
   type SignDocumentInput,
   type SignDocumentResult,
 } from "./sign-document.js";
+
+// ---- Post-quantum hybrid seal (Ed25519 + ML-DSA-65, FIPS 204) ----
+export {
+  generatePqKeyBundle,
+  loadPqSigningKeys,
+  publicMaterialForKeys,
+  wrapPqKeyBundle,
+  unwrapPqKeyBundle,
+  buildPqSeal,
+  verifyPqSealSignatures,
+  canonicalJson,
+  PQ_SEAL_VERSION,
+  PQ_SEAL_ALG,
+  type PqKeyBundle,
+  type PqPublicMaterial,
+  type PqSigningKeys,
+  type PqSeal,
+  type PqSealVerification,
+  type BuildPqSealInput,
+} from "./pq-seal.js";
+export { embedPqSeal, extractPqSeal, hasPqSeal } from "./pq-embed.js";
+export {
+  verifyPqSeal,
+  verifyDocument,
+  type PqSealVerdict,
+  type DocumentVerification,
+  type VerifyPqSealOptions,
+  type VerifyDocumentOptions,
+} from "./pq-verify.js";
+export {
+  ensureActivePqKeys,
+  rotatePqKeys,
+  type PqKeyStore,
+  type StoredPqKeys,
+  type EnsurePqKeysResult,
+} from "./pq-lifecycle.js";
+export {
+  issueMlDsaCertificate,
+  parseMlDsaCertificate,
+  verifyMlDsaCertificate,
+  certMatchesPqSeal,
+  ID_ML_DSA_65,
+  type IssueMlDsaCertOptions,
+  type MlDsaCertificate,
+  type ParsedMlDsaCertificate,
+  type MlDsaCertVerdict,
+} from "./pq-cert.js";

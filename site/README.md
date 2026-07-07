@@ -1,8 +1,12 @@
-# e-sig.org — landing page
+# e-sig.org — site
 
-Static, self-contained landing page for **e-sig** (one `index.html`, no build step,
-no external assets). Served privately from S3 through CloudFront with a TLS cert
-from ACM.
+Static multi-page site for **e-sig** (no build step). Pages: `/` (landing),
+`/pricing`, `/why-vmv`, `/terms`, `/privacy`, `/legal` — each a directory with an
+`index.html` (pretty URLs via the CloudFront function in `cf-pretty-urls.js`).
+Shared design system in `assets/site.css` (tokens, VMVONE fonts, components,
+scroll-reveal motion) + `assets/site.js` (IntersectionObserver reveals; content is
+fully visible without JS). Self-hosted VMVONE woff2 files live in `fonts/`.
+Served privately from S3 through CloudFront with a TLS cert from ACM.
 
 ## Deploy
 
@@ -23,5 +27,5 @@ Overridable via env: `ESIG_SITE_BUCKET`, `ESIG_SITE_DIST`.
 | Route 53 zone | `Z0236240WQ558UN63V2O` (alias A/AAAA apex + www → CloudFront) |
 
 The bucket is private; only this CloudFront distribution can read it (OAC + a
-bucket policy scoped to the distribution ARN). Edit `index.html` and re-run
+bucket policy scoped to the distribution ARN). Edit the page you need and re-run
 `deploy.sh`.

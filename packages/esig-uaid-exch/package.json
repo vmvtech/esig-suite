@@ -53,13 +53,13 @@
     "@uuaid/sdk": "^0.1.0"
   },
   "peerDependencies": {
-    "@e-sig/core": "^0.5.0"
+    "@e-sig/core": "^0.5.0 || ^0.6.0"
   },
   "devDependencies": {
-    "@e-sig/core": "^0.5.0",
+    "@e-sig/core": "^0.6.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.4.0",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.10"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

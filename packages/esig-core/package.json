@@ -1,6 +1,6 @@
 {
   "name": "@e-sig/core",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Self-contained PKCS#7 PDF signing — no SaaS, no metering, no per-doc fees. Render→sign→verify engine + pluggable persistence interfaces + end-to-end signDocument() orchestrator.",
   "license": "MIT",
   "type": "module",
@@ -27,6 +27,11 @@
       "types": "./dist/fs-adapters.d.ts",
       "import": "./dist/fs-adapters.js",
       "default": "./dist/fs-adapters.js"
+    },
+    "./pq-seal": {
+      "types": "./dist/pq-seal.d.ts",
+      "import": "./dist/pq-seal.js",
+      "default": "./dist/pq-seal.js"
     }
   },
   "files": [
@@ -69,6 +74,7 @@
   },
   "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-core#readme",
   "dependencies": {
+    "@noble/post-quantum": "^0.6.1",
     "@signpdf/placeholder-plain": "^3.3.0",
     "@signpdf/signpdf": "^3.3.0",
     "@signpdf/utils": "^3.3.0",
@@ -88,13 +94,10 @@
     "@types/node": "^22.0.0",
     "@types/node-forge": "^1.3.0",
     "typescript": "^5.4.0",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.10"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
     "access": "public"
-  },
-  "overrides": {
-    "crypto-js": "^4.2.0"
   }
 }
