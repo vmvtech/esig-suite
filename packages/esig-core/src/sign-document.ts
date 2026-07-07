@@ -21,6 +21,7 @@ import type {
   EsigAuditAction,
 } from "./adapters.js";
 import type { TsaTransport } from "./types.js";
+import type { PqSigningKeys } from "./pq-seal.js";
 
 export interface SignDocumentInput {
   /** Fully-rendered, signature-embedded HTML (the consumer composes this). */
@@ -51,6 +52,12 @@ export interface SignDocumentInput {
   signingTime?: Date;
   /** Optional RFC-3161 timestamp transport. Provide one to upgrade to CAdES-T. */
   tsa?: TsaTransport;
+  /**
+   * Optional post-quantum hybrid seal (Ed25519 + ML-DSA-65). Provide signing
+   * keys (e.g. from `ensureActivePqKeys` or `loadPqSigningKeys`) to embed a
+   * quantum-resistant seal covered by the classical PAdES signature.
+   */
+  pq?: { keys: PqSigningKeys; signedAt?: Date };
 
   /** Audit row fields. */
   action?: EsigAuditAction | string;
@@ -72,6 +79,12 @@ export interface SignDocumentResult {
   /** True when an RFC-3161 token was embedded (CAdES-T); false = CAdES-B. */
   timestamped: boolean;
   tsaError?: string;
+  /** True when a post-quantum hybrid seal (ML-DSA-65) was embedded. */
+  pqSealed: boolean;
+  /** Seal keyId, when post-quantum sealed. */
+  pqKeyId?: string;
+  /** ML-DSA-65 public-key fingerprint, when post-quantum sealed. */
+  pqMldsa65Fpr?: string;
 }
 
 export async function signDocument(
@@ -101,6 +114,7 @@ export async function signDocument(
     name: input.signer.name,
     signingTime: signedAt,
     tsa: input.tsa,
+    pqSeal: input.pq ? { keys: input.pq.keys, signedAt: input.pq.signedAt ?? signedAt } : undefined,
   });
 
   // 4. Persist the signed PDF (+ optional signature image).
@@ -147,6 +161,12 @@ export async function signDocument(
         degraded: !!input.tsa && !r.timestamped,
         error: r.tsaError ?? null,
       },
+      post_quantum: {
+        sealed: r.pqSealed,
+        ...(r.pqSealed
+          ? { alg: "hybrid-ed25519-ml-dsa-65", key_id: r.pqKeyId, mldsa65_fpr: r.pqMldsa65Fpr }
+          : {}),
+      },
     },
   });
 
@@ -158,5 +178,8 @@ export async function signDocument(
     certFingerprint: cert.cert.certFingerprint,
     timestamped: r.timestamped,
     tsaError: r.tsaError,
+    pqSealed: r.pqSealed,
+    pqKeyId: r.pqKeyId,
+    pqMldsa65Fpr: r.pqMldsa65Fpr,
   };
 }
