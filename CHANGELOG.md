@@ -3,6 +3,56 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
+## 0.7.0 — 2026-07-07
+
+The "tech behind the add-ons" release: every self-serve vertical add-on now
+ships real, tested capability — not a label and a price.
+
+### `@e-sig/core` 0.7.0 — ExternalSigner (HSM seam)
+
+**`ExternalSigner`.** `signPdf` / `PemSigner` accept `{ externalSigner }` as an
+alternative to `keyPem`: `{ keyType, certificatePem, signRsaSha256(data) }`.
+The RSA private key never has to enter process memory — signatures are
+delegated to hardware (HSM, PKCS#11 token, KMS). Sync or async signers both
+work; output is byte-identical to the in-memory path (proven by test). Existing
+callers are unaffected — `keyPem` behaves exactly as before (87 pre-existing
+tests unchanged, 7 new).
+
+### `@e-sig/hsm-pkcs11` 0.1.0 — NEW (HSM Signer add-on)
+
+`Pkcs11Signer` implements `ExternalSigner` over an injected PKCS#11 session
+(CKM_SHA256_RSA_PKCS), fail-closed on login failure / missing key / wrong-size
+signatures; fresh session per signature. `pkcs11js` is an optional peer — wire
+AWS CloudHSM / YubiHSM / SoftHSM per the README.
+
+### `@e-sig/worm` 0.1.0 — NEW (WORM Archival add-on)
+
+`WormPdfStorageStore` (a core `PdfStorageStore`) writes every object with S3
+Object Lock retention set atomically (default COMPLIANCE / 7 years) and a
+conditional create (`IfNoneMatch: "*"`) so overwrite is rejected by the store
+AND by S3; there is no delete surface. `exportAuditRowsToWorm` snapshots the
+tenant audit chain as deterministic NDJSON into the same locked bucket.
+Includes a provisioning script and SEC 17a-4 / FINRA framing docs.
+
+### `@e-sig/uaid-exch` 0.1.0-preview.1 — revocation lists
+
+UAP-EXCH-1 § 9 (draft): `createRevocationList` / `revokeCredential`
+(append-only, JCS-canonical sha256 digest, idempotent) /
+`verifyRevocationListIntegrity` / `assertCredentialUsable`. Fail-closed
+everywhere: tampered lists throw on lookup, unparseable validity dates reject,
+expiry + revocation both gate use. 14 new tests (26 total in the package).
+
+### `@e-sig/uuaid` 0.1.1 · `@e-sig/supabase` 0.3.1
+
+Peer ranges widened to allow `@e-sig/core` `^0.7.0`; no code changes.
+
+### Compliance packs (repo `docs/compliance/`, ship with paid add-ons)
+
+HIPAA: BAA template (45 CFR 164.504(e)) + healthcare operations runbook.
+21 CFR Part 11: clause-by-clause requirements mapping (§ 11.10–11.300 → real
+product controls, with an honest customer-responsibility column) + IQ/OQ/PQ
+validation protocol templates. All marked DRAFT pending counsel review.
+
 ## 0.6.0 — 2026-07-06
 
 ### `@e-sig/core` 0.6.0 — post-quantum hybrid seal + ML-DSA-65 X.509

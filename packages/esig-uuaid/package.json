@@ -1,6 +1,6 @@
 {
   "name": "@e-sig/uuaid",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Opt-in UUAID adapter for @e-sig/core — stamp the acting agent's UUAID into the audit log and anchor the audit hash-chain head to UUAID's Polygon-anchored ledger (encrypted, hash-only).",
   "license": "MIT",
   "type": "module",

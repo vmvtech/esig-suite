@@ -7,8 +7,20 @@
  *
  * See docs/profiles/UAP-EXCH-1/v0.1.md in the uuaid repo for the normative
  * profile. This module implements the § 5 (Signing Credential), § 6 (Exchange),
- * and § 7 (Receipt) shapes plus the § 8 submission API.
+ * and § 7 (Receipt) shapes plus the § 8 submission API. § 9 (Revocation,
+ * draft) lives in ./revocation.ts and is re-exported below.
  */
+
+// ============================================================================
+// Revocation (§ 9, draft) — status-list style credential revocation
+// ============================================================================
+//
+// There is no verify entry point in this module to wire into, so the
+// usability gate is exported standalone: call assertCredentialUsable()
+// before acting on a Signing Credential (e.g. before createExchange /
+// UaidNetworkClient.submit).
+
+export * from "./revocation.js";
 
 export type AssuranceLevel = "L0" | "L1" | "L2" | "L3" | "L4" | "L5";
 

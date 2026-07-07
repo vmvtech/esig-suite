@@ -14,7 +14,7 @@ import { SignPdf } from "@signpdf/signpdf";
 import { plainAddPlaceholder } from "@signpdf/placeholder-plain";
 import { PemSigner } from "./pem-signer.js";
 import { verifyPdfStructure } from "./verify-pdf.js";
-import type { TsaTransport } from "./types.js";
+import type { ExternalSigner, TsaTransport } from "./types.js";
 import { buildPqSeal, publicMaterialForKeys, type PqSigningKeys } from "./pq-seal.js";
 import { embedPqSeal } from "./pq-embed.js";
 
@@ -29,8 +29,26 @@ const TIMESTAMPED_SIGNATURE_LENGTH = 30720;
 
 export interface SignPdfInput {
   pdf: Buffer;
-  keyPem: string;
-  certPem: string;
+  /**
+   * PEM-encoded RSA private key (in-memory signing). Required unless
+   * `externalSigner` is provided — the two are mutually exclusive.
+   */
+  keyPem?: string;
+  /**
+   * PEM-encoded X.509 certificate. Required with `keyPem`; with
+   * `externalSigner` it defaults to `externalSigner.certificatePem`.
+   */
+  certPem?: string;
+  /**
+   * External signing seam (HSM / KMS): the RSA private key stays outside this
+   * process and the PKCS#7 signature is produced by
+   * `externalSigner.signRsaSha256` (sync or async — RSASSA-PKCS1-v1_5/SHA-256
+   * over raw bytes, e.g. PKCS#11 CKM_SHA256_RSA_PKCS). Mutually exclusive with
+   * `keyPem`. Output is byte-identical to the `keyPem` path for the same key.
+   * See `ExternalSigner` in types.ts; a PKCS#11 adapter ships as
+   * `@e-sig/hsm-pkcs11`.
+   */
+  externalSigner?: ExternalSigner;
   reason: string;
   location: string;
   contactInfo: string;
@@ -95,6 +113,12 @@ export interface SignPdfResult {
 const signpdfInstance = new SignPdf();
 
 export async function signPdf(input: SignPdfInput): Promise<SignPdfResult> {
+  if (input.externalSigner && input.keyPem) {
+    throw new Error("signPdf: pass either keyPem or externalSigner, not both");
+  }
+  if (!input.externalSigner && !input.keyPem) {
+    throw new Error("signPdf: keyPem or externalSigner is required");
+  }
   const budget =
     input.signatureLength ??
     (input.tsa ? TIMESTAMPED_SIGNATURE_LENGTH : DEFAULT_SIGNATURE_LENGTH);
@@ -132,6 +156,7 @@ export async function signPdf(input: SignPdfInput): Promise<SignPdfResult> {
   const signer = new PemSigner({
     keyPem: input.keyPem,
     certPem: input.certPem,
+    externalSigner: input.externalSigner,
     tsa: input.tsa,
     padesStrict: input.padesStrict,
   });

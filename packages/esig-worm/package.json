@@ -1,7 +1,7 @@
 {
-  "name": "@e-sig/supabase",
-  "version": "0.3.1",
-  "description": "Supabase adapters (CertStore / AuditLogStore / PdfStorageStore) for @e-sig/core — self-contained PDF e-signature persistence on Supabase Postgres + Storage.",
+  "name": "@e-sig/worm",
+  "version": "0.1.0",
+  "description": "WORM (write-once-read-many) archival adapter for @e-sig/core — store signed PDFs and audit-chain exports in an S3 Object Lock bucket with COMPLIANCE-mode retention set atomically on every put. Technical controls in the style of SEC 17a-4(f) / FINRA 4511. Dependency-light: bring your own S3 client.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -16,6 +16,7 @@
   },
   "files": [
     "dist/",
+    "scripts/",
     "README.md",
     "LICENSE"
   ],
@@ -31,29 +32,32 @@
     "node": ">=20"
   },
   "keywords": [
-    "supabase",
+    "worm",
+    "object-lock",
+    "s3",
+    "sec-17a-4",
+    "finra",
+    "compliance",
+    "immutable",
+    "retention",
+    "audit-log",
+    "archival",
     "pdf",
     "esignature",
-    "pkcs7",
-    "self-contained",
-    "esign",
-    "certstore",
-    "audit-log"
+    "esign"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/vmvtech/esig-suite.git",
-    "directory": "packages/esig-supabase"
+    "directory": "packages/esig-worm"
   },
-  "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-supabase#readme",
+  "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-worm#readme",
   "peerDependencies": {
-    "@supabase/supabase-js": ">=2",
-    "@e-sig/core": "^0.4.0 || ^0.5.0 || ^0.6.0 || ^0.7.0"
+    "@e-sig/core": "^0.6.0 || ^0.7.0"
   },
   "devDependencies": {
-    "@supabase/supabase-js": "^2.98.0",
+    "@e-sig/core": "^0.6.0 || ^0.7.0",
     "@types/node": "^22.0.0",
-    "@e-sig/core": "^0.6.0",
     "typescript": "^5.4.0",
     "vitest": "^4.1.10"
   },

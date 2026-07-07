@@ -1,6 +1,6 @@
 {
   "name": "@e-sig/uaid-exch",
-  "version": "0.1.0-preview.0",
+  "version": "0.1.0-preview.1",
   "description": "Preview implementation of the IAASO Exchange Profile (ADR-006, under review). Wraps @e-sig/core envelopes as per-transaction signed authorizations on the UUAID Network with subject + issuer proofs and Polygon-anchored batch receipts. Wire format will be finalized when ADR-006 is Accepted.",
   "license": "MIT",
   "type": "module",
@@ -53,7 +53,7 @@
     "@uuaid/sdk": "^0.1.0"
   },
   "peerDependencies": {
-    "@e-sig/core": "^0.5.0 || ^0.6.0"
+    "@e-sig/core": "^0.5.0 || ^0.6.0 || ^0.7.0"
   },
   "devDependencies": {
     "@e-sig/core": "^0.6.0",
