@@ -136,17 +136,56 @@ export interface PqSealVerification {
 
 // ---------- Key generation / loading ----------
 
+export interface GeneratePqKeyBundleOptions {
+  /**
+   * 32-byte ML-DSA-65 keygen seed. The same seed always derives the same
+   * keypair — supply one for deterministic key provisioning (e.g. from a KMS
+   * or sealed secret). Omit for a fresh random seed.
+   */
+  mldsa65Seed?: Uint8Array;
+  /**
+   * PKCS#8 DER Ed25519 private key to use instead of generating a fresh one.
+   * Together with `mldsa65Seed` this makes the whole bundle deterministic.
+   */
+  ed25519Pkcs8?: Uint8Array;
+}
+
 /**
  * Generate a fresh hybrid key bundle plus its derived public material. The bundle
  * is what you wrap + persist; the public material is what you publish/pin as the
- * signer's post-quantum identity.
+ * signer's post-quantum identity. Pass `opts` to provision deterministically
+ * from existing key material instead of random generation.
  */
-export function generatePqKeyBundle(): { bundle: PqKeyBundle; public: PqPublicMaterial } {
-  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
-  const ed25519Pkcs8 = privateKey.export({ type: "pkcs8", format: "der" }) as Buffer;
-  const ed25519PublicRaw = rawEd25519FromKeyObject(publicKey);
+export function generatePqKeyBundle(
+  opts: GeneratePqKeyBundleOptions = {}
+): { bundle: PqKeyBundle; public: PqPublicMaterial } {
+  let ed25519Pkcs8: Buffer;
+  let ed25519PublicRaw: Uint8Array;
+  if (opts.ed25519Pkcs8) {
+    const privateKey = crypto.createPrivateKey({
+      key: Buffer.from(opts.ed25519Pkcs8),
+      format: "der",
+      type: "pkcs8",
+    });
+    if (privateKey.asymmetricKeyType !== "ed25519") {
+      throw new Error(
+        `generatePqKeyBundle: ed25519Pkcs8 must be an Ed25519 key, got ${privateKey.asymmetricKeyType}`
+      );
+    }
+    ed25519Pkcs8 = Buffer.from(opts.ed25519Pkcs8);
+    ed25519PublicRaw = rawEd25519FromKeyObject(crypto.createPublicKey(privateKey));
+  } else {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+    ed25519Pkcs8 = privateKey.export({ type: "pkcs8", format: "der" }) as Buffer;
+    ed25519PublicRaw = rawEd25519FromKeyObject(publicKey);
+  }
 
-  const seed = crypto.randomBytes(MLDSA65_SEED_LEN);
+  if (opts.mldsa65Seed && opts.mldsa65Seed.length !== MLDSA65_SEED_LEN) {
+    throw new Error(
+      `generatePqKeyBundle: mldsa65Seed must be ${MLDSA65_SEED_LEN} bytes, got ${opts.mldsa65Seed.length}`
+    );
+  }
+  const seed = opts.mldsa65Seed ? Buffer.from(opts.mldsa65Seed) : crypto.randomBytes(MLDSA65_SEED_LEN);
   const { publicKey: mldsa65PublicKey } = ml_dsa65.keygen(seed);
 
   const bundle: PqKeyBundle = {

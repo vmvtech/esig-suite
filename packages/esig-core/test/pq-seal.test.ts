@@ -207,6 +207,38 @@ describe("pq-seal: deterministic key derivation", () => {
     expect(verifyPqSealSignatures(s1).ok).toBe(true);
     expect(verifyPqSealSignatures(s2).ok).toBe(true);
   });
+
+  it("generatePqKeyBundle({ mldsa65Seed, ed25519Pkcs8 }) is fully deterministic", () => {
+    const seed = new Uint8Array(32).fill(7);
+    const { bundle: seedBundle } = generatePqKeyBundle();
+    const ed25519Pkcs8 = Buffer.from(seedBundle.ed25519Pkcs8, "base64");
+
+    const a = generatePqKeyBundle({ mldsa65Seed: seed, ed25519Pkcs8 });
+    const b = generatePqKeyBundle({ mldsa65Seed: seed, ed25519Pkcs8 });
+    expect(a.bundle).toEqual(b.bundle);
+    expect(a.public).toEqual(b.public);
+    expect(a.public.mldsa65Fpr).toBe(b.public.mldsa65Fpr);
+
+    // and the derived keys match what loadPqSigningKeys re-derives
+    expect(publicMaterialForKeys(loadPqSigningKeys(a.bundle))).toEqual(a.public);
+  });
+
+  it("generatePqKeyBundle({ mldsa65Seed }) pins the ML-DSA identity only", () => {
+    const seed = new Uint8Array(32).fill(9);
+    const a = generatePqKeyBundle({ mldsa65Seed: seed });
+    const b = generatePqKeyBundle({ mldsa65Seed: seed });
+    expect(a.public.mldsa65Fpr).toBe(b.public.mldsa65Fpr);
+    expect(a.public.mldsa65).toBe(b.public.mldsa65);
+    // ed25519 halves were independently random
+    expect(a.public.ed25519).not.toBe(b.public.ed25519);
+  });
+
+  it("generatePqKeyBundle rejects a wrong-length seed and a non-Ed25519 key", () => {
+    expect(() => generatePqKeyBundle({ mldsa65Seed: new Uint8Array(31) })).toThrow(/32 bytes/);
+    const rsa = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const rsaPkcs8 = rsa.privateKey.export({ type: "pkcs8", format: "der" }) as Buffer;
+    expect(() => generatePqKeyBundle({ ed25519Pkcs8: rsaPkcs8 })).toThrow(/must be an Ed25519 key/);
+  });
 });
 
 describe("pq-seal: canonicalJson", () => {

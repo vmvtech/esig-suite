@@ -87,6 +87,7 @@ export {
   canonicalJson,
   PQ_SEAL_VERSION,
   PQ_SEAL_ALG,
+  type GeneratePqKeyBundleOptions,
   type PqKeyBundle,
   type PqPublicMaterial,
   type PqSigningKeys,

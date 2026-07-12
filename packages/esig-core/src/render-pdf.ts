@@ -12,11 +12,11 @@ export interface RenderHtmlToPdfOptions {
   margin?: { top?: string; bottom?: string; left?: string; right?: string };
   printBackground?: boolean;
   /**
-   * Override the chromium executable path. If omitted:
-   *   - on Vercel / AWS Lambda: load @sparticuz/chromium
-   *   - on macOS: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
-   *   - on Linux: try common google-chrome / chromium paths
-   * Set this when porting to an environment outside that matrix.
+   * Override the chromium executable path. If omitted, resolution order is:
+   *   1. ESIG_CHROME_PATH / PUPPETEER_EXECUTABLE_PATH / CHROME_PATH env vars
+   *   2. on Vercel / AWS Lambda: load @sparticuz/chromium
+   *   3. platform scan: common Chrome/Chromium/Edge/Brave install locations
+   * Set this (or an env var) when porting to an environment outside that matrix.
    */
   executablePath?: string;
   /** Override puppeteer launch args. Default: --no-sandbox --disable-setuid-sandbox. */
@@ -32,31 +32,65 @@ export interface RenderHtmlToPdfOptions {
   timeoutMs?: number;
 }
 
+const CHROME_ENV_VARS = ["ESIG_CHROME_PATH", "PUPPETEER_EXECUTABLE_PATH", "CHROME_PATH"] as const;
+
+const CHROME_CANDIDATES: Partial<Record<NodeJS.Platform, string[]>> = {
+  darwin: [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+  ],
+  linux: [
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/snap/bin/chromium",
+    "/usr/bin/microsoft-edge",
+    "/usr/bin/brave-browser",
+  ],
+  win32: [
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+  ],
+};
+
+async function isExecutable(p: string): Promise<boolean> {
+  try {
+    const fs = await import("node:fs");
+    // X_OK is meaningless on Windows; existence is the useful check there.
+    await fs.promises.access(p, process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function resolveExecutablePath(opts: RenderHtmlToPdfOptions): Promise<string> {
   if (opts.executablePath) return opts.executablePath;
+  for (const envVar of CHROME_ENV_VARS) {
+    const p = process.env[envVar];
+    if (!p) continue;
+    if (await isExecutable(p)) return p;
+    // An explicitly set env var pointing nowhere is a config error — fail loud
+    // rather than silently falling through to a different browser.
+    throw new Error(`renderHtmlToPdf: ${envVar}="${p}" is not an executable file.`);
+  }
   if (process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL_ENV) {
     const chromium = (await import("@sparticuz/chromium")).default;
     return await chromium.executablePath();
   }
-  if (process.platform === "darwin") {
-    return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-  }
-  for (const p of [
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-    "/snap/bin/chromium",
-  ]) {
-    try {
-      const fs = await import("node:fs");
-      await fs.promises.access(p, fs.constants.X_OK);
-      return p;
-    } catch {
-      // try next
-    }
+  const candidates = CHROME_CANDIDATES[process.platform] ?? [];
+  for (const p of candidates) {
+    if (await isExecutable(p)) return p;
   }
   throw new Error(
-    "renderHtmlToPdf: no Chrome/Chromium executable found. Install Chrome or pass options.executablePath."
+    "renderHtmlToPdf: no Chrome/Chromium executable found. Tried:\n" +
+      candidates.map((p) => `  - ${p}`).join("\n") +
+      "\nInstall Chrome/Chromium, or point to a browser with options.executablePath " +
+      "or the ESIG_CHROME_PATH / PUPPETEER_EXECUTABLE_PATH / CHROME_PATH env var."
   );
 }
 
