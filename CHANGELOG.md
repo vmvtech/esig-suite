@@ -8,6 +8,36 @@ All notable changes to the `@e-sig/*` packages. This project follows
 The "tech behind the add-ons" release: every self-serve vertical add-on now
 ships real, tested capability — not a label and a price.
 
+### Pre-publish hardening (2026-07-12)
+
+Folded into 0.7.0 before its first npm publish:
+
+- **`@e-sig/core`: zero-vulnerability consumer installs.** The
+  `@signpdf/placeholder-plain` dependency (whose `placeholder-pdfkit010`
+  transitive declares a `pdfkit@~0.10.0` peer that npm auto-installs, dragging
+  in `crypto-js@3.3.0` with 6 critical advisories) is replaced by a vendored
+  TypeScript port (`src/vendor/placeholder-plain/`, MIT, provenance headers +
+  `LICENSE-signpdf.md`). Output proven byte-identical to upstream across 12
+  input×option combinations, including the already-signed incremental path.
+  `npm install @e-sig/core` now audits clean: 0 vulnerabilities.
+- **`@e-sig/core`: portable Chrome discovery.** `renderHtmlToPdf` honors
+  `ESIG_CHROME_PATH` / `PUPPETEER_EXECUTABLE_PATH` / `CHROME_PATH`, scans
+  common Chrome/Chromium/Edge/Brave locations on macOS/Linux/Windows, fails
+  loud when an env var points at a non-executable, and the not-found error
+  lists every path tried plus the override options.
+- **`@e-sig/core`: deterministic PQ key provisioning.**
+  `generatePqKeyBundle({ mldsa65Seed, ed25519Pkcs8 })` derives the hybrid
+  bundle from caller-supplied key material (same seed → same identity);
+  omitted fields stay random. Input validation on seed length and key type.
+- **`@e-sig/uaid-exch`: ships its LICENSE.** The package directory was missing
+  the LICENSE file that `files` referenced, so the tarball published without
+  license text.
+- Repo hygiene: workspace devDependencies on `@e-sig/core` pinned to `^0.7.0`
+  (stale `^0.6.0` pins nested old registry copies of core — and their pdfkit
+  chain — under `packages/*/node_modules`); `esig-uuaid` moved to vitest 4;
+  the root `crypto-js` override is gone (nothing pulls crypto-js anymore).
+  Root `npm audit`: 0 vulnerabilities.
+
 ### `@e-sig/core` 0.7.0 — ExternalSigner (HSM seam)
 
 **`ExternalSigner`.** `signPdf` / `PemSigner` accept `{ externalSigner }` as an
