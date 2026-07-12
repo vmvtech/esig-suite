@@ -11,7 +11,7 @@
 import crypto from "node:crypto";
 
 import { SignPdf } from "@signpdf/signpdf";
-import { plainAddPlaceholder } from "@signpdf/placeholder-plain";
+import { plainAddPlaceholder } from "./vendor/placeholder-plain/index.js";
 import { PemSigner } from "./pem-signer.js";
 import { verifyPdfStructure } from "./verify-pdf.js";
 import type { ExternalSigner, TsaTransport } from "./types.js";
