@@ -238,6 +238,35 @@ describe("sign → verify (cryptographic)", () => {
     expect(v0.digestValid).toBe(true);
     expect(foreign.serialNumber).toBeDefined();
   });
+
+  it("signs an already-signed PDF (vendored placeholder, existing-AcroForm path)", async () => {
+    // Regression guard for the vendored plainAddPlaceholder: a second signature
+    // exercises the incremental-update branch (existing /AcroForm + /Annots,
+    // knownIndex reuse). signPdf's internal overflow guard must pass, the
+    // result must carry two signature dictionaries, and the second (appended)
+    // signature's /ByteRange must tile the final file exactly.
+    const { signedPdf } = await sign();
+    const cert2 = issue();
+    const { signedPdf: twice } = await signPdf({
+      pdf: signedPdf,
+      keyPem: cert2.keyPem,
+      certPem: cert2.certPem,
+      reason: "second signature",
+      location: "",
+      contactInfo: "",
+      name: "Second Signer",
+      signingTime: new Date(),
+    });
+    const text = Buffer.from(twice).toString("binary");
+    expect(text.match(/\/Type \/Sig/g)?.length).toBe(2);
+    const ranges = [...text.matchAll(/\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/g)];
+    expect(ranges.length).toBe(2);
+    const tiling = ranges.filter((r) => {
+      const [a, b, c, d] = r.slice(1, 5).map(Number);
+      return b + d + (c - (a + b)) === twice.length;
+    });
+    expect(tiling.length).toBe(1); // exactly the second, whole-file signature
+  });
 });
 
 describe("PAdES / CAdES signed attributes", () => {

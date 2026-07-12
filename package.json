@@ -19,9 +19,6 @@
   "devDependencies": {
     "typescript": "^5.4.0"
   },
-  "overrides": {
-    "crypto-js": "^4.2.0"
-  },
   "engines": {
     "node": ">=20"
   }

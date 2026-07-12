@@ -1,7 +1,7 @@
 {
   "name": "@e-sig/worm",
   "version": "0.1.0",
-  "description": "WORM (write-once-read-many) archival adapter for @e-sig/core — store signed PDFs and audit-chain exports in an S3 Object Lock bucket with COMPLIANCE-mode retention set atomically on every put. Technical controls in the style of SEC 17a-4(f) / FINRA 4511. Dependency-light: bring your own S3 client.",
+  "description": "WORM (write-once-read-many) archival adapter for @e-sig/core \u2014 store signed PDFs and audit-chain exports in an S3 Object Lock bucket with COMPLIANCE-mode retention set atomically on every put. Technical controls in the style of SEC 17a-4(f) / FINRA 4511. Dependency-light: bring your own S3 client.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -56,7 +56,7 @@
     "@e-sig/core": "^0.6.0 || ^0.7.0"
   },
   "devDependencies": {
-    "@e-sig/core": "^0.6.0 || ^0.7.0",
+    "@e-sig/core": "^0.7.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.4.0",
     "vitest": "^4.1.10"
