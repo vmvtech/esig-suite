@@ -37,6 +37,8 @@ git clone https://github.com/vmvtech/esig-suite && cd esig-suite
 npm install && npm run build && npm run quickstart
 ```
 
+![esig-suite quickstart demo — issue a cert, sign, verify, reject tampering; 60 seconds, no services](examples/quickstart/demo.gif)
+
 Or copy [`examples/quickstart`](examples/quickstart) into your own project —
 one file, one dependency (`@e-sig/core`), no database or browser required.
 
