@@ -58,6 +58,29 @@ export function verifyPdfSignature(signed /* Uint8Array */) {
   const [a, b, c, d] = m.slice(1, 5).map(Number);
   result.byteRange = [a, b, c, d];
 
+  // Canonical detached-signature coverage invariants — enforced BEFORE any
+  // crypto. Without a === 0, bytes [0, a) fall outside the signed ranges and
+  // can be mutated after signing while the file still "verifies".
+  const inBounds = [a, b, c, d].every(
+    (n) => Number.isSafeInteger(n) && n >= 0 && n <= signed.length
+  );
+  if (!inBounds) {
+    failures.push("/ByteRange values are not safe in-bounds integers");
+    return result;
+  }
+  if (a !== 0) {
+    failures.push(`/ByteRange starts at offset ${a}, not 0 — unsigned prefix is attacker-mutable`);
+    return result;
+  }
+  if (!(a + b < c)) {
+    failures.push("/ByteRange regions overlap or are unordered");
+    return result;
+  }
+  if (c + d !== signed.length) {
+    failures.push(`/ByteRange does not extend to end of file (${c + d} != ${signed.length})`);
+    return result;
+  }
+
   const covered = b + d;
   const hole = c - (a + b);
   if (covered + hole !== signed.length) {
@@ -102,18 +125,28 @@ export function verifyPdfSignature(signed /* Uint8Array */) {
 
     const ts = inspectTimestamp(root);
     if (ts.present) {
-      result.timestamped = true;
-      result.timestampTime = ts.timestampTime;
-      result.tsaCommonName = ts.tsaCommonName;
-
       // §2.4.2 binding: TST messageImprint == sha256(signatureValue).
       if (ts.sigValueHex && ts.messageImprintHashHex) {
         const expected = sha256Hex(ts.sigValueHex);
         if (expected !== ts.messageImprintHashHex.toLowerCase()) {
           failures.push("timestamp messageImprint does not match signature value");
+          result.timestampForged = true;
         }
       } else if (!ts.messageImprintHashHex) {
         failures.push("timestamp present but messageImprint could not be read");
+        result.timestampForged = true;
+      }
+
+      // The timestamp token lives in UNsigned attributes: nothing the document
+      // signer vouches for covers it, and we do NOT verify the TSA's own
+      // signature over the TSTInfo here. A signer can therefore fabricate any
+      // genTime they like. Only expose the claimed time once the structural
+      // binding above has passed — and always as UNverified, never as proof.
+      if (!result.timestampForged) {
+        result.timestamped = true;
+        result.timestampVerified = false;
+        result.timestampTime = ts.timestampTime;
+        result.tsaCommonName = ts.tsaCommonName;
       }
     }
   } catch (e) {

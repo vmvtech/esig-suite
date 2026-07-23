@@ -1,6 +1,6 @@
 # esig-suite — self-contained PDF e-signature SDK
 
-[![CI](https://img.shields.io/github/actions/workflow/status/vmvtech/esig-suite/publish.yml?branch=main&label=CI)](https://github.com/vmvtech/esig-suite/actions/workflows/publish.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/vmvtech/esig-suite/ci.yml?branch=main&label=CI)](https://github.com/vmvtech/esig-suite/actions/workflows/ci.yml)
 [![npm @e-sig/core](https://img.shields.io/npm/v/%40e-sig%2Fcore?label=%40e-sig%2Fcore)](https://www.npmjs.com/package/@e-sig/core)
 [![npm @e-sig/supabase](https://img.shields.io/npm/v/%40e-sig%2Fsupabase?label=%40e-sig%2Fsupabase)](https://www.npmjs.com/package/@e-sig/supabase)
 [![npm @e-sig/react](https://img.shields.io/npm/v/%40e-sig%2Freact?label=%40e-sig%2Freact)](https://www.npmjs.com/package/@e-sig/react)
@@ -36,8 +36,6 @@ Issue a cert → sign a PDF → verify → detect tampering, with nothing but No
 git clone https://github.com/vmvtech/esig-suite && cd esig-suite
 npm install && npm run build && npm run quickstart
 ```
-
-![esig-suite quickstart demo — 60 seconds, no services](examples/quickstart/demo.gif)
 
 Or copy [`examples/quickstart`](examples/quickstart) into your own project —
 one file, one dependency (`@e-sig/core`), no database or browser required.
