@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>esig-suite vs DocuSign — e-sig</title>
+<meta name="description" content="DocuSign is a metered SaaS: per-envelope fees, your documents on their infrastructure. esig-suite is an MIT-licensed SDK you self-host — no per-document fees, ever.">
+<meta property="og:title" content="esig-suite vs DocuSign">
+<meta property="og:description" content="Metered SaaS vs self-hosted MIT SDK — cost model, data ownership, and trust compared factually.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://e-sig.org/vs/docusign">
+<link rel="icon" type="image/svg+xml" href="/assets/e-sig.svg">
+<link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css">
+<script defer src="/assets/site.js"></script>
+<style>
+  .hero{padding:64px 0 40px}
+  h1{font-size:clamp(30px,4.6vw,50px)}
+  .lead{font-size:17.5px;max-width:760px;margin:0 0 24px}
+  section{padding:52px 0;border-top:1px solid var(--line)}
+  .note{color:var(--dim);font-size:13px;margin-top:22px;max-width:760px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<header><div class="wrap"><nav>
+  <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+  <span class="spacer"></span>
+  <a href="/#how">How it works</a>
+  <a href="/pricing">Pricing</a>
+  <a href="/verify">Verify</a>
+  <a href="https://docs.e-sig.org">Docs</a>
+  <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+</nav></div></header>
+
+<main>
+
+<section class="hero" style="border-top:0"><div class="wrap" data-stagger="90">
+  <h1 class="rv">esig-suite vs <span class="accent-serif">DocuSign</span></h1>
+  <p class="lead rv">This one isn't really a feature comparison — it's a business-model
+    comparison. DocuSign rents you signing capacity and meters it. esig-suite is software
+    you own outright. Different cost curves, different data ownership, different trust model.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">The one-sentence version</h2>
+  <p class="lead rv"><b>DocuSign is a metered SaaS: per-envelope fees, documents on their
+    infrastructure, trust anchored to their brand. esig-suite is a self-hosted MIT SDK:
+    sign unlimited documents on your own infrastructure, no per-document fees, ever.</b></p>
+  <div class="tblwrap rv"><table class="cmp">
+    <thead><tr><th></th><th>esig-suite</th><th>DocuSign</th></tr></thead>
+    <tbody>
+      <tr><td><b>Model</b></td><td>Open-source SDK (MIT) + optional managed cloud</td><td>Proprietary SaaS</td></tr>
+      <tr><td><b>Cost shape</b></td><td>Flat: your infra + optional support. Zero per-envelope fees</td><td>Per-seat + per-envelope tiers; overages metered</td></tr>
+      <tr><td><b>Where documents live</b></td><td>Your storage, your database</td><td>Their cloud (data-residency options on higher tiers)</td></tr>
+      <tr><td><b>Certificates</b></td><td>You own and issue per-tenant certs</td><td>Their managed trust infrastructure</td></tr>
+      <tr><td><b>Audit trail</b></td><td>Append-only, hash-chained, in your database</td><td>Their hosted Certificate of Completion</td></tr>
+      <tr><td><b>Recipient trust recognition</b></td><td>None — new name</td><td>Industry standard; recipients know the flow</td></tr>
+      <tr><td><b>Vendor lock-in</b></td><td>None — MIT, standard PKCS#7 / CAdES output verifiable anywhere</td><td>High — workflows, templates, and evidence live in their system</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">The cost math at volume</h2>
+  <p class="lead rv">Per-envelope pricing is convenient at low volume and punishing at
+    high volume — it's a tax that scales with your success. With esig-suite, the marginal
+    cost of the millionth signed PDF is the same as the first: whatever your storage and
+    compute already cost. If signing is core to your product rather than an occasional
+    back-office task, the flat curve wins early and keeps winning.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">Where DocuSign is genuinely ahead</h2>
+  <p class="lead rv">Brand trust at the signing ceremony (recipients recognize the flow
+    and complete it), AATL/EUTL trust-list anchoring out of the box, identity-verification
+    add-ons, notarization products, CLM, and a compliance org bigger than most companies.
+    Regulated enterprises buying <i>assurance</i>, not software, should keep buying
+    DocuSign. esig-suite's signatures are cryptographically standard — but the trust in
+    your self-issued certs is established out-of-band, and that burden is yours.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">Where esig-suite is different</h2>
+  <p class="lead rv">Ownership. The certs are yours, the PDFs never leave your storage,
+    the audit log is a hash-chained table in your database, and the signatures are
+    bog-standard PKCS#7 / CAdES that any verifier on earth can check — including the
+    <a href="/verify">in-browser verifier on this site</a>. No metering, no renewal
+    negotiation, no sunset risk, no copyleft (MIT). You trade DocuSign's brand trust for
+    complete control; for product-embedded signing, that's usually the right trade.</p>
+  <p class="note rv">This page is a summary, not legal advice. Competitor facts reflect
+    public pricing/docs as of July 2026 — tell us if we've gotten something wrong:
+    <a href="https://github.com/vmvtech/esig-suite/issues">open an issue</a>.</p>
+</div></section>
+
+</main>
+
+<footer><div class="wrap">
+  <div class="row">
+    <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+    <span class="spacer"></span>
+    <a href="/pricing">Pricing</a>
+    <a href="/why-vmv">Why VMV</a>
+    <a href="/verify">Verify</a>
+    <a href="/vs/documenso">vs Documenso</a>
+    <a href="/vs/docuseal">vs DocuSeal</a>
+    <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
+  </div>
+  <div class="row legalrow">
+    <a href="/terms">Terms of Use</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/legal">Legal</a>
+    <span class="spacer"></span>
+    <span class="mono" style="color:var(--dim)">MIT-licensed SDK</span>
+  </div>
+  <p class="disc">© 2026 VMVTech, Ltd. (US), a subsidiary of VMVCorporation (US).</p>
+</div></footer>
+
+</body>
+</html>

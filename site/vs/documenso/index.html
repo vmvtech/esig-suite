@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>esig-suite vs Documenso — e-sig</title>
+<meta name="description" content="Documenso is an AGPL-3.0 Next.js application you deploy. esig-suite is an MIT-licensed SDK you embed. License, architecture, and embedding compared factually.">
+<meta property="og:title" content="esig-suite vs Documenso">
+<meta property="og:description" content="AGPL app you deploy vs MIT SDK you embed — the licensing and architecture trade-offs, side by side.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://e-sig.org/vs/documenso">
+<link rel="icon" type="image/svg+xml" href="/assets/e-sig.svg">
+<link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css">
+<script defer src="/assets/site.js"></script>
+<style>
+  .hero{padding:64px 0 40px}
+  h1{font-size:clamp(30px,4.6vw,50px)}
+  .lead{font-size:17.5px;max-width:760px;margin:0 0 24px}
+  section{padding:52px 0;border-top:1px solid var(--line)}
+  .note{color:var(--dim);font-size:13px;margin-top:22px;max-width:760px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<header><div class="wrap"><nav>
+  <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+  <span class="spacer"></span>
+  <a href="/#how">How it works</a>
+  <a href="/pricing">Pricing</a>
+  <a href="/verify">Verify</a>
+  <a href="https://docs.e-sig.org">Docs</a>
+  <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+</nav></div></header>
+
+<main>
+
+<section class="hero" style="border-top:0"><div class="wrap" data-stagger="90">
+  <h1 class="rv">esig-suite vs <span class="accent-serif">Documenso</span></h1>
+  <p class="lead rv">Documenso is a good product — a full signing application you host.
+    esig-suite is a different thing: a library you embed inside the app you already have.
+    The choice turns on license and architecture, not feature checklists.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">The one-sentence version</h2>
+  <p class="lead rv"><b>Documenso is an AGPL-3.0 application you deploy. esig-suite is an
+    MIT-licensed SDK you embed.</b> If you want a standalone signing portal, Documenso is
+    the more complete product today. If you want signing inside your own SaaS, agency
+    deliverable, or closed-source product, the AGPL is the reason you're reading this page.</p>
+  <div class="tblwrap rv"><table class="cmp">
+    <thead><tr><th></th><th>esig-suite</th><th>Documenso</th></tr></thead>
+    <tbody>
+      <tr><td><b>License</b></td><td>MIT</td><td>AGPL-3.0</td></tr>
+      <tr><td><b>What it is</b></td><td>Embeddable SDK (engine + adapters + React UI)</td><td>Hosted signing application (Next.js monolith)</td></tr>
+      <tr><td><b>Embedding in closed-source SaaS</b></td><td>Unrestricted</td><td>AGPL network-use clause triggers source-disclosure obligations for the whole offering; most teams route around it with a commercial license</td></tr>
+      <tr><td><b>Your UI</b></td><td>Yours — headless core, optional React components</td><td>Documenso's — themable, but it's their app</td></tr>
+      <tr><td><b>Signature format</b></td><td>PKCS#7 / CAdES, optional RFC-3161 (CAdES-T)</td><td>PAdES via its own stack</td></tr>
+      <tr><td><b>Audit model</b></td><td>Append-only, hash-chained log you store</td><td>Application database</td></tr>
+      <tr><td><b>Self-hosted</b></td><td>Both</td><td>Both</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">Why the AGPL question decides it for embedders</h2>
+  <p class="lead rv">AGPL-3.0 extends copyleft to network use: offer the software (or a
+    derivative) as a service and you must offer the corresponding source — for many legal
+    teams, of the offering as a whole. SaaS teams, agencies shipping client work, and
+    closed-source products typically can't accept that without a commercial agreement.
+    MIT imposes no such obligation: embed, modify, ship, keep your code yours. If you
+    already know you need MIT-permissive, the comparison ends here.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">Where Documenso is ahead — honestly</h2>
+  <p class="lead rv">A polished end-user signing experience out of the box, team/template
+    management UI, a larger community, and years of production hardening as a complete
+    product. If you were going to run a standalone signing portal and can live with AGPL
+    (or their commercial license), use Documenso — don't rebuild their app on top of our
+    SDK unless embedding is the actual requirement.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">Where esig-suite is different</h2>
+  <p class="lead rv">MIT and library-first: <span class="mono">renderHtmlToPdf → signPdf
+    (+TSA) → verifyPdfSignature</span>, self-issued per-tenant certs, tokenized multi-signer
+    envelopes, and a hash-chained audit log — all as <span class="mono">npm install</span>,
+    not a deployment. You own the certs, the PDFs, and the trail, with no application
+    surface to adopt and no copyleft review to schedule.</p>
+  <p class="note rv">License texts govern; this page is a summary, not legal advice.
+    Competitor facts reflect their public repositories/licenses as of July 2026 — tell us
+    if we've gotten something wrong: <a href="https://github.com/vmvtech/esig-suite/issues">open an issue</a>.</p>
+</div></section>
+
+</main>
+
+<footer><div class="wrap">
+  <div class="row">
+    <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+    <span class="spacer"></span>
+    <a href="/pricing">Pricing</a>
+    <a href="/why-vmv">Why VMV</a>
+    <a href="/verify">Verify</a>
+    <a href="/vs/docuseal">vs DocuSeal</a>
+    <a href="/vs/docusign">vs DocuSign</a>
+    <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
+  </div>
+  <div class="row legalrow">
+    <a href="/terms">Terms of Use</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/legal">Legal</a>
+    <span class="spacer"></span>
+    <span class="mono" style="color:var(--dim)">MIT-licensed SDK</span>
+  </div>
+  <p class="disc">© 2026 VMVTech, Ltd. (US), a subsidiary of VMVCorporation (US).</p>
+</div></footer>
+
+</body>
+</html>
