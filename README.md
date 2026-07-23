@@ -1,5 +1,13 @@
 # esig-suite — self-contained PDF e-signature SDK
 
+[![CI](https://img.shields.io/github/actions/workflow/status/vmvtech/esig-suite/ci.yml?branch=main&label=CI)](https://github.com/vmvtech/esig-suite/actions/workflows/ci.yml)
+[![npm @e-sig/core](https://img.shields.io/npm/v/%40e-sig%2Fcore?label=%40e-sig%2Fcore)](https://www.npmjs.com/package/@e-sig/core)
+[![npm @e-sig/supabase](https://img.shields.io/npm/v/%40e-sig%2Fsupabase?label=%40e-sig%2Fsupabase)](https://www.npmjs.com/package/@e-sig/supabase)
+[![npm @e-sig/react](https://img.shields.io/npm/v/%40e-sig%2Freact?label=%40e-sig%2Freact)](https://www.npmjs.com/package/@e-sig/react)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/vmvtech/esig-suite)](https://github.com/vmvtech/esig-suite/stargazers)
+[![Node >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
+
 A portable, **self-hosted** PDF e-signature stack: render an HTML document to
 PDF, sign it with a self-issued per-tenant certificate (PKCS#7 / ETSI CAdES,
 optional RFC-3161 trusted timestamp → CAdES-T), store it, and keep an

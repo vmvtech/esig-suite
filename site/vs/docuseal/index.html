@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>esig-suite vs DocuSeal — e-sig</title>
+<meta name="description" content="DocuSeal is an AGPL-3.0 Rails application you deploy. esig-suite is an MIT-licensed TypeScript SDK you embed. License, stack, and embedding compared factually.">
+<meta property="og:title" content="esig-suite vs DocuSeal">
+<meta property="og:description" content="AGPL Rails app vs MIT TypeScript SDK — the licensing and architecture trade-offs, side by side.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://e-sig.org/vs/docuseal">
+<link rel="icon" type="image/svg+xml" href="/assets/e-sig.svg">
+<link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css">
+<script defer src="/assets/site.js"></script>
+<style>
+  .hero{padding:64px 0 40px}
+  h1{font-size:clamp(30px,4.6vw,50px)}
+  .lead{font-size:17.5px;max-width:760px;margin:0 0 24px}
+  section{padding:52px 0;border-top:1px solid var(--line)}
+  .note{color:var(--dim);font-size:13px;margin-top:22px;max-width:760px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<header><div class="wrap"><nav>
+  <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+  <span class="spacer"></span>
+  <a href="/#how">How it works</a>
+  <a href="/pricing">Pricing</a>
+  <a href="/verify">Verify</a>
+  <a href="https://docs.e-sig.org">Docs</a>
+  <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+</nav></div></header>
+
+<main>
+
+<section class="hero" style="border-top:0"><div class="wrap" data-stagger="90">
+  <h1 class="rv">esig-suite vs <span class="accent-serif">DocuSeal</span></h1>
+  <p class="lead rv">DocuSeal is one of the most-deployed open-source signing apps —
+    a complete Rails product. esig-suite isn't an app at all: it's the signing engine
+    you put inside yours. The choice turns on license and stack, not feature checklists.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">The one-sentence version</h2>
+  <p class="lead rv"><b>DocuSeal is an AGPL-3.0 Rails application you deploy. esig-suite
+    is an MIT-licensed TypeScript SDK you embed.</b> If you want a turnkey signing portal,
+    DocuSeal is battle-tested. If your product is a Node/TypeScript codebase that needs
+    signing as a feature, embedding an MIT library beats adopting a Rails monolith.</p>
+  <div class="tblwrap rv"><table class="cmp">
+    <thead><tr><th></th><th>esig-suite</th><th>DocuSeal</th></tr></thead>
+    <tbody>
+      <tr><td><b>License</b></td><td>MIT</td><td>AGPL-3.0</td></tr>
+      <tr><td><b>What it is</b></td><td>Embeddable SDK (engine + adapters + React UI)</td><td>Hosted signing application (Rails monolith)</td></tr>
+      <tr><td><b>Stack</b></td><td>TypeScript / Node — same process as your app</td><td>Ruby on Rails — separate service to run and learn</td></tr>
+      <tr><td><b>Embedding in closed-source SaaS</b></td><td>Unrestricted</td><td>AGPL network-use clause triggers source-disclosure obligations; typically requires their commercial license</td></tr>
+      <tr><td><b>Signature format</b></td><td>PKCS#7 / CAdES, optional RFC-3161 (CAdES-T)</td><td>PDF signatures via its own stack</td></tr>
+      <tr><td><b>Audit model</b></td><td>Append-only, hash-chained log you store</td><td>Application database</td></tr>
+      <tr><td><b>Self-hosted</b></td><td>Both</td><td>Both</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">The stack argument</h2>
+  <p class="lead rv">DocuSeal's API-first design means you <i>can</i> drive it from a
+    TypeScript app — over HTTP, as a second service you deploy, monitor, upgrade, and
+    secure. esig-suite's engine runs in-process: <span class="mono">npm install
+    @e-sig/core</span>, call <span class="mono">signDocument()</span>, done. No second
+    runtime, no Rails expertise required, no network hop between your app and its
+    signatures.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">Where DocuSeal is ahead — honestly</h2>
+  <p class="lead rv">A mature form-builder and signing UI, broad deployment docs
+    (Docker, Heroku, one-click hosts), a big user base, and an API surface refined by
+    years of integrations. If a standalone portal fits and AGPL is acceptable (or you'd
+    buy their commercial license), DocuSeal is the lower-risk path.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2 class="rv">Where esig-suite is different</h2>
+  <p class="lead rv">MIT and library-first, in your language: render → sign (PKCS#7 /
+    CAdES) → RFC-3161 timestamp → verify → hash-chained audit, with self-issued
+    per-tenant certs and tokenized multi-signer envelopes. Your database, your storage,
+    your certs — no service to operate and no copyleft review to schedule.</p>
+  <p class="note rv">License texts govern; this page is a summary, not legal advice.
+    Competitor facts reflect their public repositories/licenses as of July 2026 — tell us
+    if we've gotten something wrong: <a href="https://github.com/vmvtech/esig-suite/issues">open an issue</a>.</p>
+</div></section>
+
+</main>
+
+<footer><div class="wrap">
+  <div class="row">
+    <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+    <span class="spacer"></span>
+    <a href="/pricing">Pricing</a>
+    <a href="/why-vmv">Why VMV</a>
+    <a href="/verify">Verify</a>
+    <a href="/vs/documenso">vs Documenso</a>
+    <a href="/vs/docusign">vs DocuSign</a>
+    <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
+  </div>
+  <div class="row legalrow">
+    <a href="/terms">Terms of Use</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/legal">Legal</a>
+    <span class="spacer"></span>
+    <span class="mono" style="color:var(--dim)">MIT-licensed SDK</span>
+  </div>
+  <p class="disc">© 2026 VMVTech, Ltd. (US), a subsidiary of VMVCorporation (US).</p>
+</div></footer>
+
+</body>
+</html>

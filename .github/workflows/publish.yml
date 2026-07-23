@@ -1,6 +1,6 @@
 name: Publish to npm
 
-# Publishes @e-sig/core, @e-sig/supabase, @e-sig/react to the public npm
+# Publishes every publishable @e-sig workspace package to the public npm
 # registry via OIDC Trusted Publishing — no npm token, no repo secret. npm
 # mints short-lived credentials from the workflow's OIDC identity, and
 # provenance (Sigstore) is generated automatically once the repo is public.
@@ -38,23 +38,21 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run smoke
-      - name: Publish @e-sig/core
-        run: npm publish -w @e-sig/core --access public
-      - name: Publish @e-sig/supabase
-        run: npm publish -w @e-sig/supabase --access public
-      - name: Publish @e-sig/react
-        run: npm publish -w @e-sig/react --access public
-      # NOTE: first-time publish of a NEW package name cannot use OIDC trusted
-      # publishing (npm only lets you configure a trusted publisher on an
-      # existing package). Publish each new package once manually (npm publish
-      # from the package dir with a granular token), configure its Trusted
-      # Publisher (vmvtech / esig-suite / publish.yml), then these steps
-      # take over.
-      - name: Publish @e-sig/uuaid
-        run: npm publish -w @e-sig/uuaid --access public
-      - name: Publish @e-sig/uaid-exch
-        run: npm publish -w @e-sig/uaid-exch --access public --tag preview
-      - name: Publish @e-sig/worm
-        run: npm publish -w @e-sig/worm --access public
-      - name: Publish @e-sig/hsm-pkcs11
-        run: npm publish -w @e-sig/hsm-pkcs11 --access public
+      # Gate: verify BEFORE anything is published that every publishable
+      # workspace name already exists on the registry (OIDC trusted publishing
+      # cannot first-publish a NEW name — publish new packages once manually
+      # with a granular token, configure their Trusted Publisher
+      # (vmvtech / esig-suite / publish.yml), then this workflow takes over)
+      # and that at least one workspace has a new version. A failure here
+      # leaves the registry untouched instead of half-released.
+      - name: Publish preflight (registry gate)
+        run: node scripts/publish-preflight.mjs
+      # Validate packing (files list, prepublishOnly) without touching npm.
+      - name: Pack dry-run
+        run: npm publish --dry-run --workspaces
+      # Publishes workspaces dependencies-first, skipping versions already on
+      # the registry — re-running after a partial failure converges instead of
+      # dying on the first already-published package. Dist-tags come from each
+      # package's publishConfig.tag (e.g. @e-sig/uaid-exch → preview).
+      - name: Publish packages
+        run: node scripts/publish-preflight.mjs --publish

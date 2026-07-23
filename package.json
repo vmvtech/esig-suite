@@ -13,11 +13,13 @@
     "clean": "npm run clean -w @e-sig/core && npm run clean -w @e-sig/supabase && npm run clean -w @e-sig/react && npm run clean -w @e-sig/uuaid && npm run clean -w @e-sig/uaid-exch && npm run clean -w @e-sig/worm && npm run clean -w @e-sig/hsm-pkcs11",
     "smoke": "node scripts/smoke.mjs",
     "quickstart": "npm start -w esig-quickstart",
-    "test": "npm run test -w @e-sig/core && npm run test -w @e-sig/supabase && npm run test -w @e-sig/uuaid && npm run test -w @e-sig/uaid-exch && npm run test -w @e-sig/worm && npm run test -w @e-sig/hsm-pkcs11",
+    "test": "npm run test -w @e-sig/core && npm run test -w @e-sig/supabase && npm run test -w @e-sig/uuaid && npm run test -w @e-sig/uaid-exch && npm run test -w @e-sig/worm && npm run test -w @e-sig/hsm-pkcs11 && npm run test:scripts",
+    "test:scripts": "vitest run scripts/",
     "typecheck": "npm run build"
   },
   "devDependencies": {
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=20"
