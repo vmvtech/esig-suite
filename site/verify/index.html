@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verify a signed PDF — e-sig</title>
+<meta name="description" content="Verify a PDF's PKCS#7 / CAdES signature entirely in your browser. Drop a signed PDF to check integrity, authenticity, and RFC 3161 timestamps — no uploads, no servers, works offline.">
+<meta property="og:title" content="Verify a signed PDF — e-sig">
+<meta property="og:description" content="Client-side PDF signature verification. Your file never leaves your device.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://e-sig.org/verify">
+<link rel="icon" type="image/svg+xml" href="/assets/e-sig.svg">
+<link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vmvoneSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css">
+<script defer src="/assets/site.js"></script>
+<script defer src="verify.js"></script>
+<style>
+  section{padding:64px 0;border-top:1px solid var(--line)}
+  h1{font-size:clamp(34px,5vw,56px);line-height:1.08}
+  .lead{font-size:17.5px;max-width:760px;margin:0 0 24px}
+
+  .drop{border:1.5px dashed var(--line);border-radius:16px;padding:56px 28px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;background:var(--card)}
+  .drop:hover,.drop:focus-visible,.drop.over{border-color:var(--accent);background:rgba(255,255,255,0.03)}
+  .drop .big{font-size:19px;color:var(--ink);font-weight:600;margin-bottom:8px}
+  .drop .small{color:var(--dim);font-size:13.5px}
+  .drop .small kbd{border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:12px;background:rgba(255,255,255,0.04)}
+
+  .verdict{display:flex;align-items:center;gap:12px;font-size:21px;font-weight:700;margin:28px 0 6px;color:var(--ink)}
+  .dot{width:13px;height:13px;border-radius:50%;flex:none}
+  .verdict.valid .dot{background:#a6e3a1}
+  .verdict.tampered .dot,.verdict.invalid .dot{background:#f38ba8}
+  @media (prefers-color-scheme:light){
+    .verdict.valid .dot{background:#40a02b}
+    .verdict.tampered .dot,.verdict.invalid .dot{background:#d20f39}
+  }
+
+  .detail{width:100%;border-collapse:collapse;margin:14px 0 8px;font-size:14.5px}
+  .detail td{padding:10px 14px;border-top:1px solid var(--line);vertical-align:top}
+  .detail td:first-child{color:var(--dim);width:190px;white-space:nowrap}
+  .pass{color:#a6e3a1;font-weight:600}
+  .fail{color:#f38ba8;font-weight:600}
+  @media (prefers-color-scheme:light){
+    .pass{color:#40a02b}
+    .fail{color:#d20f39}
+  }
+  .dim{color:var(--dim)}
+
+  .findings{margin:8px 0 0;padding-left:20px;font-size:14px}
+  .findings li{margin:4px 0;color:var(--fg)}
+
+  .note{color:var(--dim);font-size:13px;margin-top:22px;max-width:760px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<header><div class="wrap"><nav>
+  <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+  <span class="spacer"></span>
+  <a href="/#how">How it works</a>
+  <a href="/pricing">Pricing</a>
+  <a href="/why-vmv">Why VMV</a>
+  <a href="/verify" class="active">Verify</a>
+  <a href="https://docs.e-sig.org">Docs</a>
+  <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+</nav></div></header>
+
+<main>
+
+<section id="lede" style="border-top:0"><div class="wrap" data-stagger="90">
+  <h1 class="rv">Verify a signed PDF.<br /><span class="accent-serif">Right here, offline.</span></h1>
+  <p class="lead rv">
+    Drop a PDF signed with esig-suite (or any PKCS#7 / CAdES signer) to check its
+    integrity, authenticity, and trusted timestamp. Everything runs in your browser —
+    <b>your file never leaves your device</b>, no API calls, no uploads.
+  </p>
+  <div id="drop" class="drop rv" role="button" tabindex="0" aria-label="Drop a signed PDF here, or click to choose a file">
+    <div class="big">Drop a signed PDF here</div>
+    <div class="small">or click to choose a file · <kbd>.pdf</kbd> · processed locally with the same verifier that ships in <span class="mono">@e-sig/core</span></div>
+  </div>
+  <input id="file" type="file" accept="application/pdf,.pdf" hidden>
+  <div id="result" aria-live="polite"></div>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <h2 class="rv">What this checks</h2>
+  <p class="lead rv">The exact same static-verification logic that ships in
+    <span class="mono">@e-sig/core</span>, compiled for the browser.</p>
+  <div class="tblwrap rv"><table class="cmp">
+    <thead>
+      <tr><th>Check</th><th>What it proves</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><b>Byte-range coverage</b></td><td>The signature's /ByteRange tiles the whole file — nothing was appended or patched around the signed region.</td></tr>
+      <tr><td><b>Integrity (SHA-256)</b></td><td>The signed messageDigest attribute matches the hash of the covered bytes — the document was not modified after signing.</td></tr>
+      <tr><td><b>Authenticity (RSA)</b></td><td>The RSA signature verifies against the embedded signer certificate over the signed attributes.</td></tr>
+      <tr><td><b>RFC 3161 timestamp</b></td><td>If present (CAdES-T), the timestamp token's messageImprint binds to the signature — proving <i>when</i> it was signed.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note rv">What this does <b>not</b> check: whether you should <i>trust</i> the
+    signer certificate itself. esig-suite issues self-signed, per-tenant certs, so trust
+    is established out-of-band (compare the cert fingerprint against the issuer's audit
+    log — see <span class="mono">verifyPdfSignature</span> in
+    <a href="https://github.com/vmvtech/esig-suite">the repo</a>). Structural and
+    cryptographic verification here is exact.</p>
+</div></section>
+
+</main>
+
+<footer><div class="wrap">
+  <div class="row">
+    <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+    <span class="spacer"></span>
+    <a href="/pricing">Pricing</a>
+    <a href="/why-vmv">Why VMV</a>
+    <a href="/verify">Verify</a>
+    <a href="https://docs.e-sig.org">Docs</a>
+    <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
+    <a href="https://www.npmjs.com/package/@e-sig/core">npm</a>
+    <a href="https://uuaid.foundation">UUAID Foundation</a>
+    <a href="https://app.dsalvus.com">DSalvus</a>
+  </div>
+  <div class="row legalrow">
+    <a href="/terms">Terms of Use</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/legal">Legal</a>
+    <span class="spacer"></span>
+    <span class="mono" style="color:var(--dim)">MIT-licensed SDK</span>
+  </div>
+  <p class="disc">e-sig is signing-infrastructure software, not legal
+    advice. It provides technical controls that support ESIGN/UETA (intent, attribution,
+    integrity); your compliance posture, certificate trust, and record-retention remain your
+    responsibility.</p>
+  <p class="disc" style="color:var(--dim)">© 2026 VMVTech, Ltd. (US), a subsidiary of VMVCorporation (US). esig-suite
+    &amp; DSalvus are products of VMVTech, Ltd. (US). <a href="https://uuaid.foundation">UUAID
+    Foundation</a> and IAASO are independent public-interest institutions.</p>
+</div></footer>
+
+</body>
+</html>
