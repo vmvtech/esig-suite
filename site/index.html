@@ -118,6 +118,17 @@
 <section id="start"><div class="wrap">
   <h2 class="rv">Sign a document in a few lines</h2>
   <p class="lead rv">Compose your HTML, hand it to the orchestrator over your three stores, get back a stored URL, an audit id, and a cert fingerprint.</p>
+  <span class="pill rv">⏱️ <b>60 seconds</b> · zero services · one command</span>
+  <p class="rv mono" style="font-size:14px;color:var(--mut);margin:0 0 16px">$ npm install &amp;&amp; npm run build &amp;&amp; npm run quickstart</p>
+  <img class="rv" src="/assets/quickstart-demo.gif" width="811" height="560" loading="lazy" alt="esig-suite quickstart demo — issue a cert, sign, verify, reject tampering; 60 seconds, no services" style="display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:14px">
+  <div class="flow rv" style="margin-top:16px">
+    <span>issue cert</span><span class="arw">→</span>
+    <span>render html→pdf</span><span class="arw">→</span>
+    <span>sign (+timestamp)</span><span class="arw">→</span>
+    <span>verify</span><span class="arw">→</span>
+    <span>reject tamper</span>
+  </div>
+  <p class="lead rv" style="margin-top:28px;font-size:15.5px">That's the entire quickstart — no signup, no API keys, no external calls. <a href="https://github.com/vmvtech/esig-suite/tree/main/examples/quickstart">Copy <span class="mono">examples/quickstart</span> ↗</a> into your own project and run it yourself. Here's the API underneath:</p>
 <pre class="rv"><span class="c">// one call: render → issue/rotate cert → sign (+timestamp) → store → audit</span>
 <span class="k">import</span> { <span class="f">signDocument</span> } <span class="k">from</span> <span class="s">"@e-sig/core"</span>;
 
