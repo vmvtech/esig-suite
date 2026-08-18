@@ -1,0 +1,19 @@
+# Keep the build context small and keep local state out of images.
+# Added for packages/esig-gateway/Dockerfile (the repo's only container build).
+node_modules
+**/node_modules
+**/dist
+.git
+.github
+_stage
+site
+docs
+examples/quickstart/.next
+**/coverage
+**/.vitest
+*.zip
+*.png
+.env
+.env.*
+.qwen
+.vexp

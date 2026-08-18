@@ -41,6 +41,90 @@ function signSealed() {
   });
 }
 
+describe("pq-pdf: UUAID attribution end-to-end (IAASO-0004)", () => {
+  const UUAID = "uuaid:foundation:agent:018f9f7a-7b4c-7cc2-9b7f-7b7d6d16a001";
+
+  async function signSealedAs(uuaid?: string) {
+    const cert = generateSelfSignedCert({ subjectName: "Acme Inc" });
+    const keys = loadPqSigningKeys(generatePqKeyBundle().bundle);
+    return signPdf({
+      pdf: SAMPLE_PDF,
+      keyPem: cert.keyPem,
+      certPem: cert.certPem,
+      reason: "PQ uuaid e2e",
+      location: "",
+      contactInfo: "a@b.co",
+      name: "Acme Inc",
+      pqSeal: { keys, uuaid },
+    });
+  }
+
+  it("carries the asserted UUAID through signPdf -> PDF -> verify", async () => {
+    const r = await signSealedAs(UUAID);
+    expect(r.pqUuaid).toBe(UUAID);
+    expect(extractPqSeal(r.signedPdf)?.uuaid).toBe(UUAID);
+
+    const v = verifyDocument(r.signedPdf, { expectedUuaid: UUAID });
+    expect(v.classical.ok).toBe(true);
+    expect(v.postQuantum.ok).toBe(true);
+    expect(v.postQuantum.uuaid).toBe(UUAID);
+    expect(v.postQuantum.uuaidMatches).toBe(true);
+    expect(v.ok).toBe(true);
+  });
+
+  it("fails a pinned UUAID that the seal does not assert", async () => {
+    const r = await signSealedAs(UUAID);
+    const v = verifyPqSeal(r.signedPdf, {
+      expectedUuaid: "uuaid:foundation:agent:018f9f7a-7b4c-7cc2-9b7f-7b7d6d16a999",
+    });
+    expect(v.uuaidMatches).toBe(false);
+    expect(v.ok).toBe(false);
+    expect(v.failures.join(" ")).toMatch(/does not match the expected/);
+  });
+
+  it("fails a pinned UUAID against an unattributed seal (no silent downgrade)", async () => {
+    const r = await signSealedAs();
+    expect(r.pqUuaid).toBeUndefined();
+    expect(extractPqSeal(r.signedPdf)?.uuaid).toBeUndefined();
+
+    // Unpinned: still a perfectly valid L1 seal.
+    expect(verifyPqSeal(r.signedPdf).ok).toBe(true);
+    // Pinned: must NOT pass just because the field is missing.
+    const v = verifyDocument(r.signedPdf, { expectedUuaid: UUAID });
+    expect(v.postQuantum.ok).toBe(false);
+    expect(v.postQuantum.failures.join(" ")).toMatch(/asserts no UUAID/);
+    expect(v.ok).toBe(false);
+  });
+
+  it("keeps the UUAID under the classical RSA signature too", async () => {
+    // The seal is embedded (base64) BEFORE the /ByteRange signature, so swapping
+    // the asserted identity in a finished PDF must break both layers. Tamper the
+    // real blob, not the plaintext — the identifier never appears verbatim.
+    const r = await signSealedAs(UUAID);
+    const original = extractPqSeal(r.signedPdf)!;
+    expect(original.uuaid).toBe(UUAID);
+
+    const forged = JSON.parse(JSON.stringify(original));
+    forged.uuaid = "uuaid:foundation:agent:018f9f7a-7b4c-7cc2-9b7f-7b7d6d16a999";
+    const originalB64 = Buffer.from(JSON.stringify(original), "utf8").toString("base64");
+    const forgedB64 = Buffer.from(JSON.stringify(forged), "utf8").toString("base64");
+    // Same-length swap keeps every byte offset (and the /ByteRange) intact, so
+    // the failure below is the signature catching it — not a corrupted file.
+    expect(forgedB64.length).toBe(originalB64.length);
+
+    const pdfText = r.signedPdf.toString("latin1");
+    expect(pdfText).toContain(originalB64);
+    const swapped = Buffer.from(pdfText.replace(originalB64, forgedB64), "latin1");
+    expect(swapped.length).toBe(r.signedPdf.length);
+
+    expect(extractPqSeal(swapped)?.uuaid).toBe(forged.uuaid); // the swap landed
+    const v = verifyDocument(swapped);
+    expect(v.postQuantum.ok).toBe(false); // seal signatures reject it
+    expect(v.classical.ok).toBe(false); // and so does the RSA layer above it
+    expect(v.ok).toBe(false);
+  });
+});
+
 describe("pq-pdf: sealed signing", () => {
   it("reports the seal in the signPdf result", async () => {
     const r = await signSealed();

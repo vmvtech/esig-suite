@@ -5,9 +5,12 @@ import {
   DEFAULT_SIGNATURE_LENGTH,
   SUBFILTER_ADOBE_PKCS7_DETACHED,
   removeTrailingNewLine,
-  PDFObject,
   PDFKitReferenceMock,
 } from "@signpdf/utils";
+// NOT @signpdf/utils' PDFObject: that one splices any value containing "<<"
+// into the dictionary raw and emits names unescaped, which lets caller-supplied
+// option strings inject keys into the signature dictionary. See pdfObject.ts.
+import { PDFObject } from "./pdfObject.js";
 import { pdfkitAddPlaceholder, type PdfKitMock } from "./pdfkitAddPlaceholder.js";
 import getIndexFromRef from "./getIndexFromRef.js";
 import readPdf from "./readPdf.js";
@@ -35,9 +38,24 @@ export interface PlainAddPlaceholderInput {
   signatureLength?: number;
   /** One of SUBFILTER_* from @signpdf/utils */
   subFilter?: string;
-  /** [x1, y1, x2, y2] widget rectangle */
+  /**
+   * [x1, y1, x2, y2] widget rectangle.
+   *
+   * ATTRIBUTION INTEROP: the UUAID provenance verifier's PDF attribution-scope
+   * whitelist (IAASO-0004) requires the invisible `[0 0 0 0]` /Rect and denies
+   * any other value. `signPdf` never passes this, so today every document we
+   * emit is in scope — but a visible-signature feature would drop attribution
+   * on day one. Coordinate with the UUAID lane before wiring it up.
+   */
   widgetRect?: number[];
-  /** Name of the application generating the signature */
+  /**
+   * Name of the application generating the signature (emitted as
+   * `/Prop_Build /App <</Name ...>>`).
+   *
+   * ATTRIBUTION INTEROP: `App` is not in that verifier's allowed nested
+   * Prop_Build key set, so setting this denies attribution. Same rule as
+   * `widgetRect` — `signPdf` never passes it; coordinate before it does.
+   */
   appName?: string;
 }
 

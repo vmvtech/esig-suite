@@ -40,6 +40,17 @@ export interface PqSealVerdict {
   mldsa65Fpr?: string;
   signedAt?: string;
   coveredBytes?: number;
+  /**
+   * The signer-asserted UUAID carried in the seal, when present (IAASO-0004).
+   * ASSERTION, NOT ATTRIBUTION: a valid seal proves the seal key claimed this
+   * identity, never that the identity's owner authorised the document. Treat it
+   * as attribution only once an independent uuaid -> key direction has been
+   * checked (a UUAID-side registration of this seal key). Unmatched, it carries
+   * no more weight than `mldsa65Fpr`.
+   */
+  uuaid?: string;
+  /** A `expectedUuaid` was supplied AND the seal asserts exactly that UUAID. */
+  uuaidMatches?: boolean;
   failures: string[];
 }
 
@@ -58,6 +69,17 @@ export interface VerifyPqSealOptions {
    * that produced the seal — the X.509 upgrade of `expectedMldsa65Fpr`.
    */
   signerCert?: string | Uint8Array;
+  /**
+   * Pin the expected signer-asserted UUAID. When set, the seal MUST carry
+   * exactly this `uuaid` (case-sensitive — UUAID segments are case-preserving)
+   * or verification fails.
+   *
+   * This pins an ASSERTION. It answers "does this seal claim the identity I
+   * expected?", not "does that identity vouch for this key?" — the relying party
+   * still supplies the trust, exactly as with `expectedMldsa65Fpr`. Pinning a
+   * UUAID you obtained from the document itself proves nothing.
+   */
+  expectedUuaid?: string;
 }
 
 /**
@@ -80,6 +102,7 @@ export function verifyPqSeal(pdf: Buffer, opts: VerifyPqSealOptions = {}): PqSea
     mldsa65Fpr: (seal as PqSeal).keys?.mldsa65Fpr,
     signedAt: (seal as PqSeal).signedAt,
     coveredBytes: (seal as PqSeal).coveredBytes,
+    uuaid: (seal as PqSeal).uuaid,
     failures,
   };
 
@@ -106,6 +129,7 @@ export function verifyPqSeal(pdf: Buffer, opts: VerifyPqSealOptions = {}): PqSea
   if (!sigs.mldsa65) failures.push("ML-DSA-65 seal signature invalid");
   if (!sigs.fingerprintOk) failures.push("ML-DSA-65 fingerprint inconsistent with its public key");
   if (!sigs.keyIdOk) failures.push("seal keyId inconsistent with its public keys");
+  if (!sigs.uuaidOk) failures.push("seal carries a malformed UUAID assertion");
 
   // (3) Optional identity pinning (in-band TOFU assertion).
   let identityOk = true;
@@ -113,6 +137,21 @@ export function verifyPqSeal(pdf: Buffer, opts: VerifyPqSealOptions = {}): PqSea
     identityOk = (verdict.mldsa65Fpr ?? "").toLowerCase() === opts.expectedMldsa65Fpr.toLowerCase();
     if (!identityOk) {
       failures.push("post-quantum signer fingerprint does not match the expected (pinned) identity");
+    }
+  }
+
+  // (3b) Optional UUAID assertion pinning (IAASO-0004). Pins what the seal
+  // CLAIMS; the uuaid -> key direction is out of band, see PqSealVerdict.uuaid.
+  if (opts.expectedUuaid) {
+    const uuaidMatches = verdict.uuaid === opts.expectedUuaid;
+    verdict.uuaidMatches = uuaidMatches;
+    if (!uuaidMatches) {
+      identityOk = false;
+      failures.push(
+        verdict.uuaid === undefined
+          ? "seal asserts no UUAID but one was expected"
+          : "seal's asserted UUAID does not match the expected (pinned) identity"
+      );
     }
   }
 
@@ -166,6 +205,7 @@ export function verifyDocument(pdf: Buffer, opts: VerifyDocumentOptions = {}): D
   const postQuantum = verifyPqSeal(pdf, {
     expectedMldsa65Fpr: opts.expectedMldsa65Fpr,
     signerCert: opts.signerCert,
+    expectedUuaid: opts.expectedUuaid,
   });
 
   let sealWithinSignedRegion = true;

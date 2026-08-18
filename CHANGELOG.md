@@ -3,7 +3,91 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
-## 0.7.0 — 2026-07-07
+## Unreleased
+
+### `@e-sig/core`: fix signature-dictionary injection via `signPdf` options (security)
+
+Reported by the UUAID lane on 2026-08-11, found while adversarially testing an
+independent verifier against `@e-sig/core@0.6.0`. A caller of `signPdf` could
+splice arbitrary keys into the PDF signature dictionary through its options —
+including viewer-actionable ones such as `/OpenAction`. The resulting document
+is *validly signed*: the signature genuinely covers the injected content, which
+is what makes it dangerous. It matters wherever `signPdf` options are fed from
+user or tenant input; a hardcoded call site was never exposed.
+
+Root cause is `PDFObject.convert` in `@signpdf/utils` (inherited from pdfkit),
+on two paths:
+
+- **`subFilter`** was passed through as a JS string, which that converter emits
+  as a raw unescaped PDF name (`/${value}`) — so whitespace or a delimiter in
+  the value ends the `/SubFilter` token early and everything after it becomes
+  sibling keys in the signature dictionary.
+- **`reason` / `name` / `location` / `contactInfo`** (found while reproducing
+  the above, and the more exposed of the two — these commonly come straight
+  from a web form). The converter's dictionary branch emits *any* value whose
+  string form contains `<<` completely raw — not converted, not escaped, not
+  even wrapped in the PDF string parens.
+
+Fixed in two layers:
+
+- **`subFilter` is now validated against a closed set** — `ETSI.CAdES.detached`
+  and `adbe.pkcs7.detached`, the only two this signer can actually produce.
+  Exported as `SUPPORTED_SUBFILTERS` / the `SubFilter` type. The check is at
+  runtime, not only in the types, because the attack surface is JS callers.
+  Narrowing `subFilter?: string` to `subFilter?: SubFilter` is a compile-time
+  breaking change for TS callers that pass a plain `string`.
+- **The vendored serializer is hardened** (new
+  `src/vendor/placeholder-plain/pdfObject.ts`, replacing `@signpdf/utils`'
+  `PDFObject` at the one call site): the raw-splice branch is removed outright,
+  and PDF names are escaped per ISO 32000-1 §7.3.5. This closes the class, not
+  just the two reported paths. It is the only deliberate divergence from
+  upstream in that vendored directory.
+
+Output is **byte-identical to upstream for every legitimate input** — verified
+on the real path by running `plainAddPlaceholder` through both converters over
+the same PDF across 8 cases (both subfilters, unicode and paren-bearing string
+fields, `appName`, `widgetRect`, large budget) and diffing bytes. Regression
+coverage in `test/sig-dict-injection.test.ts`, which asserts the byte-identity
+claim rather than assuming it.
+
+### `@e-sig/core`: optional signer-asserted UUAID in the post-quantum seal
+
+Enables IAASO-0004 (Media Provenance & Attribution) identity attribution for
+e-sig-signed PDFs, at the request of the UUAID registry lane.
+
+- **`buildPqSeal({ …, uuaid })` / `signPdf({ pqSeal: { …, uuaid } })`** embed an
+  optional `uuaid` field in the seal's *signed* payload, so the assertion is
+  bound under both Ed25519 and ML-DSA-65 and cannot be added to, removed from,
+  or swapped on an existing seal. `signPdf` returns it as `pqUuaid`.
+- **`verifyPqSeal` / `verifyDocument`** surface `verdict.uuaid` and accept
+  `expectedUuaid` to pin it (mirroring `expectedMldsa65Fpr`). Pinning against a
+  seal that asserts no UUAID fails — no silent downgrade.
+- **Fail-closed on malformed claims.** `buildPqSeal` refuses to sign a
+  structurally invalid identifier, and `verifyPqSealSignatures` rejects a seal
+  carrying one (new `uuaidOk`, folded into `ok`) even when its signatures are
+  intact. Validation is structural only — which subject classes and object types
+  exist is UUAID's registry to evolve, not this package's to adjudicate.
+  `isWellFormedUuaidAssertion` is exported as the wire contract.
+- **Not a version bump of the seal.** `PQ_SEAL_VERSION` stays `1`: the field is
+  omitted entirely unless supplied, so unattributed seals are byte-identical to
+  pre-`uuaid` output, and verifiers that predate the field still verify
+  uuaid-bearing seals (the signed payload is reconstructed generically as "the
+  seal minus `sig`"). Bumping the version would have been the breaking change.
+  Verified twice: 7/7 checks against **`@e-sig/core@0.6.0` installed from npm**
+  (the current `latest`, and the version downstream verifiers pin) — it accepts
+  attributed seals and PDFs, round-trips the field verbatim, and simply ignores
+  it; plus 13/13 cross-version checks, both directions, against a local snapshot
+  of the pre-`uuaid` 0.7.0 build (unpublished — 0.7.0 has never been released to
+  npm).
+- **Semantics — read before relying on it.** A valid `uuaid` proves the seal key
+  *claims* that identity (key → uuaid). It does **not** prove the identity's
+  owner authorised the document; the uuaid → key direction lives in the UUAID
+  registry and is out of scope here. Unmatched, the assertion is worth no more
+  than the TOFU fingerprint beside it.
+- One additive break for consumers doing exact-shape assertions:
+  `PqSealVerification` gained `uuaidOk`.
+
+## 0.7.0 — 2026-07-07 (not yet published; npm `latest` is `0.6.0`)
 
 The "tech behind the add-ons" release: every self-serve vertical add-on now
 ships real, tested capability — not a label and a price.

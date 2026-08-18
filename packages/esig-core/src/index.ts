@@ -18,7 +18,13 @@ export {
   type GeneratedCert,
 } from "./cert-issuer.js";
 export { renderHtmlToPdf, type RenderHtmlToPdfOptions } from "./render-pdf.js";
-export { signPdf, type SignPdfInput, type SignPdfResult } from "./sign-pdf.js";
+export {
+  signPdf,
+  SUPPORTED_SUBFILTERS,
+  type SubFilter,
+  type SignPdfInput,
+  type SignPdfResult,
+} from "./sign-pdf.js";
 export { verifyPdfStructure, verifyPdfSignature, type VerifyResult } from "./verify-pdf.js";
 export {
   buildTimeStampReq,
@@ -84,6 +90,7 @@ export {
   unwrapPqKeyBundle,
   buildPqSeal,
   verifyPqSealSignatures,
+  isWellFormedUuaidAssertion,
   canonicalJson,
   PQ_SEAL_VERSION,
   PQ_SEAL_ALG,

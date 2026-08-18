@@ -1,0 +1,33 @@
+{
+  "name": "@e-sig/assurance-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Internal HTTP signing gateway over @e-sig/core — POST /v1/sign renders a caller-supplied HTML document to PDF, signs it PAdES/PKCS#7 (+ optional RFC-3161 TSA, + hybrid Ed25519/ML-DSA-65 seal) and returns the bytes. Private reachability only.",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "esig-assurance-gateway": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "start": "node dist/bin.js",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@e-sig/core": "^0.7.0",
+    "@e-sig/worm": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.10"
+  }
+}

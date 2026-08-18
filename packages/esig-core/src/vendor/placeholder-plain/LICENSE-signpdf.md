@@ -14,6 +14,14 @@ dependency chain; no logic was changed — only TypeScript types were added.
 `@signpdf/utils` and `@signpdf/signpdf` remain regular dependencies and are
 still imported by this vendored code.
 
+**One deliberate divergence.** `pdfObject.ts` is a hardened replacement for
+`PDFObject.convert` from `@signpdf/utils` (itself derived from pdfkit's
+`PDFObject` by Devon Govett, MIT). It removes the raw-splice branch that
+emits any value containing `<<` unconverted, and escapes PDF names per
+ISO 32000-1 §7.3.5. Both close signature-dictionary injection paths reachable
+from caller-supplied `signPdf` options. Output is byte-identical to upstream
+for every input this package legitimately produces. See the file header.
+
 ---
 
 MIT License

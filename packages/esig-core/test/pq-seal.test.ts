@@ -7,6 +7,7 @@
 
 import crypto from "node:crypto";
 import { describe, it, expect } from "vitest";
+import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
 
 import {
   generatePqKeyBundle,
@@ -16,6 +17,7 @@ import {
   unwrapPqKeyBundle,
   buildPqSeal,
   verifyPqSealSignatures,
+  isWellFormedUuaidAssertion,
   canonicalJson,
   PQ_SEAL_ALG,
   PQ_SEAL_VERSION,
@@ -66,7 +68,15 @@ describe("pq-seal: verification (happy path)", () => {
   it("verifies both signatures and the fingerprint", () => {
     const { seal: s } = seal();
     const v = verifyPqSealSignatures(s);
-    expect(v).toEqual({ ed25519: true, mldsa65: true, fingerprintOk: true, keyIdOk: true, ok: true });
+    // `uuaidOk` is vacuously true here: this seal asserts no UUAID.
+    expect(v).toEqual({
+      ed25519: true,
+      mldsa65: true,
+      fingerprintOk: true,
+      keyIdOk: true,
+      uuaidOk: true,
+      ok: true,
+    });
   });
 
   it("survives a JSON round-trip (transport-safe)", () => {
@@ -238,6 +248,128 @@ describe("pq-seal: deterministic key derivation", () => {
     const rsa = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
     const rsaPkcs8 = rsa.privateKey.export({ type: "pkcs8", format: "der" }) as Buffer;
     expect(() => generatePqKeyBundle({ ed25519Pkcs8: rsaPkcs8 })).toThrow(/must be an Ed25519 key/);
+  });
+});
+
+// IAASO-0004 attribution: an optional signer-asserted UUAID inside the signed
+// payload. These tests pin the two properties the UUAID registry relies on —
+// (1) the assertion is immutable once sealed, and (2) a seal that asserts
+// nothing is byte-identical to pre-`uuaid` output.
+describe("pq-seal: signer-asserted UUAID (IAASO-0004)", () => {
+  const COMPACT = "uuaid:foundation:agent:018f9f7a-7b4c-7cc2-9b7f-7b7d6d16a001";
+  const FEDERATED = "uuaid:issuer:global:aaua:main-examiner";
+
+  function sealWith(uuaid?: string, digestHex = sha256Hex("doc")) {
+    const keys = loadPqSigningKeys(generatePqKeyBundle().bundle);
+    return { keys, seal: buildPqSeal({ digestHex, coveredBytes: 3, keys, uuaid }) };
+  }
+
+  it("omits the field entirely when no UUAID is asserted", () => {
+    const { seal: s } = sealWith();
+    expect("uuaid" in s).toBe(false);
+    // The signed bytes are the payload; an absent key must not appear in them,
+    // or every pre-existing verifier's reconstruction would diverge.
+    const { sig: _sig, ...payload } = s;
+    void _sig;
+    expect(canonicalJson(payload)).not.toContain("uuaid");
+    expect(verifyPqSealSignatures(s).ok).toBe(true);
+    expect(verifyPqSealSignatures(s).uuaidOk).toBe(true);
+  });
+
+  it("carries and verifies both UUAID profiles", () => {
+    for (const id of [COMPACT, FEDERATED]) {
+      const { seal: s } = sealWith(id);
+      expect(s.uuaid).toBe(id);
+      const v = verifyPqSealSignatures(s);
+      expect(v.ok).toBe(true);
+      expect(v.uuaidOk).toBe(true);
+    }
+  });
+
+  it("binds the UUAID under BOTH signatures — it cannot be swapped", () => {
+    const { seal: s } = sealWith(COMPACT);
+    const tampered = clone(s);
+    tampered.uuaid = "uuaid:foundation:agent:018f9f7a-7b4c-7cc2-9b7f-7b7d6d16a999";
+    const v = verifyPqSealSignatures(tampered);
+    expect(v.ed25519).toBe(false);
+    expect(v.mldsa65).toBe(false);
+    expect(v.ok).toBe(false);
+  });
+
+  it("cannot be retrofitted onto a seal that asserted no identity", () => {
+    const { seal: s } = sealWith();
+    const forged = clone(s);
+    forged.uuaid = COMPACT;
+    expect(verifyPqSealSignatures(forged).ok).toBe(false);
+  });
+
+  it("cannot be stripped from a seal that asserted one", () => {
+    const { seal: s } = sealWith(COMPACT);
+    const stripped = clone(s);
+    delete stripped.uuaid;
+    expect(verifyPqSealSignatures(stripped).ok).toBe(false);
+  });
+
+  it("refuses to sign a malformed identity claim", () => {
+    const keys = loadPqSigningKeys(generatePqKeyBundle().bundle);
+    const bad = [
+      "",
+      "not-a-uuaid",
+      "uuaid:only:two",
+      "uuaid:a:b:c:d:e", // 6 segments
+      "uuaid:agent::x:y", // empty segment
+      "uuaid:agent:us$:x:y", // bad charset
+      "uuaid:agent:us:x:", // empty local id
+      `uuaid:foundation:agent:${"a".repeat(300)}`, // over length bound
+    ];
+    for (const uuaid of bad) {
+      expect(() => buildPqSeal({ digestHex: sha256Hex("d"), coveredBytes: 3, keys, uuaid })).toThrow(
+        /well-formed UUAID/,
+      );
+    }
+  });
+
+  it("accepts structurally valid identifiers without adjudicating the registry", () => {
+    // Subject classes / object types evolve in the UUAID lane; this package must
+    // not reject a newly-registered-but-valid identifier.
+    expect(isWellFormedUuaidAssertion("uuaid:someFutureClass:eu:body:local-1")).toBe(true);
+    expect(isWellFormedUuaidAssertion(COMPACT)).toBe(true);
+    expect(isWellFormedUuaidAssertion("nope")).toBe(false);
+    expect(isWellFormedUuaidAssertion(undefined)).toBe(false);
+    expect(isWellFormedUuaidAssertion(42)).toBe(false);
+  });
+
+  it("fails closed on a VALIDLY SIGNED but malformed UUAID", () => {
+    // Attacker model: someone holding the seal key hand-rolls a payload whose
+    // identity field would never pass buildPqSeal. Signatures are intact, so
+    // only the uuaidOk gate can reject it.
+    const keys = loadPqSigningKeys(generatePqKeyBundle().bundle);
+    const pub = publicMaterialForKeys(keys);
+    const payload = {
+      v: PQ_SEAL_VERSION,
+      alg: PQ_SEAL_ALG,
+      over: "sha256" as const,
+      digest: sha256Hex("doc"),
+      coveredBytes: 3,
+      signedAt: new Date().toISOString(),
+      keyId: pub.keyId,
+      uuaid: "uuaid:foundation:agent:<script>alert(1)</script>",
+      keys: { ed25519: pub.ed25519, mldsa65: pub.mldsa65, mldsa65Fpr: pub.mldsa65Fpr },
+    };
+    const signingInput = Buffer.from(canonicalJson(payload), "utf8");
+    const handRolled = {
+      ...payload,
+      sig: {
+        ed25519: Buffer.from(crypto.sign(null, signingInput, keys.ed25519PrivateKey)).toString("base64"),
+        mldsa65: Buffer.from(ml_dsa65.sign(signingInput, keys.mldsa65SecretKey)).toString("base64"),
+      },
+    } as PqSeal;
+
+    const v = verifyPqSealSignatures(handRolled);
+    expect(v.ed25519).toBe(true); // signatures genuinely valid...
+    expect(v.mldsa65).toBe(true);
+    expect(v.uuaidOk).toBe(false); // ...but the identity field is rejected
+    expect(v.ok).toBe(false);
   });
 });
 

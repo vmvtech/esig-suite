@@ -27,6 +27,16 @@ const DEFAULT_SIGNATURE_LENGTH = 8192;
  */
 const TIMESTAMPED_SIGNATURE_LENGTH = 30720;
 
+/**
+ * The /SubFilter values `signPdf` can emit. Both denote a detached PKCS#7,
+ * which is what `PemSigner` produces; the legacy `adbe.pkcs7.sha1` /
+ * `adbe.x509.rsa.sha1` forms are deliberately absent because this signer
+ * cannot produce them.
+ */
+export const SUPPORTED_SUBFILTERS = ["ETSI.CAdES.detached", "adbe.pkcs7.detached"] as const;
+
+export type SubFilter = (typeof SUPPORTED_SUBFILTERS)[number];
+
 export interface SignPdfInput {
   pdf: Buffer;
   /**
@@ -63,8 +73,14 @@ export interface SignPdfInput {
   /**
    * Subfilter. Default ETSI.CAdES.detached (PAdES B-B baseline). Override
    * to adbe.pkcs7.detached for legacy Adobe Reader 9+ compatibility.
+   *
+   * Restricted to the two values this signer can actually produce — a
+   * detached PKCS#7. Anything else is rejected: /SubFilter is written into
+   * the signature dictionary as a PDF name, so an unvalidated value is a
+   * dictionary-injection vector for any caller that feeds this from user or
+   * tenant input. (Defence in depth — the serializer now escapes names too.)
    */
-  subFilter?: string;
+  subFilter?: SubFilter;
   /**
    * Optional RFC 3161 timestamp transport. When provided, the signature is
    * upgraded to CAdES-T and the default `signatureLength` rises to 30720. The
@@ -92,6 +108,13 @@ export interface SignPdfInput {
     keys: PqSigningKeys;
     /** Seal timestamp. Defaults to `signingTime` or now. */
     signedAt?: Date;
+    /**
+     * Optional UUAID this signer asserts as its identity (IAASO-0004
+     * attribution). Signed into the seal, so it is immutable once embedded —
+     * but it is a claim by the seal key, not proof of identity. Omit to produce
+     * a seal byte-identical to pre-`uuaid` output.
+     */
+    uuaid?: string;
   };
 }
 
@@ -108,6 +131,8 @@ export interface SignPdfResult {
   pqKeyId?: string;
   /** ML-DSA-65 public-key fingerprint (SHA-256 hex), when sealed. */
   pqMldsa65Fpr?: string;
+  /** The UUAID asserted in the seal, when one was supplied. */
+  pqUuaid?: string;
 }
 
 const signpdfInstance = new SignPdf();
@@ -118,6 +143,17 @@ export async function signPdf(input: SignPdfInput): Promise<SignPdfResult> {
   }
   if (!input.externalSigner && !input.keyPem) {
     throw new Error("signPdf: keyPem or externalSigner is required");
+  }
+  // Runtime check, not just a type: the attack surface is JS callers passing
+  // an unvalidated string straight through from user/tenant input.
+  if (
+    input.subFilter !== undefined &&
+    !(SUPPORTED_SUBFILTERS as readonly string[]).includes(input.subFilter)
+  ) {
+    throw new Error(
+      `signPdf: unsupported subFilter ${JSON.stringify(input.subFilter)} — ` +
+        `expected one of ${SUPPORTED_SUBFILTERS.join(", ")}`,
+    );
   }
   const budget =
     input.signatureLength ??
@@ -137,6 +173,7 @@ export async function signPdf(input: SignPdfInput): Promise<SignPdfResult> {
       coveredBytes: input.pdf.length,
       keys: input.pqSeal.keys,
       signedAt: input.pqSeal.signedAt ?? input.signingTime,
+      uuaid: input.pqSeal.uuaid,
     });
     basePdf = embedPqSeal(input.pdf, seal);
     const pub = publicMaterialForKeys(input.pqSeal.keys);
@@ -184,5 +221,6 @@ export async function signPdf(input: SignPdfInput): Promise<SignPdfResult> {
     pqSealed: !!input.pqSeal,
     pqKeyId,
     pqMldsa65Fpr,
+    pqUuaid: input.pqSeal?.uuaid,
   };
 }

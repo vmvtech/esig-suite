@@ -1,0 +1,11 @@
+[
+  {
+    "tenant": "dsalvus-pilot",
+    "aliases": ["assurance-signer"],
+    "subjectName": "DSalvus Assurance (Pilot)",
+    "callers": ["spiffe://vmvtech.io/ns/dsalvus/sa/dsalvus-assurance"],
+    "reason": "DSalvus monthly assurance evidence dossier",
+    "location": "vmv-internal",
+    "pqSeal": true
+  }
+]
