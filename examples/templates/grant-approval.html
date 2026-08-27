@@ -1,0 +1,154 @@
+<!--
+  TEMPLATE: Internal Grant / Budget Approval Request
+  ====================================================
+  Self-contained document template for use with @e-sig/core / @e-sig/mcp
+  (esig_create_envelope / core createEnvelope). Fill every {{placeholder}}
+  below before creating an envelope from this file — see
+  examples/templates/README.md for a fill-and-send snippet.
+
+  This template is designed for a multi-signer approval CHAIN: set each
+  approver's `order` (1, 2, 3, ...) when creating the envelope so lower
+  orders must sign before higher ones are unlocked — see core's
+  `signers[].order` (packages/esig-core/src/envelope.ts). The row labels
+  below ("Requested by", "Department approval", ...) map to each signer's
+  `roleLabel`.
+
+  Placeholders (mustache-style {{...}}):
+    {{submission_date}}         Date the request is submitted
+    {{project_name}}            Name of the project/initiative requesting funds
+    {{requesting_department}}   Department/team making the request
+    {{requestor_name}}          Person submitting the request
+    {{cost_center}}              Cost center / GL code the spend posts to
+    {{project_description}}     What the funds are for, in a paragraph
+    {{budget_period}}            Fiscal period covered, e.g. "FY2027 Q2"
+    {{requested_amount}}        Total amount requested, e.g. "$48,500"
+    {{line_item_1_desc}} / {{line_item_1_amount}}   First budget line item
+    {{line_item_2_desc}} / {{line_item_2_amount}}   Second budget line item
+    {{line_item_3_desc}} / {{line_item_3_amount}}   Third budget line item
+    {{approver_1_name}} / {{approver_1_title}}       Department-head approver
+    {{approver_2_name}} / {{approver_2_title}}       Finance approver
+    {{approver_3_name}} / {{approver_3_title}}       Executive approver
+
+  This is a TEMPLATE for internal process use, not legal advice. Have your
+  finance/legal team review before adopting it as an official form.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Internal Grant / Budget Approval Request</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body {
+    font-family: Georgia, "Times New Roman", Times, serif;
+    color: #1a1a1a;
+    line-height: 1.5;
+    font-size: 12pt;
+  }
+  .page { max-width: 6.5in; margin: 0 auto; padding: 0.4in 0.3in 1in; }
+  .doc-banner {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11pt;
+    font-weight: bold;
+    text-align: center;
+    color: #5c4400;
+    background: #fff3cd;
+    border: 2px solid #b8860b;
+    padding: 10px 14px;
+    margin: 0 0 28px;
+  }
+  h1 { font-size: 16pt; text-align: center; margin: 0 0 4px; }
+  .doc-subtitle { text-align: center; font-size: 10.5pt; color: #555; margin: 0 0 20px; }
+  h2 { font-size: 12.5pt; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 24px 0 8px; }
+  p { margin: 0 0 10px; text-align: justify; }
+  .meta-table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 10.5pt; }
+  .meta-table td { padding: 4px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  .meta-table td.k { font-weight: bold; color: #444; width: 38%; }
+  .budget-table { width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-size: 10.5pt; }
+  .budget-table th, .budget-table td { border: 1px solid #999; padding: 6px 8px; text-align: left; }
+  .budget-table th { background: #f2f2f2; }
+  .budget-table td.amount, .budget-table th.amount { text-align: right; }
+  .budget-table tr.total td { font-weight: bold; border-top: 2px solid #333; }
+  .approval-chain { width: 100%; border-collapse: collapse; margin: 8px 0 20px; font-size: 10.5pt; }
+  .approval-chain th, .approval-chain td { border: 1px solid #999; padding: 8px; text-align: left; vertical-align: top; }
+  .approval-chain th { background: #f2f2f2; }
+  .approval-chain .approver-role { font-weight: bold; }
+  .closing { margin-top: 24px; font-style: italic; color: #333; }
+  @page { margin: 0.75in; }
+  @media print {
+    .doc-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .budget-table th, .approval-chain th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-size: 11pt; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="doc-banner">TEMPLATE — not legal advice; have counsel review before use</div>
+
+  <h1>Internal Grant / Budget Approval Request</h1>
+  <p class="doc-subtitle">Submitted {{submission_date}}</p>
+
+  <table class="meta-table">
+    <tr><td class="k">Project</td><td>{{project_name}}</td></tr>
+    <tr><td class="k">Requesting department</td><td>{{requesting_department}}</td></tr>
+    <tr><td class="k">Requested by</td><td>{{requestor_name}}</td></tr>
+    <tr><td class="k">Cost center</td><td>{{cost_center}}</td></tr>
+    <tr><td class="k">Budget period</td><td>{{budget_period}}</td></tr>
+    <tr><td class="k">Total requested</td><td>{{requested_amount}}</td></tr>
+  </table>
+
+  <h2>1. Purpose</h2>
+  <p>{{project_description}}</p>
+
+  <h2>2. Budget Detail</h2>
+  <table class="budget-table">
+    <tr><th>Line item</th><th class="amount">Amount</th></tr>
+    <tr><td>{{line_item_1_desc}}</td><td class="amount">{{line_item_1_amount}}</td></tr>
+    <tr><td>{{line_item_2_desc}}</td><td class="amount">{{line_item_2_amount}}</td></tr>
+    <tr><td>{{line_item_3_desc}}</td><td class="amount">{{line_item_3_amount}}</td></tr>
+    <tr class="total"><td>Total</td><td class="amount">{{requested_amount}}</td></tr>
+  </table>
+
+  <h2>3. Approval Chain</h2>
+  <p>
+    This request requires sign-off from each approver below, in order. Each approver's
+    electronic signature is recorded once this document is routed through the signing
+    envelope; no approver's signature is required from this page directly.
+  </p>
+  <table class="approval-chain">
+    <tr><th>Step</th><th>Role</th><th>Approver</th></tr>
+    <tr>
+      <td>1</td>
+      <td class="approver-role">Department approval</td>
+      <td>{{approver_1_name}}, {{approver_1_title}}</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td class="approver-role">Finance approval</td>
+      <td>{{approver_2_name}}, {{approver_2_title}}</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td class="approver-role">Executive approval</td>
+      <td>{{approver_3_name}}, {{approver_3_title}}</td>
+    </tr>
+  </table>
+
+  <h2>4. Conditions</h2>
+  <p>
+    Funds approved under this request are restricted to the line items listed in Section
+    2 and the budget period stated above. Any material change in scope, timeline, or
+    amount requires a new or amended approval request. Spend against this approval is
+    subject to the requesting department's standard expense and procurement policies.
+  </p>
+
+  <p class="closing">
+    Each named approver's electronic signature below indicates that they have reviewed
+    this request and approve the budget as described.
+  </p>
+</div>
+</body>
+</html>

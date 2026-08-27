@@ -1,0 +1,156 @@
+<!--
+  TEMPLATE: Research Study Informed Consent Form (IRB)
+  =====================================================
+  Self-contained document template for use with @e-sig/core / @e-sig/mcp
+  (esig_create_envelope / core createEnvelope). Fill every {{placeholder}}
+  below before creating an envelope from this file — see
+  examples/templates/README.md for a fill-and-send snippet.
+
+  Placeholders (mustache-style {{...}}):
+    {{study_title}}              Full title of the research study
+    {{irb_protocol_number}}      Your institution's IRB protocol/approval number
+    {{institution_name}}         Name of the institution conducting the research
+    {{principal_investigator_name}}  PI's full name
+    {{principal_investigator_title}} PI's title/department
+    {{participant_name}}         Full name of the participant/subject
+    {{study_purpose}}            Plain-language summary of what the study is studying
+    {{procedures_description}}   What the participant will be asked to do, and how long
+    {{risks_description}}        Reasonably foreseeable risks or discomforts
+    {{benefits_description}}     Expected benefits, if any, to the participant or others
+    {{compensation_description}} Any payment/compensation for participation
+    {{confidentiality_description}} How data/identity will be protected
+    {{contact_name}}             Person to contact with questions about the study
+    {{contact_phone}}            Contact phone number
+    {{contact_email}}            Contact email address
+    {{irb_contact_phone}}        IRB/ethics-board phone number for questions about rights as a subject
+
+  This is a TEMPLATE, not legal advice, and not a substitute for your
+  institution's own IRB-approved consent language. Have your IRB and
+  counsel review before use.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Research Study Informed Consent Form</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body {
+    font-family: Georgia, "Times New Roman", Times, serif;
+    color: #1a1a1a;
+    line-height: 1.5;
+    font-size: 12pt;
+  }
+  .page { max-width: 6.5in; margin: 0 auto; padding: 0.4in 0.3in 1in; }
+  .doc-banner {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11pt;
+    font-weight: bold;
+    text-align: center;
+    color: #5c4400;
+    background: #fff3cd;
+    border: 2px solid #b8860b;
+    padding: 10px 14px;
+    margin: 0 0 28px;
+  }
+  h1 { font-size: 16pt; text-align: center; margin: 0 0 4px; }
+  .doc-subtitle { text-align: center; font-size: 10.5pt; color: #555; margin: 0 0 20px; }
+  h2 { font-size: 12.5pt; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 24px 0 8px; }
+  p { margin: 0 0 10px; text-align: justify; }
+  .callout {
+    background: #eef4fb;
+    border: 1px solid #9db8d8;
+    padding: 10px 14px;
+    margin: 14px 0;
+    font-size: 10.5pt;
+  }
+  .callout .callout-label { font-weight: bold; color: #234; display: block; margin-bottom: 3px; }
+  .meta-table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 10.5pt; }
+  .meta-table td { padding: 4px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  .meta-table td.k { font-weight: bold; color: #444; width: 40%; }
+  .closing { margin-top: 24px; font-style: italic; color: #333; }
+  @page { margin: 0.75in; }
+  @media print {
+    .doc-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .callout { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-size: 11pt; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="doc-banner">TEMPLATE — not legal advice; have counsel review before use</div>
+
+  <h1>Research Study Informed Consent Form</h1>
+  <p class="doc-subtitle">{{institution_name}} &middot; IRB Protocol {{irb_protocol_number}}</p>
+
+  <table class="meta-table">
+    <tr><td class="k">Study title</td><td>{{study_title}}</td></tr>
+    <tr><td class="k">Principal investigator</td><td>{{principal_investigator_name}}, {{principal_investigator_title}}</td></tr>
+    <tr><td class="k">Participant</td><td>{{participant_name}}</td></tr>
+  </table>
+
+  <div class="callout">
+    <span class="callout-label">You will receive a copy of this consent form.</span>
+    A fully executed copy of this signed consent form will be provided to you for your
+    own records, either electronically or in print, before or at the time you begin any
+    study procedures.
+  </div>
+
+  <h2>1. Purpose of the Study</h2>
+  <p>You are being asked to take part in a research study. {{study_purpose}}</p>
+
+  <h2>2. What You Will Be Asked to Do</h2>
+  <p>{{procedures_description}}</p>
+
+  <h2>3. Risks and Discomforts</h2>
+  <p>{{risks_description}}</p>
+
+  <h2>4. Benefits</h2>
+  <p>{{benefits_description}}</p>
+
+  <h2>5. Compensation</h2>
+  <p>{{compensation_description}}</p>
+
+  <h2>6. Confidentiality</h2>
+  <p>{{confidentiality_description}}</p>
+
+  <h2>7. Voluntary Participation</h2>
+  <p>
+    Taking part in this study is entirely voluntary. You may decline to participate, or
+    withdraw at any time, without penalty or loss of any benefits to which you are
+    otherwise entitled. If you decide to withdraw, any data collected up to that point
+    may still be used as described above unless you specifically request otherwise.
+  </p>
+
+  <h2>8. Consent to Electronic Records and Signature</h2>
+  <p>
+    By signing below electronically, you confirm that: you are able to access, view, and
+    retain electronic records such as this one (including by requesting a printed copy at
+    any time, at no cost, from {{contact_name}}); you consent to the use of an electronic
+    record and an electronic signature to document your consent to participate in this
+    study, in lieu of a handwritten signature on paper; and you understand that you may
+    withdraw this consent to sign electronically at any time before signing, by contacting
+    {{contact_name}} at {{contact_email}} or {{contact_phone}}, and requesting a paper
+    consent process instead. Withdrawing consent to sign electronically does not, by
+    itself, withdraw your consent to participate in the study.
+  </p>
+
+  <h2>9. Questions</h2>
+  <p>
+    If you have questions about the study, contact {{contact_name}} at {{contact_phone}}
+    or {{contact_email}}. If you have questions about your rights as a research
+    participant, or wish to speak with someone other than the research team, contact the
+    {{institution_name}} IRB/ethics office at {{irb_contact_phone}}.
+  </p>
+
+  <p class="closing">
+    Your electronic signature below indicates that you have read this form (or had it
+    read to you), that your questions have been answered, and that you voluntarily agree
+    to participate in this study under the terms described above.
+  </p>
+</div>
+</body>
+</html>

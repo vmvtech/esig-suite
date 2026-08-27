@@ -7,7 +7,7 @@
 // cases that need precise clock/state control a raw HTTP round trip can't
 // give cleanly (nonce replay, cross-envelope reuse, expiry).
 
-import { generateKeyPairSync, sign as ed25519Sign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign as ed25519Sign } from "node:crypto";
 import http from "node:http";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -31,6 +31,7 @@ import {
   IdentityError,
   loadConfig,
   ConfigError,
+  RegistryClient,
   verifySignerIdentity,
   type IdentityProofInput,
   type McpServerDeps,
@@ -105,22 +106,25 @@ async function startHttp(config: Awaited<ReturnType<typeof makeConfig>>, envelop
 }
 
 // A minimal local node:http stub for the L2 registry surface (§12
-// "Bindings": GET /resolve/{uuaid}, GET /verify/{credentialId}).
+// "Bindings": GET /iaaso/v1/badge/{uuaid} — the registry-signed badge, the
+// ONLY registry surface carrying an agent's presentation key — and
+// GET /verify/{credentialId}).
 function startRegistryStub(opts: {
-  resolveBody: unknown;
-  verifyBody: unknown;
+  badgeBody?: unknown;
+  badgeStatus?: number;
+  verifyBody?: unknown;
 }): Promise<{ server: http.Server; base: string }> {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       res.setHeader("content-type", "application/json");
-      if (req.url?.startsWith("/resolve/")) {
-        res.writeHead(200);
-        res.end(JSON.stringify(opts.resolveBody));
+      if (req.url?.startsWith("/iaaso/v1/badge/")) {
+        res.writeHead(opts.badgeStatus ?? 200);
+        res.end(JSON.stringify(opts.badgeBody ?? {}));
         return;
       }
       if (req.url?.startsWith("/verify/")) {
         res.writeHead(200);
-        res.end(JSON.stringify(opts.verifyBody));
+        res.end(JSON.stringify(opts.verifyBody ?? {}));
         return;
       }
       res.writeHead(404);
@@ -132,6 +136,50 @@ function startRegistryStub(opts: {
       const port = typeof address === "object" && address ? address.port : 0;
       resolve({ server, base: `http://127.0.0.1:${port}` });
     });
+  });
+}
+
+async function closeStub(stub: { server: http.Server }): Promise<void> {
+  await new Promise<void>((resolve) => stub.server.close(() => resolve()));
+}
+
+// ---------- test registry key + badge sealer (uuaid-core wire format) ----------
+//
+// Badge = SignatureEnvelope { payload, payloadHash: "0x"+sha256hex(JCS(payload)),
+// signatures: [{alg:"ed25519", keyId, publicKey: hex, signature: hex, created}] },
+// Ed25519 over UTF8(JCS(payload)) — see identity/badge.ts's module header.
+
+const REGISTRY_KEY = (() => {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const spki = publicKey.export({ type: "spki", format: "der" }) as Buffer;
+  return { publicKeyHex: Buffer.from(spki.subarray(spki.length - 32)).toString("hex"), privateKey };
+})();
+/** The PINNED key as config carries it: 64 lowercase hex. */
+const PINNED_KEY_HEX = REGISTRY_KEY.publicKeyHex;
+
+function sealBadgeEnvelope(payload: object, signer = REGISTRY_KEY, keyId = "uuaid-registry-1") {
+  const payloadHash = "0x" + createHash("sha256").update(jcsBytes(payload)).digest("hex");
+  const signature = ed25519Sign(null, jcsBytes(payload), signer.privateKey).toString("hex");
+  return {
+    payload,
+    payloadHash,
+    signatures: [{ alg: "ed25519", keyId, publicKey: signer.publicKeyHex, signature, created: new Date().toISOString() }],
+  };
+}
+
+function makeBadgeEnvelope(presentationKey: unknown, payloadOverrides: Record<string, unknown> = {}) {
+  return sealBadgeEnvelope({
+    "@type": "UUAIDVerifiableBadge",
+    spec: "IAASO-0003",
+    v: "1.0",
+    subject: { uuaid: TEST_UUAID, nameVerified: false, presentationKey },
+    status: "active",
+    credentials: [],
+    issuer: { id: "uuaid-registry", name: "UUAID Registry", keyId: "uuaid-registry-1" },
+    issuedAt: new Date().toISOString(),
+    freshUntil: new Date(Date.now() + 60_000).toISOString(),
+    resolve: `https://registry.example/iaaso/v1/resolve/${TEST_UUAID}`,
+    ...payloadOverrides,
   });
 }
 
@@ -458,48 +506,121 @@ describe("(g) minLevel raise-only: config floor L1 + request L0 -> effective L1"
       }),
     ).rejects.toThrow(/ESIG_MCP_UUAID_REGISTRY_URL/);
   });
+
+  it("an envelope REQUESTING L2 with a registry URL but NO pinned signing key refuses at CREATE time (fail closed)", async () => {
+    const config = await makeConfig({ uuaidRegistryUrl: "https://registry.example" }); // no uuaidRegistrySigningKey
+    const stores = buildStores(config);
+    const envelopes = new EnvelopeService({ config, ...stores, delivery: new CapturingDelivery() });
+
+    await expect(
+      envelopes.create({
+        title: "L2 without pinned key",
+        html: "<p>body</p>",
+        signers: [{ name: "Alice", email: "alice@example.com" }],
+        identity: { minLevel: "L2" },
+      }),
+    ).rejects.toThrow(/ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY/);
+  });
 });
 
-describe("(h) L2 — local node:http stub registry", () => {
-  it("resolve lists the key + verify says valid -> L2 verified", async () => {
-    const wallet = makeTestWallet();
-    // G1(b): credentialSubject.key.publicKey MUST equal the proof's own key
-    // (the real tae/v1 schema field, schema.json:80-89) — `wallet.did` is a
-    // `did:key:` string decoding to the SAME raw bytes as the proof's
-    // `verificationMethod` (which additionally carries a `#fragment`).
-    const credential = {
-      id: "uuaid:foundation:signing-credential:test-cred-1",
-      credentialSubject: { key: { keyId: "test-key-1", publicKey: wallet.did } },
-    } as unknown as UaidSigningCredential;
-    const stub = await startRegistryStub({
-      resolveBody: { keys: [{ verificationMethod: wallet.verificationMethod }] },
-      verifyBody: { valid: true, active: true, notExpired: true },
-    });
+// Shared L2 fixture: stub registry + config + envelope + one issued challenge
+// signed by the fixture's test wallet. `run()` invokes the REAL verifier (the
+// same function EnvelopeService.sign calls); every rejection below asserts the
+// IdentityError `reason`. By default the stub serves a badge SEALED BY THE
+// PINNED KEY attesting the wallet's own key — each test tweaks one thing.
+async function l2Fixture(opts: {
+  /** presentationKey placed in the badge; `null` = bearer badge. Default: the proof wallet's own key. */
+  presentationKey?: unknown;
+  /** Badge payload overrides (status, freshUntil, …) applied BEFORE sealing. */
+  payloadOverrides?: Record<string, unknown>;
+  /** Seal with a NON-pinned key to simulate a badge that signed itself. */
+  sealWith?: { publicKeyHex: string; privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"] };
+  /** Serve this instead of a normally-sealed badge (tamper tests). */
+  badgeBody?: unknown;
+  badgeStatus?: number;
+  verifyBody?: unknown;
+  withCredential?: boolean;
+  registryKeyHex?: string;
+  /** The uuaid presented in `identityProof.uuaid` — default TEST_UUAID (equal to the badge's own `subject.uuaid` unless `payloadOverrides.subject` says otherwise). */
+  proofUuaid?: string;
+}) {
+  const wallet = makeTestWallet();
+  // G1(b): credentialSubject.key.publicKey MUST equal the proof's own key
+  // (the real tae/v1 schema field, schema.json:80-89) — `wallet.did` is a
+  // `did:key:` string decoding to the SAME raw bytes as the proof's
+  // `verificationMethod` (which additionally carries a `#fragment`).
+  const credential = {
+    id: "uuaid:foundation:signing-credential:test-cred-1",
+    credentialSubject: { key: { keyId: "test-key-1", publicKey: wallet.did } },
+  } as unknown as UaidSigningCredential;
+  const badgeBody =
+    opts.badgeBody ??
+    sealBadgeEnvelope(
+      {
+        "@type": "UUAIDVerifiableBadge",
+        spec: "IAASO-0003",
+        v: "1.0",
+        subject: {
+          uuaid: TEST_UUAID,
+          nameVerified: false,
+          // Deliberate `in` check, not `??`: `presentationKey: null` (a bearer
+          // badge) must survive as null.
+          presentationKey: "presentationKey" in opts ? opts.presentationKey : { alg: "ed25519", publicKey: wallet.rawPublic.toString("hex"), keyId: "wallet-key" },
+        },
+        status: "active",
+        credentials: [],
+        issuer: { id: "uuaid-registry", name: "UUAID Registry", keyId: "uuaid-registry-1" },
+        issuedAt: new Date().toISOString(),
+        freshUntil: new Date(Date.now() + 60_000).toISOString(),
+        resolve: `https://registry.example/iaaso/v1/resolve/${TEST_UUAID}`,
+        ...opts.payloadOverrides,
+      },
+      opts.sealWith ?? REGISTRY_KEY,
+    );
+  const stub = await startRegistryStub({ badgeBody, badgeStatus: opts.badgeStatus, verifyBody: opts.verifyBody });
+  const registryKeyHex = opts.registryKeyHex ?? PINNED_KEY_HEX;
+  const config = await makeConfig({ uuaidRegistryUrl: stub.base, uuaidRegistrySigningKey: registryKeyHex });
+  const stores = buildStores(config);
+  const envelopes = new EnvelopeService({ config, ...stores, delivery: new CapturingDelivery(), render: async () => SAMPLE_PDF });
 
-    const config = await makeConfig({ uuaidRegistryUrl: stub.base });
-    const stores = buildStores(config);
-    const envelopes = new EnvelopeService({ config, ...stores, delivery: new CapturingDelivery(), render: async () => SAMPLE_PDF });
+  const created = await envelopes.create({
+    title: "L2 test",
+    html: "<p>body</p>",
+    signers: [{ name: "Alice", email: "alice@example.com" }],
+    identity: { minLevel: "L2" },
+  });
+  const challenge = await envelopes.issueIdentityChallenge(created.envelopeId, created.signers[0].signerId);
+  const proof = wallet.sign(challenge);
 
-    const created = await envelopes.create({
-      title: "L2 up test",
-      html: "<p>body</p>",
-      signers: [{ name: "Alice", email: "alice@example.com" }],
-      identity: { minLevel: "L2" },
-    });
-    const challenge = await envelopes.issueIdentityChallenge(created.envelopeId, created.signers[0].signerId);
-    const proof = wallet.sign(challenge);
-
-    const record = await verifySignerIdentity({
+  const run = () =>
+    verifySignerIdentity({
       store: stores.envelopeStore,
       tenantId: config.tenant,
       envelopeId: created.envelopeId,
       signerId: created.signers[0].signerId,
       minLevel: "L2",
-      proof: { uuaid: TEST_UUAID, proof, credential },
-      registry: new (await import("../dist/index.js")).RegistryClient(stub.base),
+      proof: { uuaid: opts.proofUuaid ?? TEST_UUAID, proof, ...(opts.withCredential ? { credential } : {}) },
+      registry: new RegistryClient(stub.base),
+      registrySigningKey: registryKeyHex,
     });
+  return { wallet, credential, stub, config, stores, envelopes, created, run };
+}
+
+describe("(h) L2 — local node:http stub registry (registry-signed badge)", () => {
+  it("badge signed by the pinned key attests the proof's key + credential verifies (matching agent_uuaid) -> L2 verified", async () => {
+    const fixture = await l2Fixture({
+      verifyBody: {
+        credential_id: "uuaid:foundation:signing-credential:test-cred-1",
+        agent_uuaid: TEST_UUAID,
+        valid: true,
+        active: true,
+        notExpired: true,
+      },
+      withCredential: true,
+    });
+    const record = await fixture.run();
     expect(record?.level).toBe("L2");
-    expect(record?.registry?.credentialId).toBe(credential.id);
+    expect(record?.registry?.credentialId).toBe("uuaid:foundation:signing-credential:test-cred-1");
     expect(record?.registry?.credentialValid).toBe(true);
     // R1: digests are always computed (even with no blobStore wired in this
     // direct call) — proofDigest already existed; credentialDigest and
@@ -508,18 +629,100 @@ describe("(h) L2 — local node:http stub registry", () => {
     expect(record?.credentialDigest).toBeTruthy();
     expect(record?.registry?.registrySnapshotDigest).toBeTruthy();
 
-    await new Promise<void>((resolve) => stub.server.close(() => resolve()));
+    await closeStub(fixture.stub);
+  });
+
+  it("badge presentationKey null (no key bound — the registry's current norm: n=2 sampled, both null) -> L2_KEY_NOT_BOUND", async () => {
+    const fixture = await l2Fixture({ presentationKey: null });
+    await expect(fixture.run()).rejects.toMatchObject({ reason: "L2_KEY_NOT_BOUND" });
+    await closeStub(fixture.stub);
+  });
+
+  it("badge attests a DIFFERENT key than the proof's -> L2_KEY_MISMATCH", async () => {
+    const fixture = await l2Fixture({
+      presentationKey: { alg: "ed25519", publicKey: REGISTRY_KEY.publicKeyHex, keyId: "other-pk" },
+    });
+    await expect(fixture.run()).rejects.toMatchObject({ reason: "L2_KEY_MISMATCH" });
+    await closeStub(fixture.stub);
+  });
+
+  it("registry-signed badge for a DIFFERENT uuaid B, whose presentationKey happens to equal the proof's own key, presented for uuaid A -> 403 L2_BADGE_SUBJECT_MISMATCH, no identity record", async () => {
+    const UUAID_A = "uuaid:foundation:agent:33333333-3333-3333-3333-333333333333";
+    // Badge's own subject.uuaid stays the fixture default (TEST_UUAID = "B"),
+    // and its presentationKey stays the fixture default (the wallet's OWN
+    // key — so the key check alone would pass); only the PROVING uuaid (A)
+    // is different, which is exactly what the registry's blind pinned-key
+    // check cannot catch on its own.
+    const fixture = await l2Fixture({ proofUuaid: UUAID_A });
+    await expect(fixture.run()).rejects.toMatchObject({ reason: "L2_BADGE_SUBJECT_MISMATCH" });
+    const status = await fixture.envelopes.status(fixture.created.envelopeId);
+    expect(status.signers[0].identity).toBeUndefined();
+    await closeStub(fixture.stub);
+  });
+
+  it("badge status superseded (a retired agent still yields a VALID badge) -> L2_UUAID_NOT_ACTIVE", async () => {
+    const fixture = await l2Fixture({
+      payloadOverrides: { status: "superseded", statusReasonCode: "superseded-by-survivor" },
+    });
+    await expect(fixture.run()).rejects.toMatchObject({ reason: "L2_UUAID_NOT_ACTIVE" });
+    await closeStub(fixture.stub);
+  });
+
+  it("badge 404 (absent, or tombstoned where /resolve would still 200) -> L2_UUAID_NOT_FOUND", async () => {
+    const fixture = await l2Fixture({ badgeStatus: 404, badgeBody: { error: "tombstoned" } });
+    await expect(fixture.run()).rejects.toMatchObject({ reason: "L2_UUAID_NOT_FOUND" });
+    await closeStub(fixture.stub);
+  });
+
+  it("badge signed by a key OTHER than the pinned one (the badge carried its own signer key — only the pin decides) -> L2_BADGE_ISSUER_UNTRUSTED", async () => {
+    const impostor = (() => {
+      const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+      const spki = publicKey.export({ type: "spki", format: "der" }) as Buffer;
+      return { publicKeyHex: Buffer.from(spki.subarray(spki.length - 32)).toString("hex"), privateKey };
+    })();
+    const fixture = await l2Fixture({ sealWith: impostor });
+    await expect(fixture.run()).rejects.toMatchObject({ reason: "L2_BADGE_ISSUER_UNTRUSTED" });
+    await closeStub(fixture.stub);
+  });
+
+  it("tampered badge payload (pinned signature is over the ORIGINAL bytes) -> L2_BADGE_HASH_MISMATCH", async () => {
+    const fixture = await l2Fixture({
+      badgeBody: (() => {
+        const envelope = makeBadgeEnvelope(null) as { payload: Record<string, unknown>; payloadHash: string; signatures: unknown[] };
+        return { ...envelope, payload: { ...envelope.payload, issuer: { id: "evil", name: "Evil", keyId: "x" } } };
+      })(),
+    });
+    await expect(fixture.run()).rejects.toMatchObject({ reason: "L2_BADGE_HASH_MISMATCH" });
+    await closeStub(fixture.stub);
+  });
+
+  it("stale badge (freshUntil in the past) -> L2_BADGE_STALE", async () => {
+    const fixture = await l2Fixture({
+      payloadOverrides: { freshUntil: new Date(Date.now() - 60_000).toISOString() },
+    });
+    await expect(fixture.run()).rejects.toMatchObject({ reason: "L2_BADGE_STALE" });
+    await closeStub(fixture.stub);
+  });
+
+  it("valid credential bound to a DIFFERENT uuaid (minted through a path that never checked the caller owns the handle) -> L2_CREDENTIAL_UUAID_MISMATCH", async () => {
+    const fixture = await l2Fixture({
+      // An ABSENT agent_uuaid fails the same assert (undefined !== proof.uuaid).
+      verifyBody: { credential_id: "uuaid:foundation:signing-credential:test-cred-1", agent_uuaid: "uuaid:foundation:agent:99999999-9999-9999-9999-999999999999", valid: true, active: true, notExpired: true },
+      withCredential: true,
+    });
+    await expect(fixture.run()).rejects.toMatchObject({ reason: "L2_CREDENTIAL_UUAID_MISMATCH" });
+    await closeStub(fixture.stub);
   });
 
   it("registry down -> 403, and NO downgrade to L1 (no record persisted at all)", async () => {
     const wallet = makeTestWallet();
-    const stub = await startRegistryStub({ resolveBody: {}, verifyBody: {} });
+    const stub = await startRegistryStub({});
     const deadPort = (stub.server.address() as { port: number }).port;
-    await new Promise<void>((resolve) => stub.server.close(() => resolve()));
+    await closeStub(stub);
     // `deadPort` is now guaranteed unbound — nothing else in this test process races to claim it.
     const deadBase = `http://127.0.0.1:${deadPort}`;
 
-    const config = await makeConfig({ uuaidRegistryUrl: deadBase });
+    const config = await makeConfig({ uuaidRegistryUrl: deadBase, uuaidRegistrySigningKey: PINNED_KEY_HEX });
     const stores = buildStores(config);
     const envelopes = new EnvelopeService({ config, ...stores, delivery: new CapturingDelivery(), render: async () => SAMPLE_PDF });
 
@@ -532,7 +735,6 @@ describe("(h) L2 — local node:http stub registry", () => {
     const challenge = await envelopes.issueIdentityChallenge(created.envelopeId, created.signers[0].signerId);
     const proof = wallet.sign(challenge);
 
-    const RegistryClientCtor = (await import("../dist/index.js")).RegistryClient;
     await expect(
       verifySignerIdentity({
         store: stores.envelopeStore,
@@ -541,7 +743,8 @@ describe("(h) L2 — local node:http stub registry", () => {
         signerId: created.signers[0].signerId,
         minLevel: "L2",
         proof: { uuaid: TEST_UUAID, proof },
-        registry: new RegistryClientCtor(deadBase),
+        registry: new RegistryClient(deadBase),
+        registrySigningKey: PINNED_KEY_HEX,
       }),
     ).rejects.toMatchObject({ reason: "L2_REGISTRY_UNAVAILABLE" });
 
@@ -568,6 +771,27 @@ describe("(h) L2 — local node:http stub registry", () => {
         ESIG_MCP_IDENTITY_MIN_LEVEL: "L2",
       }),
     ).toThrow(ConfigError);
+  });
+
+  it('ESIG_MCP_IDENTITY_MIN_LEVEL="L2" with a registry URL but no signing key -> ConfigError', () => {
+    expect(() =>
+      loadConfig({
+        ESIG_MCP_PASSPHRASE: "a".repeat(24),
+        ESIG_MCP_DELIVERY: "file",
+        ESIG_MCP_IDENTITY_MIN_LEVEL: "L2",
+        ESIG_MCP_UUAID_REGISTRY_URL: "https://registry.example",
+      }),
+    ).toThrow(/ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY/);
+  });
+
+  it("a malformed signing key (not 64 hex chars) -> ConfigError", () => {
+    expect(() =>
+      loadConfig({
+        ESIG_MCP_PASSPHRASE: "a".repeat(24),
+        ESIG_MCP_DELIVERY: "file",
+        ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY: "not-hex",
+      }),
+    ).toThrow(/64 hex/);
   });
 });
 
@@ -693,8 +917,8 @@ describe("(k) G2 — htmlSha256 anchoring: pinned base html, never composed/rend
 
 describe("(l) G3 — registry URL pinned at creation; refuses if the server's current one differs", () => {
   it("create() pins identityPolicy.registryUrl to config.uuaidRegistryUrl when minLevel is L2", async () => {
-    const stub = await startRegistryStub({ resolveBody: {}, verifyBody: {} });
-    const config = await makeConfig({ uuaidRegistryUrl: stub.base });
+    const stub = await startRegistryStub({});
+    const config = await makeConfig({ uuaidRegistryUrl: stub.base, uuaidRegistrySigningKey: PINNED_KEY_HEX });
     const stores = buildStores(config);
     const envelopes = new EnvelopeService({ config, ...stores, delivery: new CapturingDelivery() });
 
@@ -711,11 +935,8 @@ describe("(l) G3 — registry URL pinned at creation; refuses if the server's cu
 
   it("verifySignerIdentity refuses BEFORE any registry call when configuredRegistryUrl differs from the pinned one (L2_REGISTRY_URL_CHANGED)", async () => {
     const wallet = makeTestWallet();
-    const stub = await startRegistryStub({
-      resolveBody: { keys: [{ verificationMethod: wallet.verificationMethod }] },
-      verifyBody: { valid: true, active: true, notExpired: true },
-    });
-    const config = await makeConfig({ uuaidRegistryUrl: stub.base });
+    const stub = await startRegistryStub({ badgeBody: makeBadgeEnvelope({ alg: "ed25519", publicKey: wallet.rawPublic.toString("hex"), keyId: "test-pk" }) });
+    const config = await makeConfig({ uuaidRegistryUrl: stub.base, uuaidRegistrySigningKey: PINNED_KEY_HEX });
     const stores = buildStores(config);
     const envelopes = new EnvelopeService({ config, ...stores, delivery: new CapturingDelivery(), render: async () => SAMPLE_PDF });
 
@@ -914,5 +1135,227 @@ describe("IdentityError sanity", () => {
     expect(e.reason).toBe("SOME_REASON");
     expect(e.uuaid).toBe(TEST_UUAID);
     expect(e.level).toBe("L1");
+  });
+});
+
+describe("(p) input validation — malformed uuaid rejected at the boundary, via the real MCP client + HTTP", () => {
+  it("uuaid containing '<script>' and a control character -> 403 L0_MALFORMED_UUAID", async () => {
+    const harness = await buildHarness();
+    const { config, envelopes, delivery, mcpServer } = harness;
+    const client = await connectedClient(mcpServer);
+    const { base, server } = await startHttp(config, envelopes);
+
+    // esig_create_envelope (real MCP tool call) — L0 needs no registry.
+    const created = await client.callTool({
+      name: "esig_create_envelope",
+      arguments: {
+        title: "Malformed uuaid test",
+        html: "<p>terms</p>",
+        signers: [{ name: "Alice", email: "alice@example.com" }],
+        identity: { minLevel: "L0" },
+      },
+    });
+    expect(created.isError).not.toBe(true);
+    const envelopeId = (created.structuredContent as Record<string, any>).envelopeId as string;
+    const token = tokenFromLink(delivery.calls[0].links[0].url);
+
+    // POST /sign/<token> (real HTTP approval endpoint) with a uuaid carrying
+    // both an HTML-special payload and a control character — well outside
+    // isWellFormedUuaidAssertion's `[A-Za-z0-9_-]` charset (pq-seal.ts) —
+    // must fail L0 well-formedness before anything else runs.
+    const maliciousUuaid = "<script>alert(1)</script>\x07";
+    const res = await fetch(`${base}/sign/${token}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        signatureImageDataUrl: PNG_DATA_URL,
+        consent: true,
+        identityProof: { uuaid: maliciousUuaid },
+      }),
+    });
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string; reason: string };
+    expect(body.reason).toBe("L0_MALFORMED_UUAID");
+
+    // Rejected before recordSignature ever ran — no identity, no signature.
+    const status = await envelopes.status(envelopeId);
+    expect(status.signers[0].identity).toBeUndefined();
+    expect(status.signers[0].signedAt).toBeFalsy();
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await client.close();
+  });
+});
+
+describe("(q) G7 — untrusted registry verifyCredential 'reason' text never reaches an unsafe sink", () => {
+  it("rejected path: '<b>' in the registry's reason never appears in the signer.identity_rejected audit metadata", async () => {
+    const wallet = makeTestWallet();
+    const credential = {
+      id: "uuaid:foundation:signing-credential:q-rejected",
+      credentialSubject: { key: { keyId: "q-key-1", publicKey: wallet.did } },
+    } as unknown as UaidSigningCredential;
+    const badgeBody = makeBadgeEnvelope({ alg: "ed25519", publicKey: wallet.rawPublic.toString("hex"), keyId: "wallet-key" });
+    const stub = await startRegistryStub({
+      badgeBody,
+      verifyBody: {
+        credential_id: credential.id,
+        agent_uuaid: TEST_UUAID,
+        valid: false,
+        active: false,
+        notExpired: false,
+        reason: "<b>revoked</b>",
+      },
+    });
+    const config = await makeConfig({ uuaidRegistryUrl: stub.base, uuaidRegistrySigningKey: PINNED_KEY_HEX });
+    const stores = buildStores(config);
+    const delivery = new CapturingDelivery();
+    const envelopes = new EnvelopeService({ config, ...stores, delivery, render: async () => SAMPLE_PDF });
+
+    const created = await envelopes.create({
+      title: "Q rejected reason test",
+      html: "<p>body</p>",
+      signers: [{ name: "Alice", email: "alice@example.com" }],
+      identity: { minLevel: "L2" },
+    });
+    const token = tokenFromLink(delivery.calls[0].links[0].url);
+    const challenge = await envelopes.issueIdentityChallenge(created.envelopeId, created.signers[0].signerId);
+    const proof = wallet.sign(challenge);
+
+    await expect(
+      envelopes.sign(token, PNG_DATA_URL, { uuaid: TEST_UUAID, proof, credential }),
+    ).rejects.toMatchObject({ reason: "L2_CREDENTIAL_INVALID" });
+
+    // Only the machine-readable reason CODE (e.reason) is audited
+    // (envelopes.ts's `signer.identity_rejected` insert) — never e.message,
+    // which is where the registry's raw reason text lives.
+    const auditRows = await (stores.auditStore as FsAuditLogStore).readAll();
+    const rejectedRow = auditRows.find((r) => r.action === "signer.identity_rejected");
+    expect(rejectedRow).toBeTruthy();
+    expect(JSON.stringify(rejectedRow!.metadata)).not.toContain("<b>");
+
+    await closeStub(stub);
+  });
+
+  it("accepted path: '<b>' in the registry's reason (present alongside an otherwise-valid credential) never appears in composed HTML", async () => {
+    const wallet = makeTestWallet();
+    const credential = {
+      id: "uuaid:foundation:signing-credential:q-accepted",
+      credentialSubject: { key: { keyId: "q-key-2", publicKey: wallet.did } },
+    } as unknown as UaidSigningCredential;
+    const badgeBody = makeBadgeEnvelope({ alg: "ed25519", publicKey: wallet.rawPublic.toString("hex"), keyId: "wallet-key" });
+    const stub = await startRegistryStub({
+      badgeBody,
+      verifyBody: {
+        credential_id: credential.id,
+        agent_uuaid: TEST_UUAID,
+        valid: true,
+        active: true,
+        notExpired: true,
+        reason: "<b>informational</b>",
+      },
+    });
+    const config = await makeConfig({ uuaidRegistryUrl: stub.base, uuaidRegistrySigningKey: PINNED_KEY_HEX });
+    const stores = buildStores(config);
+    const delivery = new CapturingDelivery();
+    let composedHtmlSeen = "";
+    const envelopes = new EnvelopeService({
+      config,
+      ...stores,
+      delivery,
+      render: async (html: string) => {
+        composedHtmlSeen = html;
+        return SAMPLE_PDF;
+      },
+    });
+
+    const created = await envelopes.create({
+      title: "Q accepted reason test",
+      html: "<p>body</p>",
+      signers: [{ name: "Alice", email: "alice@example.com" }],
+      identity: { minLevel: "L2" },
+    });
+    const token = tokenFromLink(delivery.calls[0].links[0].url);
+    const challenge = await envelopes.issueIdentityChallenge(created.envelopeId, created.signers[0].signerId);
+    const proof = wallet.sign(challenge);
+
+    const result = await envelopes.sign(token, PNG_DATA_URL, { uuaid: TEST_UUAID, proof, credential });
+    expect(result.status).toBe("completed");
+
+    // identity/verify.ts stores ONLY credentialId/credentialValid from a
+    // successful registry credential check (verify.ts ~L543-544) — the
+    // registry's `reason` text is never assigned onto the record at all
+    // (G7's `assertSafeIdentityString` bound-and-scrub exists as
+    // defense-in-depth for it regardless). `identityAttestationsHtml`
+    // (envelopes.ts) composes only uuaid/level/keyFingerprint/verifiedAt,
+    // each passed through `escapeHtml` — so composed HTML can carry the
+    // registry's raw reason neither unescaped nor escaped: there is no path
+    // for it to reach the rendered document at all.
+    expect(composedHtmlSeen).not.toContain("<b>");
+    expect(composedHtmlSeen).not.toContain("informational");
+
+    await closeStub(stub);
+  });
+});
+
+describe("(r) R1 — FULL L2 path through EnvelopeService.sign(): blobs/identity/ holds proof, credential, and registry-snapshot files, each named by its own sha256, matching the signer record's digests", () => {
+  it("all three blob files exist, are content-addressed, and match record digests", async () => {
+    const wallet = makeTestWallet();
+    const credential = {
+      id: "uuaid:foundation:signing-credential:r1-full-l2",
+      credentialSubject: { key: { keyId: "r1-key", publicKey: wallet.did } },
+    } as unknown as UaidSigningCredential;
+    const badgeBody = makeBadgeEnvelope({ alg: "ed25519", publicKey: wallet.rawPublic.toString("hex"), keyId: "wallet-key" });
+    const stub = await startRegistryStub({
+      badgeBody,
+      verifyBody: { credential_id: credential.id, agent_uuaid: TEST_UUAID, valid: true, active: true, notExpired: true },
+    });
+
+    const config = await makeConfig({ uuaidRegistryUrl: stub.base, uuaidRegistrySigningKey: PINNED_KEY_HEX });
+    const stores = buildStores(config);
+    const delivery = new CapturingDelivery();
+    const envelopes = new EnvelopeService({ config, ...stores, delivery, render: async () => SAMPLE_PDF });
+
+    const created = await envelopes.create({
+      title: "R1 full L2 blob test",
+      html: "<p>body</p>",
+      signers: [{ name: "Alice", email: "alice@example.com" }],
+      identity: { minLevel: "L2" },
+    });
+    const token = tokenFromLink(delivery.calls[0].links[0].url);
+    const challenge = await envelopes.issueIdentityChallenge(created.envelopeId, created.signers[0].signerId);
+    const proof = wallet.sign(challenge);
+
+    const result = await envelopes.sign(token, PNG_DATA_URL, { uuaid: TEST_UUAID, proof, credential });
+    expect(result.status).toBe("completed");
+
+    const status = await envelopes.status(created.envelopeId);
+    const record = status.signers[0].identity!;
+    expect(record.level).toBe("L2");
+    expect(record.proofDigest).toBeTruthy();
+    expect(record.credentialDigest).toBeTruthy();
+    expect(record.registry?.registrySnapshotDigest).toBeTruthy();
+
+    // Every digest names a real file under blobs/identity/, and that file's
+    // OWN sha256 equals the name it is stored under (content-addressed).
+    for (const digest of [record.proofDigest!, record.credentialDigest!, record.registry!.registrySnapshotDigest!]) {
+      const blobFile = join(config.dataDir, "blobs", "identity", `${digest}.json`);
+      expect(existsSync(blobFile)).toBe(true);
+      const bytes = readFileSync(blobFile);
+      expect(createHash("sha256").update(bytes).digest("hex")).toBe(digest);
+    }
+
+    // Content sanity: each file holds the artifact its name claims.
+    const proofBlob = JSON.parse(readFileSync(join(config.dataDir, "blobs", "identity", `${record.proofDigest}.json`), "utf8"));
+    expect(proofBlob.proofValue).toBe(proof.proofValue);
+    const credentialBlob = JSON.parse(
+      readFileSync(join(config.dataDir, "blobs", "identity", `${record.credentialDigest}.json`), "utf8"),
+    );
+    expect(credentialBlob.id).toBe(credential.id);
+    const snapshotBlob = JSON.parse(
+      readFileSync(join(config.dataDir, "blobs", "identity", `${record.registry!.registrySnapshotDigest}.json`), "utf8"),
+    );
+    expect(snapshotBlob.payload.subject.uuaid).toBe(TEST_UUAID);
+
+    await closeStub(stub);
   });
 });

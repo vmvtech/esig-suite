@@ -1,0 +1,183 @@
+<!--
+  TEMPLATE: Mutual Non-Disclosure Agreement (NDA)
+  ================================================
+  Self-contained document template for use with @e-sig/core / @e-sig/mcp
+  (esig_create_envelope / core createEnvelope). Fill every {{placeholder}}
+  below before creating an envelope from this file — see
+  examples/templates/README.md for a fill-and-send snippet.
+
+  Placeholders (mustache-style {{...}}):
+    {{effective_date}}         Date the agreement takes effect, e.g. "March 3, 2027"
+    {{party_a_name}}           Full legal name of the first party
+    {{party_a_entity_type}}    e.g. "a Delaware corporation" / "an individual"
+    {{party_a_address}}        Mailing address of the first party
+    {{party_a_signatory_title}} Title of the person signing for Party A, e.g. "CEO"
+    {{party_b_name}}           Full legal name of the second party
+    {{party_b_entity_type}}    e.g. "a New York LLC" / "an individual"
+    {{party_b_address}}        Mailing address of the second party
+    {{party_b_signatory_title}} Title of the person signing for Party B
+    {{purpose}}                One-sentence description of why the parties are sharing information
+    {{term_years}}              Confidentiality obligation term, in years, e.g. "3"
+    {{governing_state}}        State/jurisdiction whose law governs, e.g. "Delaware"
+
+  This is a TEMPLATE, not legal advice. Have counsel review before use.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mutual Non-Disclosure Agreement</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body {
+    font-family: Georgia, "Times New Roman", Times, serif;
+    color: #1a1a1a;
+    line-height: 1.5;
+    font-size: 12pt;
+  }
+  .page { max-width: 6.5in; margin: 0 auto; padding: 0.4in 0.3in 1in; }
+  .doc-banner {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11pt;
+    font-weight: bold;
+    text-align: center;
+    color: #5c4400;
+    background: #fff3cd;
+    border: 2px solid #b8860b;
+    padding: 10px 14px;
+    margin: 0 0 28px;
+  }
+  h1 { font-size: 17pt; text-align: center; margin: 0 0 4px; }
+  .doc-subtitle { text-align: center; font-size: 10.5pt; color: #555; margin: 0 0 24px; }
+  h2 { font-size: 12.5pt; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 26px 0 8px; }
+  p { margin: 0 0 10px; text-align: justify; }
+  ol.clauses { padding-left: 1.2em; margin: 0; }
+  ol.clauses > li { margin-bottom: 10px; text-align: justify; }
+  .party-block { display: flex; gap: 24px; margin: 16px 0 20px; }
+  .party-block > div { flex: 1; border: 1px solid #ccc; padding: 10px 12px; font-size: 10.5pt; }
+  .party-block .label { font-weight: bold; color: #444; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
+  .closing { margin-top: 24px; font-style: italic; color: #333; }
+  @page { margin: 0.75in; }
+  @media print {
+    .doc-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-size: 11pt; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="doc-banner">TEMPLATE — not legal advice; have counsel review before use</div>
+
+  <h1>Mutual Non-Disclosure Agreement</h1>
+  <p class="doc-subtitle">Effective as of {{effective_date}}</p>
+
+  <p>
+    This Mutual Non-Disclosure Agreement (this "Agreement") is entered into as of
+    {{effective_date}} (the "Effective Date") by and between the parties identified below,
+    for the purpose of {{purpose}}. Each party may disclose certain confidential and
+    proprietary information to the other in connection with that purpose, and the parties
+    agree as follows.
+  </p>
+
+  <div class="party-block">
+    <div>
+      <div class="label">Party A</div>
+      {{party_a_name}}, {{party_a_entity_type}}<br>
+      {{party_a_address}}
+    </div>
+    <div>
+      <div class="label">Party B</div>
+      {{party_b_name}}, {{party_b_entity_type}}<br>
+      {{party_b_address}}
+    </div>
+  </div>
+
+  <h2>1. Definition of Confidential Information</h2>
+  <p>
+    "Confidential Information" means any non-public information disclosed by one party
+    (the "Disclosing Party") to the other (the "Receiving Party"), whether orally, in
+    writing, or in any other form, that is designated as confidential or that a reasonable
+    person would understand to be confidential given the nature of the information and the
+    circumstances of disclosure, including without limitation business plans, financial
+    information, technical data, product designs, customer lists, and the existence and
+    terms of this Agreement.
+  </p>
+
+  <h2>2. Obligations of the Receiving Party</h2>
+  <ol class="clauses">
+    <li>Use Confidential Information solely for the purpose stated above;</li>
+    <li>Protect Confidential Information using at least the same degree of care the
+      Receiving Party uses to protect its own confidential information, and in no event
+      less than reasonable care;</li>
+    <li>Not disclose Confidential Information to any third party without the Disclosing
+      Party's prior written consent, except to employees, agents, or advisors who need to
+      know it for the stated purpose and who are bound by confidentiality obligations at
+      least as protective as this Agreement; and</li>
+    <li>Promptly notify the Disclosing Party of any unauthorized use or disclosure of
+      which the Receiving Party becomes aware.</li>
+  </ol>
+
+  <h2>3. Exclusions</h2>
+  <p>
+    Confidential Information does not include information that: (a) is or becomes publicly
+    available through no fault of the Receiving Party; (b) was rightfully known to the
+    Receiving Party prior to disclosure; (c) is rightfully received from a third party
+    without breach of any confidentiality obligation; or (d) is independently developed by
+    the Receiving Party without use of the Disclosing Party's Confidential Information.
+  </p>
+
+  <h2>4. Term</h2>
+  <p>
+    This Agreement is effective as of the Effective Date and continues until either party
+    terminates it on written notice. The confidentiality obligations in Section 2 survive
+    termination of this Agreement for {{term_years}} years, except for trade secrets, which
+    remain protected for as long as they qualify as trade secrets under applicable law.
+  </p>
+
+  <h2>5. Return or Destruction</h2>
+  <p>
+    Upon the Disclosing Party's written request, the Receiving Party will promptly return
+    or destroy all materials containing Confidential Information and certify that it has
+    done so, except for one archival copy retained solely to demonstrate compliance with
+    this Agreement.
+  </p>
+
+  <h2>6. No License; No Obligation</h2>
+  <p>
+    Nothing in this Agreement grants either party any license or ownership right in the
+    other party's Confidential Information, and nothing obligates either party to disclose
+    any information or to enter into any further business relationship.
+  </p>
+
+  <h2>7. Remedies</h2>
+  <p>
+    The parties agree that unauthorized use or disclosure of Confidential Information may
+    cause irreparable harm for which monetary damages would be an inadequate remedy, and
+    that the Disclosing Party is entitled to seek injunctive relief in addition to any
+    other remedies available at law or in equity.
+  </p>
+
+  <h2>8. Governing Law</h2>
+  <p>
+    This Agreement is governed by the laws of the State of {{governing_state}}, without
+    regard to its conflict-of-laws principles.
+  </p>
+
+  <h2>9. Entire Agreement</h2>
+  <p>
+    This Agreement is the entire agreement between the parties concerning its subject
+    matter and supersedes all prior discussions and agreements, whether written or oral,
+    on that subject. It may be amended only by a writing signed by both parties.
+  </p>
+
+  <p class="closing">
+    IN WITNESS WHEREOF, the parties have caused this Agreement to be executed by their
+    duly authorized representatives as of the Effective Date, signing electronically
+    below: {{party_a_name}} by its {{party_a_signatory_title}}, and {{party_b_name}} by
+    its {{party_b_signatory_title}}.
+  </p>
+</div>
+</body>
+</html>

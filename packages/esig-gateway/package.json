@@ -22,7 +22,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@e-sig/core": "^0.7.0",
+    "@e-sig/core": "^0.8.0",
     "@e-sig/worm": "^0.1.0"
   },
   "devDependencies": {

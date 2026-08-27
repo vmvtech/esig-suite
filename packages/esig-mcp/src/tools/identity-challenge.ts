@@ -1,6 +1,7 @@
 // tools/identity-challenge.ts — esig_identity_challenge
 // (docs/architecture/esig-mcp.md §12 "Challenge"). State-changing
-// (issues/rotates a per-signer sole-control nonce) and audited via
+// (issues a per-signer sole-control nonce — idempotent within TTL: the same
+// live nonce is returned until it is consumed or expires) and audited via
 // `EnvelopeService.issueIdentityChallenge`, which also applies the SAME
 // hourly rate limiter esig_create_envelope draws from, under the label
 // "challenge". A sender-side agent uses this to relay a challenge to the
@@ -23,7 +24,9 @@ export function registerIdentityChallengeTool(server: McpServer, deps: McpServer
         "this envelope's identity requirement (docs/architecture/esig-mcp.md §12). The challenge is " +
         "NOT secret — it is bound to this envelope, signer, and content digest (envelopeId, signerId, " +
         "htmlSha256, nonce, issuedAt, expiresAt), and single-use once a valid proof consumes its " +
-        "nonce. Re-issuing replaces any prior unconsumed nonce for this signer. Sign the challenge " +
+        "nonce. Re-issuing is idempotent within the challenge TTL: while the prior nonce is live " +
+        "and unconsumed the SAME challenge is returned; a fresh nonce is minted only once it has " +
+        "been consumed or has expired. Sign the challenge " +
         "with an eddsa-jcs-2022 DataIntegrityProof and present it as `identityProof` on POST /sign. " +
         "Only meaningful for envelopes created with an `identity.minLevel` above \"none\" (or a signer " +
         "with a `identity.signers[].uuaid` pin) — see esig_create_envelope.",

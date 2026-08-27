@@ -1,0 +1,154 @@
+<!--
+  TEMPLATE: Field Trip / Activity Permission Slip (K-12)
+  ========================================================
+  Self-contained document template for use with @e-sig/core / @e-sig/mcp
+  (esig_create_envelope / core createEnvelope). Fill every {{placeholder}}
+  below before creating an envelope from this file — see
+  examples/templates/README.md for a fill-and-send snippet.
+
+  Placeholders (mustache-style {{...}}):
+    {{school_name}}              Name of the school
+    {{student_name}}             Full name of the student
+    {{grade_level}}               Student's grade level
+    {{teacher_name}}             Supervising teacher/staff name
+    {{activity_name}}            Name/description of the field trip or activity
+    {{activity_date}}            Date of the activity
+    {{activity_location}}        Destination/location
+    {{departure_time}}           Departure time
+    {{return_time}}              Expected return time
+    {{transportation_method}}    How students will travel, e.g. "school bus"
+    {{cost_amount}}               Cost to the family, if any, e.g. "$15" or "No cost"
+    {{guardian_name}}            Parent/guardian full name
+    {{guardian_phone}}           Parent/guardian phone number
+    {{guardian_email}}           Parent/guardian email address
+    {{emergency_contact_name}}   Emergency contact (if different from guardian)
+    {{emergency_contact_phone}}  Emergency contact phone number
+    {{emergency_contact_relationship}} Relationship to student
+    {{medical_conditions}}       Known allergies/medical conditions/medications, or "None"
+    {{physician_name}}           Student's physician, if applicable
+    {{physician_phone}}          Physician phone number, if applicable
+
+  This is a TEMPLATE, not legal advice. Have your school district's
+  counsel/policy office review before adopting it as an official form.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Field Trip / Activity Permission Slip</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body {
+    font-family: Georgia, "Times New Roman", Times, serif;
+    color: #1a1a1a;
+    line-height: 1.5;
+    font-size: 12pt;
+  }
+  .page { max-width: 6.5in; margin: 0 auto; padding: 0.4in 0.3in 1in; }
+  .doc-banner {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11pt;
+    font-weight: bold;
+    text-align: center;
+    color: #5c4400;
+    background: #fff3cd;
+    border: 2px solid #b8860b;
+    padding: 10px 14px;
+    margin: 0 0 28px;
+  }
+  h1 { font-size: 16pt; text-align: center; margin: 0 0 4px; }
+  .doc-subtitle { text-align: center; font-size: 10.5pt; color: #555; margin: 0 0 20px; }
+  h2 { font-size: 12.5pt; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 24px 0 8px; }
+  p { margin: 0 0 10px; }
+  .meta-table { width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-size: 10.5pt; }
+  .meta-table td { padding: 4px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  .meta-table td.k { font-weight: bold; color: #444; width: 40%; }
+  .contact-grid { display: flex; gap: 20px; margin: 8px 0 18px; }
+  .contact-grid > div { flex: 1; border: 1px solid #ccc; padding: 10px 12px; font-size: 10.5pt; }
+  .contact-grid .label { font-weight: bold; color: #444; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
+  .callout {
+    background: #fdecea;
+    border: 1px solid #e0a8a0;
+    padding: 10px 14px;
+    margin: 14px 0;
+    font-size: 10.5pt;
+  }
+  .callout .callout-label { font-weight: bold; color: #7a2e24; display: block; margin-bottom: 3px; }
+  .closing { margin-top: 24px; font-style: italic; color: #333; }
+  @page { margin: 0.75in; }
+  @media print {
+    .doc-banner, .callout { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-size: 11pt; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="doc-banner">TEMPLATE — not legal advice; have counsel review before use</div>
+
+  <h1>Field Trip / Activity Permission Slip</h1>
+  <p class="doc-subtitle">{{school_name}}</p>
+
+  <table class="meta-table">
+    <tr><td class="k">Student</td><td>{{student_name}}, Grade {{grade_level}}</td></tr>
+    <tr><td class="k">Supervising teacher/staff</td><td>{{teacher_name}}</td></tr>
+    <tr><td class="k">Activity</td><td>{{activity_name}}</td></tr>
+    <tr><td class="k">Date</td><td>{{activity_date}}</td></tr>
+    <tr><td class="k">Location</td><td>{{activity_location}}</td></tr>
+    <tr><td class="k">Departure / return</td><td>{{departure_time}} / {{return_time}}</td></tr>
+    <tr><td class="k">Transportation</td><td>{{transportation_method}}</td></tr>
+    <tr><td class="k">Cost</td><td>{{cost_amount}}</td></tr>
+  </table>
+
+  <h2>1. Permission</h2>
+  <p>
+    I give permission for my child, {{student_name}}, to participate in {{activity_name}}
+    on {{activity_date}} at {{activity_location}}, traveling by {{transportation_method}}
+    and supervised by {{teacher_name}} and accompanying school staff/chaperones.
+  </p>
+
+  <h2>2. Guardian and Emergency Contacts</h2>
+  <div class="contact-grid">
+    <div>
+      <div class="label">Parent / guardian</div>
+      {{guardian_name}}<br>
+      {{guardian_phone}}<br>
+      {{guardian_email}}
+    </div>
+    <div>
+      <div class="label">Emergency contact</div>
+      {{emergency_contact_name}} ({{emergency_contact_relationship}})<br>
+      {{emergency_contact_phone}}
+    </div>
+  </div>
+
+  <h2>3. Medical Information</h2>
+  <p><strong>Allergies / medical conditions / medications:</strong> {{medical_conditions}}</p>
+  <p><strong>Physician:</strong> {{physician_name}} &mdash; {{physician_phone}}</p>
+
+  <div class="callout">
+    <span class="callout-label">Emergency medical care</span>
+    In the event my child requires emergency medical treatment during this activity and I
+    cannot be reached, I authorize {{school_name}} staff to obtain such treatment on my
+    child's behalf, including transport to the nearest appropriate medical facility. I
+    understand I remain responsible for any resulting medical costs not covered by
+    insurance.
+  </div>
+
+  <h2>4. Acknowledgment</h2>
+  <p>
+    I understand that participation in {{activity_name}} is voluntary, that reasonable
+    supervision will be provided, and that school staff are not insurers of my child's
+    safety. I have provided current and accurate contact and medical information above
+    and will notify {{school_name}} promptly of any changes before the activity date.
+  </p>
+
+  <p class="closing">
+    By signing electronically below, I confirm that I am {{student_name}}'s parent or
+    legal guardian and that I consent to the terms of this permission slip.
+  </p>
+</div>
+</body>
+</html>

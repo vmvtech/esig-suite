@@ -40,6 +40,7 @@ export {
   EnvelopeError,
   SEAL_RENDER_LAUNCH_ARGS,
   derivePhase,
+  getEnvelopeDocument,
   type EnvelopeServiceDeps,
   type SignerInput,
   type CreateEnvelopeArgs,
@@ -48,6 +49,7 @@ export {
   type EnvelopeStatusSummary,
   type EnvelopePhase,
   type EnvelopeSealState,
+  type EnvelopeDocumentMeta,
 } from "./envelopes.js";
 
 export { verifyDocumentBytes, type VerifyOptions, type VerifyDocumentBytesResult } from "./verify.js";
@@ -76,7 +78,8 @@ export {
   type IdentityChallengePayload,
 } from "./identity/challenge.js";
 export { verifySignerIdentity } from "./identity/verify.js";
-export { RegistryClient, RegistryError, resolveListsKey, type VerifyCredentialResult } from "./identity/registry.js";
+export { RegistryClient, RegistryError, RegistryNotFoundError, type VerifyCredentialResult } from "./identity/registry.js";
+export { BadgeError, verifyRegistryBadge, hexToBytes, type BadgePayload, type BadgePresentationKey } from "./identity/badge.js";
 
 export { createMcpServer, V0_1_TOOL_NAMES, type McpServerDeps } from "./server.js";
 

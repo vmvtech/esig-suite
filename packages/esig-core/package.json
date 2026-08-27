@@ -1,12 +1,15 @@
 {
   "name": "@e-sig/core",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Self-contained PKCS#7 PDF signing \u2014 no SaaS, no metering, no per-doc fees. Render\u2192sign\u2192verify engine + pluggable persistence interfaces + end-to-end signDocument() orchestrator.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "esig": "./dist/bin/esig.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -41,7 +44,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node -e \"fs.copyFileSync('src/vendor/placeholder-plain/LICENSE-signpdf.md','dist/vendor/placeholder-plain/LICENSE-signpdf.md')\"",
+    "build": "tsc -p tsconfig.build.json && node -e \"fs.copyFileSync('src/vendor/placeholder-plain/LICENSE-signpdf.md','dist/vendor/placeholder-plain/LICENSE-signpdf.md')\" && node -e \"fs.chmodSync('dist/bin/esig.js', 0o755)\"",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
     "pretest": "npm run build",

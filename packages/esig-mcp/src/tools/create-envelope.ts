@@ -32,6 +32,20 @@ const identitySignerSchema = z
     message: "exactly one of signerId or index is required",
   });
 
+// §13: `html` and `docId` are both individually optional (below) so the JSON
+// schema exposed via tools/list stays a plain object shape — a top-level
+// `.refine()` passed as `registerTool`'s own `inputSchema` would make the
+// MCP SDK's `normalizeObjectSchema` unable to find a `.shape` on the result
+// (verified against the installed SDK: a ZodEffects has none) and fall back
+// to an EMPTY input schema for this tool's `tools/list` entry. This small,
+// separate schema is parsed by hand in the handler instead — still a real
+// zod `.refine()`, just not the one wired to `registerTool`.
+const exactlyOneOfHtmlOrDocId = z
+  .object({ html: z.string().optional(), docId: z.string().optional() })
+  .refine((v) => (v.html !== undefined) !== (v.docId !== undefined), {
+    message: "exactly one of `html` or `docId` must be provided.",
+  });
+
 const identitySchema = z.object({
   minLevel: z
     .enum(["none", "L0", "L1", "L2"])
@@ -42,8 +56,9 @@ const identitySchema = z.object({
         "behavior). L0: signer's uuaid must be well-formed (and match the pin below, if set) — asserted, " +
         "no cryptographic proof. L1: the signer's wallet/agent must sign a server-issued sole-control " +
         "challenge — obtain it via esig_identity_challenge or GET /sign/<token>/challenge, then present " +
-        "the resulting DataIntegrityProof as `identityProof` on POST /sign. L2: L1 plus the proof's key " +
-        "must resolve on ESIG_MCP_UUAID_REGISTRY_URL (requires that env var to be configured).",
+        "the resulting DataIntegrityProof as `identityProof` on POST /sign. L2: L1 plus the registry " +
+        "(ESIG_MCP_UUAID_REGISTRY_URL) must attest the proof's key<->uuaid binding via its signed badge — " +
+        "requires that env var AND ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY (the registry's pinned Ed25519 public key).",
     ),
   signers: z
     .array(identitySignerSchema)
@@ -57,9 +72,12 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
     {
       title: "Create a signing envelope",
       description:
-        "Create a new envelope from HTML content and a signer list, and dispatch each signer's " +
-        "tokenized signing link through this server's configured delivery channel (file outbox, " +
-        "console, or webhook — never back to the calling agent). `<script>` tags, event-handler attributes, " +
+        "Create a new envelope and dispatch each signer's tokenized signing link through this " +
+        "server's configured delivery channel (file outbox, console, or webhook — never back to " +
+        "the calling agent). Pass EXACTLY ONE of `html` (an HTML document, rendered to PDF at seal " +
+        "time) or `docId` (a docId from esig_ingest_document): to sign an existing PDF, ingest it " +
+        "then create an envelope with docId — no Chrome needed, and the signer reviews and signs " +
+        "the exact ingested bytes (WYSIWYS). `<script>` tags, event-handler attributes, " +
         "`javascript:` URLs, and `<iframe>`/`<object>`/`<embed>`/`<form>` are stripped from `html` " +
         "before storage (defense in depth; the human-facing approval page also renders the " +
         "envelope inside a fully sandboxed iframe). By design (invariants I8/T1/T8), the result " +
@@ -68,7 +86,25 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
         "tell that human to check their configured delivery channel, not ask this tool for a link.",
       inputSchema: {
         title: z.string().min(1).describe("Envelope title, shown to signers on the approval page."),
-        html: z.string().min(1).describe("The envelope body as HTML."),
+        html: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "The envelope body as HTML, rendered to PDF at seal time. Exactly one of `html`/`docId` " +
+              "is required — use `docId` instead to sign an existing PDF with no Chrome needed.",
+          ),
+        docId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "A docId returned by esig_ingest_document (sha256 hex of previously-ingested PDF bytes). " +
+              "Creates a PDF envelope: the signer reviews and signs the EXACT ingested bytes (WYSIWYS) " +
+              "via a generated cover sheet that drives the same signer/order/token flow as an HTML " +
+              "envelope — no Chrome/rendering involved anywhere on this path. Exactly one of " +
+              "`html`/`docId` is required.",
+          ),
         signers: z.array(signerSchema).min(1).describe("One or more signers. At least one is required."),
         expiresAt: z
           .string()
@@ -83,7 +119,12 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
           ),
       },
     },
-    async ({ title, html, signers, expiresAt, identity }) => {
+    async ({ title, html, docId, signers, expiresAt, identity }) => {
+      const oneOf = exactlyOneOfHtmlOrDocId.safeParse({ html, docId });
+      if (!oneOf.success) {
+        return toolError(oneOf.error.issues[0]?.message ?? "exactly one of `html` or `docId` must be provided.");
+      }
+
       let expiresAtDate: Date | undefined;
       if (expiresAt !== undefined) {
         expiresAtDate = new Date(expiresAt);
@@ -94,7 +135,7 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
 
       let result;
       try {
-        result = await deps.envelopes.create({ title, html, signers, expiresAt: expiresAtDate, identity });
+        result = await deps.envelopes.create({ title, html, docId, signers, expiresAt: expiresAtDate, identity });
       } catch (e) {
         return toolError(messageOf(e));
       }
@@ -107,8 +148,11 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
 
       // D2: `undefined` (a harness that didn't supply it) reads as ready —
       // see tools/types.ts's own comment; `bin.ts` always supplies the real,
-      // probed value.
-      const sealReady = deps.sealReady ?? true;
+      // probed value. §13: a PDF envelope's seal step never renders via
+      // Chrome (it signs the ingested bytes directly), so the server-wide
+      // Chrome preflight does not apply to THIS envelope — report it ready
+      // regardless of `deps.sealReady`.
+      const sealReady = (deps.sealReady ?? true) || result.document !== undefined;
 
       const summary =
         `envelope ${result.envelopeId} created with ${result.signers.length} signer(s); ` +
@@ -117,6 +161,10 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
           ? " (ESIG_MCP_RETURN_LINKS=1: raw links are included in this result — local demo only)"
           : " (raw links are withheld from this result by design, invariants I8/T1/T8)") +
         (result.removedTags.length > 0 ? `; stripped from html: ${result.removedTags.join(", ")}` : "") +
+        (result.document
+          ? `; signs the ingested PDF docId ${result.document.docId} (sha256 ${result.document.sha256}, ` +
+            `${result.document.size} byte(s)) — no Chrome needed`
+          : "") +
         (result.identityPolicy
           ? `; requires signer identity level ${result.identityPolicy.minLevel} (esig_identity_challenge issues the sole-control challenge)`
           : "") +

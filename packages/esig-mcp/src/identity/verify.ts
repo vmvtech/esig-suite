@@ -28,7 +28,8 @@ import { isWellFormedUuaidAssertion, type EnvelopeStore, type PdfStorageStore } 
 import { jcsBytes, publicKeyFromVerificationMethod, verifyChallengeProof } from "@e-sig/uaid-exch";
 
 import { CHALLENGE_TYPE, finalizeChallenge } from "./challenge.js";
-import { bytesEqual, resolveListsKey, type RegistryClient } from "./registry.js";
+import { BadgeError, hexToBytes, verifyRegistryBadge, type BadgePayload } from "./badge.js";
+import { bytesEqual, RegistryNotFoundError, type RegistryClient } from "./registry.js";
 import {
   getPinnedHtmlSha256,
   getSignerIdentityState,
@@ -57,6 +58,17 @@ export interface VerifySignerIdentityInput {
   pinnedRegistryUrl?: string;
   /** G3: the server's CURRENT `ESIG_MCP_UUAID_REGISTRY_URL`, read fresh by the caller at verify time (never cached from creation time). */
   configuredRegistryUrl?: string;
+  /**
+   * The server's CURRENT `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY` — the PINNED
+   * registry Ed25519 public key (64 hex) badges are verified against. Unlike
+   * the registry URL this is NOT pinned per envelope: the URL pin (G3)
+   * already fixes WHICH registry attests, and that registry legitimately
+   * rotating its signing key must not strand already-created envelopes — a
+   * rotated key simply fails verification (fail closed) until the operator
+   * updates config. Required for L2 (fail-closed `L2_NO_REGISTRY_KEY`
+   * otherwise, before any network call).
+   */
+  registrySigningKey?: string;
   /**
    * R1: content-addressed store for identity artifacts (proof JSON,
    * credential JSON if any, resolve-response snapshot). When provided, the
@@ -296,9 +308,8 @@ export async function verifySignerIdentity(
       input.minLevel,
     );
     // The real tae/v1 field is credentialSubject.key.publicKey
-    // (schema.json:80-89) — G1's original bug named a field
-    // (`authenticator.public_key_jwk`) that does not exist in the schema at
-    // all, so no check against it could ever fire.
+    // (schema.json:80-89) — G1's original bug named a field that does not
+    // exist in the schema at all, so no check against it could ever fire.
     const credentialKey = proof.credential.credentialSubject?.key;
     if (!credentialKey || typeof credentialKey.publicKey !== "string" || credentialKey.publicKey.length === 0) {
       throw new IdentityError(
@@ -384,17 +395,116 @@ export async function verifySignerIdentity(
       );
     }
 
-    let resolved: unknown;
-    try {
-      resolved = await input.registry.resolve(proof.uuaid);
-    } catch (e) {
-      // T13: registry down/non-2xx/timeout ⇒ FAIL, never silently drop to L1.
-      throw new IdentityError(`registry resolve failed: ${messageOf(e)}`, "L2_REGISTRY_UNAVAILABLE", proof.uuaid, input.minLevel);
-    }
-    if (!resolveListsKey(resolved, proofRawKey)) {
+    // The pinned registry key is the trust anchor the badge is verified
+    // against (identity/badge.ts) — required BEFORE any network call so a
+    // misconfigured server fails fast and identically every time.
+    if (!input.registrySigningKey) {
       throw new IdentityError(
-        `registry does not list this proof's key for uuaid "${proof.uuaid}"`,
-        "L2_KEY_NOT_LISTED",
+        "ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY (the pinned registry Ed25519 public key, 64 hex chars from " +
+          "the registry's /.well-known/uuaid-registry.json) is required for identity level L2",
+        "L2_NO_REGISTRY_KEY",
+        proof.uuaid,
+        input.minLevel,
+      );
+    }
+
+    // The badge is the ONLY registry surface carrying an agent's presentation
+    // key — and it is registry-signed, so it is verified below against the
+    // PINNED key instead of trusting TLS alone. (`/resolve/{uuaid}` carries no
+    // signer key material at all — Uuaid-Lead, evidence 2026-08-27.)
+    let badgeRaw: unknown;
+    try {
+      badgeRaw = await input.registry.badge(proof.uuaid);
+    } catch (e) {
+      if (e instanceof RegistryNotFoundError) {
+        // A badge 404 is authoritative (absent, or tombstoned where /resolve
+        // would still return 200 — Uuaid-Lead, evidence §4.5).
+        throw new IdentityError(
+          `registry has no badge for uuaid "${proof.uuaid}": ${messageOf(e)}`,
+          "L2_UUAID_NOT_FOUND",
+          proof.uuaid,
+          input.minLevel,
+        );
+      }
+      // T13: registry down/non-2xx/timeout ⇒ FAIL, never silently drop to L1.
+      throw new IdentityError(`registry badge fetch failed: ${messageOf(e)}`, "L2_REGISTRY_UNAVAILABLE", proof.uuaid, input.minLevel);
+    }
+
+    let badgePayload: BadgePayload;
+    try {
+      badgePayload = verifyRegistryBadge(badgeRaw, { pinnedRegistryKey: input.registrySigningKey, now: now() });
+    } catch (e) {
+      if (e instanceof BadgeError) {
+        throw new IdentityError(`registry badge rejected: ${e.message}`, `L2_${e.reason}`, proof.uuaid, input.minLevel);
+      }
+      throw new IdentityError(`registry badge verification failed: ${messageOf(e)}`, "L2_BADGE_MALFORMED", proof.uuaid, input.minLevel);
+    }
+
+    // Blind-verifier finding 2026-08-27: a badge carries its OWN subject —
+    // the pinned-key check above proves the registry signed it, not that it
+    // is a badge FOR the uuaid being proven. Without this, a registry-signed
+    // badge for a different subject B that happens to share (or bear) the
+    // proof's key would satisfy every check below. Also catches a
+    // missing/empty subject.uuaid (falls through the same `!==`, since
+    // `proof.uuaid` is already confirmed non-empty by the L0 well-formed
+    // check above).
+    if (badgePayload.subject.uuaid !== proof.uuaid) {
+      throw new IdentityError(
+        `registry badge is for uuaid "${badgePayload.subject.uuaid || "(missing)"}", not the uuaid being proven "${proof.uuaid}"`,
+        "L2_BADGE_SUBJECT_MISMATCH",
+        proof.uuaid,
+        input.minLevel,
+      );
+    }
+
+    // A SUPERSEDED (or otherwise non-active) agent still yields a perfectly
+    // valid badge — `status` is what retires it (Uuaid-Lead, evidence §4.4).
+    if (badgePayload.status !== "active") {
+      throw new IdentityError(
+        `registry status for uuaid "${proof.uuaid}" is "${badgePayload.status}"` +
+          `${badgePayload.statusReasonCode ? ` (${badgePayload.statusReasonCode})` : ""} — only an "active" uuaid satisfies L2`,
+        "L2_UUAID_NOT_ACTIVE",
+        proof.uuaid,
+        input.minLevel,
+      );
+    }
+
+    // The presentation key is the registry's ATTESTATION of the key<->uuaid
+    // binding — NOT a proof of key possession (registering a key proves
+    // ownership of the AGENT, never possession of the KEY; L1's sole-control
+    // challenge above is what supplies possession). Keep the two claims apart
+    // in any user-facing copy.
+    const presentationKey = badgePayload.subject.presentationKey;
+    if (!presentationKey) {
+      throw new IdentityError(
+        `the registry has NO presentation key bound to uuaid "${proof.uuaid}" (badge subject.presentationKey is null) — ` +
+          "the agent must bind its signing key with the registry first; L2 attests only what the registry attests",
+        "L2_KEY_NOT_BOUND",
+        proof.uuaid,
+        input.minLevel,
+      );
+    }
+    let badgeKeyBytes: Uint8Array;
+    try {
+      if (presentationKey.alg !== "ed25519") {
+        throw new BadgeError(`presentationKey.alg is "${presentationKey.alg}", expected "ed25519"`, "BADGE_MALFORMED");
+      }
+      badgeKeyBytes = hexToBytes(presentationKey.publicKey, 32, "presentationKey.publicKey");
+    } catch (e) {
+      throw new IdentityError(
+        `registry badge presentationKey is unusable: ${messageOf(e)}`,
+        "L2_BADGE_MALFORMED",
+        proof.uuaid,
+        input.minLevel,
+      );
+    }
+    if (!bytesEqual(proofRawKey, badgeKeyBytes)) {
+      throw new IdentityError(
+        `the registry's attested presentation key does not match this proof's key for uuaid "${proof.uuaid}". ` +
+          "Note: when an agent has several active keys the badge reports ONE, chosen arbitrarily by the registry " +
+          "(no ordering guarantee) — a mismatch may mean the signer used a different registered key, not that " +
+          "the key is unregistered.",
+        "L2_KEY_MISMATCH",
         proof.uuaid,
         input.minLevel,
       );
@@ -403,8 +513,9 @@ export async function verifySignerIdentity(
     record.level = "L2";
     record.registry = {
       resolvedAt: now().toISOString(),
-      // R1: persist the raw /resolve/{uuaid} response snapshot too.
-      registrySnapshotDigest: await persistIdentityBlob(input.blobStore, Buffer.from(JSON.stringify(resolved), "utf8")),
+      // R1: persist the raw badge envelope (the signed snapshot this decision
+      // rests on) so the digest names exactly the bytes that were verified.
+      registrySnapshotDigest: await persistIdentityBlob(input.blobStore, Buffer.from(JSON.stringify(badgeRaw), "utf8")),
     };
 
     if (proof.credential) {
@@ -427,6 +538,20 @@ export async function verifySignerIdentity(
           `credential ${credentialId} is not usable (valid=${verified.valid}, active=${verified.active}, ` +
             `notExpired=${verified.notExpired}${verified.reason ? `, reason=${verified.reason}` : ""})`,
           "L2_CREDENTIAL_INVALID",
+          proof.uuaid,
+          input.minLevel,
+        );
+      }
+      // The credential's OWNED subject must equal the proving uuaid: AIAU's
+      // exam flow never checks that the caller owns the handle, so a valid
+      // credential can exist for a uuaid that never presented anything
+      // (Uuaid-Lead, evidence §5 — auditCredentialOrigin, routes.ts:461-500).
+      // Asserting the binding here closes that gap on this side for free.
+      if (verified.agentUuaid !== proof.uuaid) {
+        throw new IdentityError(
+          `credential ${credentialId} is bound to ${verified.agentUuaid ? `uuaid "${verified.agentUuaid}"` : "no uuaid (registry returned no agent_uuaid)"}, ` +
+            `not the proving uuaid "${proof.uuaid}"`,
+          "L2_CREDENTIAL_UUAID_MISMATCH",
           proof.uuaid,
           input.minLevel,
         );

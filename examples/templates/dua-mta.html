@@ -1,0 +1,160 @@
+<!--
+  TEMPLATE: Data Use Agreement / Material Transfer Agreement (DUA/MTA)
+  =====================================================================
+  Self-contained document template for use with @e-sig/core / @e-sig/mcp
+  (esig_create_envelope / core createEnvelope). Fill every {{placeholder}}
+  below before creating an envelope from this file — see
+  examples/templates/README.md for a fill-and-send snippet.
+
+  Placeholders (mustache-style {{...}}):
+    {{effective_date}}          Date the agreement takes effect
+    {{provider_name}}           Institution/entity providing the data and/or material
+    {{provider_address}}        Provider's address
+    {{recipient_name}}          Institution/entity receiving the data and/or material
+    {{recipient_address}}       Recipient's address
+    {{recipient_pi_name}}       Recipient-side principal investigator responsible for the material/data
+    {{material_description}}    Description of the biological/physical material transferred (if any)
+    {{data_description}}        Description of the dataset transferred (if any)
+    {{permitted_use_description}} What the recipient is permitted to do with the material/data
+    {{term_months}}              Duration of the agreement, in months
+    {{publication_terms}}       How/when the recipient may publish results derived from the material/data
+    {{ip_terms}}                 Ownership/IP terms for the material/data and derivatives
+    {{governing_state}}         State/jurisdiction whose law governs
+    {{provider_signatory_title}} Title of the person signing for the provider
+    {{recipient_signatory_title}} Title of the person signing for the recipient
+
+  This is a TEMPLATE, not legal advice. Have counsel review before use —
+  MTAs in particular often need to route through each institution's
+  technology-transfer or sponsored-research office.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Data Use / Material Transfer Agreement</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body {
+    font-family: Georgia, "Times New Roman", Times, serif;
+    color: #1a1a1a;
+    line-height: 1.5;
+    font-size: 12pt;
+  }
+  .page { max-width: 6.5in; margin: 0 auto; padding: 0.4in 0.3in 1in; }
+  .doc-banner {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11pt;
+    font-weight: bold;
+    text-align: center;
+    color: #5c4400;
+    background: #fff3cd;
+    border: 2px solid #b8860b;
+    padding: 10px 14px;
+    margin: 0 0 28px;
+  }
+  h1 { font-size: 16pt; text-align: center; margin: 0 0 4px; }
+  .doc-subtitle { text-align: center; font-size: 10.5pt; color: #555; margin: 0 0 24px; }
+  h2 { font-size: 12.5pt; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 24px 0 8px; }
+  p { margin: 0 0 10px; text-align: justify; }
+  ol.clauses { padding-left: 1.2em; margin: 0; }
+  ol.clauses > li { margin-bottom: 8px; text-align: justify; }
+  .party-block { display: flex; gap: 24px; margin: 16px 0 20px; }
+  .party-block > div { flex: 1; border: 1px solid #ccc; padding: 10px 12px; font-size: 10.5pt; }
+  .party-block .label { font-weight: bold; color: #444; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
+  .closing { margin-top: 24px; font-style: italic; color: #333; }
+  @page { margin: 0.75in; }
+  @media print {
+    .doc-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-size: 11pt; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="doc-banner">TEMPLATE — not legal advice; have counsel review before use</div>
+
+  <h1>Data Use / Material Transfer Agreement</h1>
+  <p class="doc-subtitle">Effective as of {{effective_date}}</p>
+
+  <p>
+    This Data Use / Material Transfer Agreement (this "Agreement") is entered into as of
+    {{effective_date}} between the Provider and the Recipient identified below, governing
+    the transfer and use of the data and/or material described in Section 1.
+  </p>
+
+  <div class="party-block">
+    <div>
+      <div class="label">Provider</div>
+      {{provider_name}}<br>
+      {{provider_address}}
+    </div>
+    <div>
+      <div class="label">Recipient</div>
+      {{recipient_name}}<br>
+      {{recipient_address}}<br>
+      Responsible investigator: {{recipient_pi_name}}
+    </div>
+  </div>
+
+  <h2>1. Description of Material and/or Data</h2>
+  <p><strong>Material:</strong> {{material_description}}</p>
+  <p><strong>Data:</strong> {{data_description}}</p>
+
+  <h2>2. Permitted Use</h2>
+  <p>{{permitted_use_description}}</p>
+  <p>
+    The Recipient will use the material and/or data solely for the permitted use above,
+    solely under the direction of {{recipient_pi_name}}, and will not distribute the
+    material, the data, or any progeny, derivatives, or modifications to any third party
+    without the Provider's prior written consent.
+  </p>
+
+  <h2>3. Term and Return/Destruction</h2>
+  <p>
+    This Agreement remains in effect for {{term_months}} months from the Effective Date
+    unless earlier terminated by either party on written notice. Upon expiration or
+    termination, the Recipient will, at the Provider's election, return or destroy any
+    remaining material and confirm destruction of the data, except to the extent
+    retention is required by law or institutional record-keeping policy.
+  </p>
+
+  <h2>4. Publication</h2>
+  <p>{{publication_terms}}</p>
+
+  <h2>5. Ownership and Intellectual Property</h2>
+  <p>{{ip_terms}}</p>
+
+  <h2>6. No Warranty</h2>
+  <p>
+    The material and/or data are provided "as is," without warranty of any kind, express
+    or implied, including without limitation any warranty of merchantability, fitness for
+    a particular purpose, or non-infringement. The Provider makes no representation that
+    use of the material or data will not infringe any patent, trademark, or other
+    proprietary right of a third party.
+  </p>
+
+  <h2>7. Compliance</h2>
+  <p>
+    The Recipient will comply with all applicable laws and institutional policies
+    governing the handling of the material and/or data, including, where applicable,
+    biosafety, export control, human-subjects, and data-protection requirements, and will
+    obtain any additional institutional approvals required before use.
+  </p>
+
+  <h2>8. Governing Law</h2>
+  <p>
+    This Agreement is governed by the laws of the State of {{governing_state}}, without
+    regard to its conflict-of-laws principles.
+  </p>
+
+  <p class="closing">
+    IN WITNESS WHEREOF, the parties have caused this Agreement to be executed by their
+    duly authorized representatives as of the Effective Date, signing electronically
+    below: {{provider_name}} by its {{provider_signatory_title}}, and {{recipient_name}}
+    by its {{recipient_signatory_title}}.
+  </p>
+</div>
+</body>
+</html>

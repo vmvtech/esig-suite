@@ -3,6 +3,138 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
+## @e-sig/core 0.8.0, verify-in-CI, and document templates — 2026-08-27
+
+### `@e-sig/core` 0.8.0: `esig verify` CLI
+
+(0.7.1 was a docs-only bump that was never published; 0.8.0 supersedes it.)
+`@e-sig/core` now ships an `esig` binary — `npx -y -p @e-sig/core esig verify
+<file.pdf …> [--json] [--require-pq] [--expected-uuaid <u>]
+[--expected-mldsa65-fpr <hex>] [--quiet]` — wrapping `verifyDocument()` for
+terminals and CI. Exit codes: `0` all files verified, `1` at least one failed
+verification, `2` usage or I/O error. `--json` prints one array and nothing
+else. No key material is involved. New file `src/bin/esig.ts` only; no other
+core source changed.
+
+### GitHub Action `vmvtech/esig-suite` (`action.yml`): verify signed PDFs in CI
+
+Composite action — inputs `files` (newline-separated paths/globs; paths with
+spaces are safe), `require-pq`, `expected-uuaid`, `version` — runs the CLI
+and writes a per-file table to the job summary; fails the job on exit `1`.
+Usage in `docs/verify-in-ci.md`.
+
+### `examples/templates/`: six ready-to-fill document templates
+
+Mutual NDA, IRB research consent (with consent-to-electronic-records and
+copy-to-participant language), data-use / material-transfer agreement,
+internal grant approval with an approver chain, K-12 permission slip,
+employment offer letter. Self-contained HTML, inline CSS only, no scripts, no
+external resources, print-friendly, mustache-style `{{placeholders}}`
+documented inline, and a visible "TEMPLATE — not legal advice" banner.
+`scripts/templates.test.mjs` (part of `test:scripts`) enforces all of that and
+proves `@e-sig/mcp`'s sanitizer is a byte-for-byte no-op on each template.
+Note: only the MCP path sanitizes; core's `createEnvelope` stores HTML
+verbatim.
+
+## @e-sig/mcp 0.3.0 — 2026-08-27
+
+### `@e-sig/mcp` 0.3.0: PDF envelopes — sign an existing PDF, Chrome-free, WYSIWYS (docs/architecture/esig-mcp.md §13)
+
+`esig_create_envelope` now accepts **exactly one of `html` or `docId`**.
+Passing `docId` — a docId returned by `esig_ingest_document` — creates a
+**PDF envelope**: the signer reviews and signs the *exact ingested bytes*
+(What You See Is What You Sign), and the seal step signs those same bytes
+directly with core's `signPdf` — **no HTML rendering, so no Chrome anywhere
+on this path**.
+
+- **`esig_create_envelope`:** `docId` input, validated to start with the
+  `%PDF-` magic bytes (`docId is not a PDF` otherwise) and within
+  `ESIG_MCP_MAX_PDF_BYTES`. A PDF envelope's `html` (what core's
+  token/order/`recordSignature` flow runs on) is a generated, escaped cover
+  sheet — title, docId, sha256, byte size, ordered signer list, and the
+  sentence "This envelope signs the PDF document with sha256 &lt;hex&gt;" —
+  so the existing identity-challenge `htmlSha256` pin (mechanism unchanged)
+  binds the PDF transitively. `metadata.mcp.document = {docId, sha256, size,
+  kind:"pdf"}` is persisted at creation and surfaced on
+  `esig_create_envelope`/`esig_envelope_status`/`esig_list_envelopes`.
+- **`GET /sign/<token>/document.pdf`:** streams the exact ingested bytes for
+  a PDF envelope (any resolvable token state except invalid),
+  `Content-Type: application/pdf`, `X-Content-Type-Options: nosniff`,
+  `Cache-Control: no-store`, `Content-Disposition: inline` with a filename
+  derived from the envelope title. The approval page swaps the sandboxed
+  `srcdoc` iframe (which cannot host a PDF viewer) for a plain same-origin
+  `<iframe src="/sign/<token>/document.pdf">`, an "Open the PDF in a new tab"
+  link, and the document sha256 — HTML envelopes are unchanged. The existing
+  CSP already allowed this (`frame-src` already included `'self'`); no CSP
+  change was needed.
+- **Seal step:** branches on `metadata.mcp.document` — a PDF envelope loads
+  the ingested bytes, re-verifies their sha256 against the value pinned at
+  creation (content binding, mismatch → `seal_failed` with a reason), and
+  signs them directly (`reason: "Signed via e-sig envelope <id> by <n>
+  signer(s)"`, `name`: signer names joined by `, `), with the same
+  operator-cert/PQ-seal wiring as an HTML envelope. It never calls the
+  HTML→PDF renderer. The completion receipt now also carries `document`
+  (when present) and, per signer, `signedAt` and a sha256 of the drawn
+  signature image (never the full data URL).
+- **`esig_ingest_document`** and **`esig_create_envelope`**'s own
+  descriptions now tell an agent it can ingest a PDF and sign it directly
+  with no HTML/Chrome step.
+
+### `@e-sig/mcp` 0.3.0: `esig-mcp init` and `esig-mcp demo` (docs/architecture/esig-mcp.md §14)
+
+Two new CLI subcommands (`esig-mcp init [--dir] [--force]`,
+`esig-mcp demo [--auto] [--keep]`), dispatched from `bin.ts` before any MCP
+Config is loaded — both exit (or, `demo` without `--auto`, block on
+Ctrl-C/stdin EOF) well before `StdioServerTransport` is ever constructed, so
+stdout is as free to use here as it already was for `--help`/`--version`.
+
+- **`init`:** creates `<dir>/esig-data/{inbox,outbox,blobs}` (`<dir>`
+  defaults to `cwd`), generates a fresh `ESIG_MCP_PASSPHRASE` (32 random
+  bytes, base64url) into `<dir>/.esig-mcp.env` (mode `0600`, refuses to
+  overwrite without `--force`), prints a ready-to-paste `.mcp.json` snippet
+  (absolute paths; the passphrase itself is never printed — only
+  `<see .esig-mcp.env>`), and runs the existing Chrome preflight so an
+  operator learns `sealReady` up front.
+- **`demo`:** an end-to-end, Chrome-free PDF-envelope signing run in a temp
+  data dir — ingests the newly bundled `assets/sample.pdf`, creates a
+  one-signer envelope, and prints the signing URL, the outbox file path, and
+  a curl one-liner. `--auto` performs that signature itself (in-process
+  `fetch`) and prints the sealed PDF's path plus an
+  `esig_verify_document`-style verdict; without it, `demo` waits for a human
+  to sign from a browser. Chrome-free by construction, not by injection: a
+  PDF envelope's seal step never calls the HTML renderer at all (§13), and
+  `demo` only ever creates PDF envelopes.
+- **README:** the quickstart now leads with `npx @e-sig/mcp demo --auto` as
+  a 30-second, zero-config proof, then `npx @e-sig/mcp init` as the setup
+  path, then the `.mcp.json` wiring (manual env-var configuration is still
+  documented as an alternative to `init`).
+- **`package.json`:** ships `assets/sample.pdf` alongside `dist/` (added to
+  `files`); `tsconfig.build.json`'s `src`-only `include` already left it
+  untouched by the build.
+
+### `@e-sig/mcp` 0.3.0: L2 now verifies the registry-signed badge
+
+L2's key↔uuaid check moved off `GET /resolve/{uuaid}` and onto
+`GET /iaaso/v1/badge/{uuaid}` — the registry's signed identity snapshot
+(IAASO-0003). `/resolve` carries **no signer key material for any agent**
+(Uuaid-Lead, live-measured); the original `/resolve`-based check
+(`L2_KEY_NOT_LISTED`) was a guaranteed false negative for every agent, not an
+edge case. The badge is also registry-signed, so it's now verified against a
+pinned trust anchor instead of TLS alone: `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY`
+(the registry's Ed25519 public key, 64 hex chars, from its
+`/.well-known/uuaid-registry.json`) — hash binding, an Ed25519 signature, and
+freshness (`freshUntil`), all fail-closed.
+
+**Blind-verifier finding, closed same day:** verifying the badge against the
+pinned key proves the registry signed *a* badge — not that it's a badge FOR
+the uuaid being proven. `identity/verify.ts` now additionally asserts the
+badge's `subject.uuaid` equals the uuaid being proven, refusing with the new
+`L2_BADGE_SUBJECT_MISMATCH` otherwise (also catches a missing/empty
+`subject.uuaid`); without this, a registry-signed badge for a *different*
+subject that happens to share the proof's key would have passed every other
+L2 check. A badge `404` (absent, or tombstoned — where `/resolve` would still
+return `200`) refuses with `L2_UUAID_NOT_FOUND`.
+
 ## @e-sig/mcp 0.2.0 — 2026-08-27
 
 ### `@e-sig/mcp` 0.2.0: add signer identity via UUAID + IAASO (docs/architecture/esig-mcp.md §12)
@@ -38,15 +170,30 @@ until `L2` is in play.
   required check for the requested level has already passed — a proof is
   never accepted twice, and a proof over one envelope's challenge is
   rejected against another's.
-- `L2` (registry-bound — key↔uuaid actually verified) — L1 plus
-  `ESIG_MCP_UUAID_REGISTRY_URL`'s `GET /resolve/{uuaid}` must list the
-  proof's key, and (if a `credential` is presented) its
-  `credentialSubject.key.publicKey` must equal the proof's key, and
-  `GET /verify/{credentialId}` must say `valid && active && notExpired`. A
+- `L2` (registry-bound — key↔uuaid actually verified) — L1 plus the
+  registry's signed badge: `GET /iaaso/v1/badge/{uuaid}` (registry-signed
+  hybrid Ed25519 + ML-DSA-65 envelope, IAASO-0003) must verify against the
+  PINNED registry key (`ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY` — hash
+  binding, Ed25519 signature, `freshUntil` freshness, `status === "active"`),
+  and its `subject.presentationKey` (64 **lowercase hex** Ed25519 — not
+  multibase/JWK/did:key) must equal the proof's key, and (if a `credential`
+  is presented) its `credentialSubject.key.publicKey` must equal the proof's
+  key, and `GET /verify/{credentialId}` must say `valid && active &&
+  notExpired` **and report an `agent_uuaid` equal to the proving uuaid** (a
+  credential can be minted through a path that never checked the caller owns
+  the handle — the binding assert closes that on this side). A
   down/unreachable/malformed registry response is a hard failure — this
   never silently drops to L1 (`ESIG_MCP_UUAID_REGISTRY_URL` is validated
   `https://`-only at config time and, for a per-envelope request, at
   creation time, and is *pinned per envelope* at creation — see below).
+  *Corrected same day (Uuaid-Lead, live-measured):* `/resolve/{uuaid}`
+  carries NO signer key material for any agent — the original
+  `/resolve`-based key check (`L2_KEY_NOT_LISTED`) was a guaranteed false
+  negative; the badge is the only registry surface carrying an agent's
+  presentation key, and a badge 404 (absent/tombstoned) now refuses with
+  `L2_UUAID_NOT_FOUND` instead of a generic unavailability error.
+  Superseded by the badge mechanism in 0.3.0 (above), which additionally
+  pins the badge to the proving uuaid (`L2_BADGE_SUBJECT_MISMATCH`).
 
 A rejected identity throws a typed `IdentityError` — `POST /sign` maps it to
 `403 {error, reason}`; `esig_create_envelope`/`esig_envelope_status`/
@@ -56,14 +203,16 @@ registry?: {resolvedAt, credentialId?, credentialValid?,
 registrySnapshotDigest?, receiptId?, anchor?}}`); the `file` outbox receipt
 carries the identity requirement; a verified signer gets an escaped
 "Identity attestations" line in the composed HTML *before* it is sealed.
-Full artifacts (proof/credential JSON, the registry's `/resolve` response
-snapshot) are persisted content-addressed to `blobs/identity/<sha256>.json`
+Full artifacts (proof/credential JSON, the registry's signed badge
+envelope) are persisted content-addressed to `blobs/identity/<sha256>.json`
 (never in audit metadata — only digests and identifiers, PII minimization);
 the operator's own post-quantum seal never carries a signer's `uuaid`.
 
 New env vars: `ESIG_MCP_IDENTITY_MIN_LEVEL` (default `none`),
-`ESIG_MCP_UUAID_REGISTRY_URL`, `ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC` (default
-`900`, max `3600`).
+`ESIG_MCP_UUAID_REGISTRY_URL`, `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY` (the
+registry's pinned Ed25519 public key, 64 hex chars from its
+`/.well-known/uuaid-registry.json` — required for L2 alongside the URL),
+`ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC` (default `900`, max `3600`).
 
 `toolError()` now returns `content[0]` as a JSON `{"error": message}` text
 block (mirroring `toolResult()`'s own JSON-first `content[0]`) with the same
@@ -126,12 +275,15 @@ New dependency: `@e-sig/uaid-exch@^0.1.0-preview.2` (workspace).
   and charset-restricted (`[A-Za-z0-9_-]`) by core's
   `isWellFormedUuaidAssertion` — unchanged, just confirmed and cited.
 - **G8 (LOW) — TOFU conditions for L2 documented** (see the README section
-  below): https-only, no key pinning yet, and the full `/resolve` response
-  is now snapshotted to a content-addressed blob (R1) with the verification
-  record referencing its digest.
+  below): https-only, and the full registry response is snapshotted to a
+  content-addressed blob (R1) with the verification record referencing its
+  digest. *Corrected same day:* the trust anchor is now an actual key pin —
+  `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY`, verified over the registry's signed
+  badge (hash binding + Ed25519 + freshness) — so L2 no longer rests on
+  TLS/TOFU alone.
 - **R1 (verifier) — identity artifacts are now actually persisted.** The
   proof JSON, the presented credential JSON (if any), and the registry's
-  `/resolve` response snapshot (L2) are written to
+  signed badge envelope (L2) are written to
   `blobs/identity/<sha256>.json` via the same `PdfStorageStore` seam
   `EnvelopeService` already holds for the sealed PDF — never in audit
   metadata. `proofDigest` (pre-existing) is now literally the digest that

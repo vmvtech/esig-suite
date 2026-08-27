@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 // bin.ts — the real MCP server entrypoint (design doc §5 "Architecture",
-// MUST DO item 3). Loads config, builds the library-layer stores/services,
-// starts the built-in HTTP approval server, then connects the MCP server
-// over stdio.
+// MUST DO item 3), plus the `init`/`demo` CLI subcommands (design doc §14,
+// cli-init.ts / cli-demo.ts). Loads config, builds the library-layer
+// stores/services, starts the built-in HTTP approval server, then connects
+// the MCP server over stdio.
 //
 // stdout is reserved ENTIRELY for the MCP stdio JSON-RPC transport
 // (StdioServerTransport reads/writes it directly) once the server actually
 // starts — this file, and every module it calls into, writes only to
-// stderr from that point on. The ONE exception (D3) is `--help`/`--version`:
-// both `process.exit(0)` before `StdioServerTransport` is ever constructed,
-// so nothing has claimed stdout yet — printing there (not stderr) is what
-// lets `esig-mcp --help` behave like a normal CLI when piped or captured.
+// stderr from that point on. The exceptions are `--help`/`--version` (D3)
+// and the `init`/`demo` subcommands (§14): all four exit — or, for `demo`
+// without `--auto`, block on Ctrl-C/stdin EOF — well before
+// `StdioServerTransport` is ever constructed, so nothing has claimed stdout
+// yet. Printing there (not stderr) is what lets `esig-mcp --help`/`init`/
+// `demo` behave like a normal CLI when piped or captured.
 
 import { readFileSync, promises as fs } from "node:fs";
 import path from "node:path";
@@ -26,6 +29,8 @@ import { EnvelopeService } from "./envelopes.js";
 import { createMcpServer } from "./server.js";
 import { createApprovalServer } from "./http.js";
 import { checkSealReadiness } from "./chrome-preflight.js";
+import { runInit } from "./cli-init.js";
+import { runDemo } from "./cli-demo.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // D3: read the version from the installed/monorepo package.json at runtime
@@ -76,6 +81,12 @@ const OPTIONAL_ENV_VARS: ReadonlyArray<[name: string, defaultValue: string, note
     "https:// UUAID registry base URL. Required when ESIG_MCP_IDENTITY_MIN_LEVEL=L2 (or any envelope requests L2).",
   ],
   [
+    "ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY",
+    "—",
+    "The UUAID registry's Ed25519 public key, 64 hex chars (keys[].publicKey of its /.well-known/uuaid-registry.json). " +
+      "Pinned trust anchor: L2 verifies registry-signed badges against it. Required alongside the registry URL for L2.",
+  ],
+  [
     "ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC",
     "900",
     "Sole-control challenge lifetime in seconds. Max 3600.",
@@ -98,8 +109,17 @@ function usage(): string {
     "esig-mcp — MCP server for agent-driven e-signature workflows (mode H: human signs by default).",
     "",
     "Usage: esig-mcp [--help] [--version]",
+    "       esig-mcp init [--dir <path>] [--force]",
+    "       esig-mcp demo [--auto] [--keep]",
     "",
-    "All configuration is via environment variables.",
+    "Subcommands:",
+    "  init   Set up a local esig-data/ directory + .esig-mcp.env, print an .mcp.json snippet, and run",
+    "         the Chrome preflight. Run this once before wiring esig-mcp into an MCP client.",
+    "  demo   Run an end-to-end, Chrome-free PDF-envelope signing demo in a temp data dir: ingest the",
+    "         bundled sample.pdf, create a one-signer envelope, and print the signing URL (add --auto to",
+    "         sign it in-process and print the sealed PDF path + verify verdict; --keep keeps the temp dir).",
+    "",
+    "All configuration for the server (no subcommand) is via environment variables.",
     "",
     "Required:",
     envTable(REQUIRED_ENV_VARS),
@@ -130,6 +150,20 @@ function addressPort(server: ReturnType<typeof createApprovalServer>, fallback: 
 }
 
 async function main(): Promise<void> {
+  // §14 MUST DO item 1: 'init' and 'demo' are dispatched on argv[2], before
+  // anything else in this function — both exit on their own (cli-init.ts /
+  // cli-demo.ts), well before this function ever loads a server Config or
+  // constructs StdioServerTransport, so stdout is exactly as free to use as
+  // it is for --help/--version below (this file's header comment).
+  if (process.argv[2] === "init") {
+    await runInit(process.argv.slice(3));
+    return;
+  }
+  if (process.argv[2] === "demo") {
+    await runDemo(process.argv.slice(3));
+    return;
+  }
+
   // D3: both flags exit before StdioServerTransport is ever constructed, so
   // stdout is still free to use (see this file's header comment) — printed
   // there, not stderr, so `esig-mcp --help` / `--version` behave like a
@@ -206,7 +240,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const envelopes = new EnvelopeService({ config, ...stores, delivery });
+  const envelopes = new EnvelopeService({ config, ...stores, documents, delivery });
 
   const httpServer = createApprovalServer({ config, envelopes });
   await new Promise<void>((resolve, reject) => {

@@ -175,6 +175,10 @@ export interface CompletionReceiptSigner {
   signerId: string;
   name: string;
   email: string;
+  /** ISO-8601, when this signer has signed. */
+  signedAt?: string;
+  /** sha256 of the drawn signature image data URL — never the full data URL itself (§13). */
+  signatureImageSha256?: string;
   /** This signer's verified identity record (§12), when one exists. */
   identity?: unknown;
 }

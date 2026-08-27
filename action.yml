@@ -1,0 +1,138 @@
+name: "e-sig verify"
+description: >-
+  Cryptographically verify e-signed PDFs in CI — classical PAdES/PKCS#7
+  signature plus optional post-quantum (ML-DSA-65) seal — using the `esig`
+  CLI from @e-sig/core. No key material required: verification is a pure
+  function of the document bytes.
+author: "VMVTech"
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  files:
+    description: >-
+      Newline-separated list of PDF file paths or globs to verify (glob
+      expansion happens inside this action, via bash).
+    required: true
+  require-pq:
+    description: >-
+      When "true", fail any file that does not carry a valid post-quantum
+      seal (esig verify --require-pq).
+    required: false
+    default: "false"
+  expected-uuaid:
+    description: >-
+      Pin the post-quantum seal's asserted UUAID (esig verify
+      --expected-uuaid). Omit to skip UUAID pinning.
+    required: false
+    default: ""
+  version:
+    description: 'npm version spec for @e-sig/core to install, e.g. "^0.8.0".'
+    required: false
+    default: "^0.8.0"
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Verify signed PDFs
+      shell: bash
+      env:
+        ESIG_ACTION_FILES: ${{ inputs.files }}
+        ESIG_ACTION_REQUIRE_PQ: ${{ inputs.require-pq }}
+        ESIG_ACTION_EXPECTED_UUAID: ${{ inputs.expected-uuaid }}
+        ESIG_ACTION_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+
+        # Expand each line of `files` as a glob (nullglob so a pattern with no
+        # matches disappears instead of being passed through literally).
+        shopt -s nullglob
+        declare -a targets=()
+        while IFS= read -r pattern; do
+          [ -z "$pattern" ] && continue
+          # Split on newlines only, so a path containing spaces stays one
+          # target; glob expansion still applies to the (single) word.
+          oldIFS=$IFS; IFS=$'\n'; matched=( $pattern ); IFS=$oldIFS
+          if [ ${#matched[@]} -eq 0 ]; then
+            echo "::warning::e-sig verify: no files matched pattern: $pattern"
+          else
+            targets+=( "${matched[@]}" )
+          fi
+        done <<< "$ESIG_ACTION_FILES"
+
+        if [ ${#targets[@]} -eq 0 ]; then
+          echo "::error::e-sig verify: no input files matched — check the 'files' input"
+          exit 2
+        fi
+
+        declare -a flags=(--json)
+        if [ "$ESIG_ACTION_REQUIRE_PQ" = "true" ]; then
+          flags+=(--require-pq)
+        fi
+        if [ -n "$ESIG_ACTION_EXPECTED_UUAID" ]; then
+          flags+=(--expected-uuaid "$ESIG_ACTION_EXPECTED_UUAID")
+        fi
+
+        set +e
+        output="$(npx -y -p "@e-sig/core@${ESIG_ACTION_VERSION}" esig verify "${targets[@]}" "${flags[@]}")"
+        status=$?
+        set -e
+
+        {
+          echo "### e-sig verify"
+          echo
+          echo "| File | Result | Digest | Signature | Signer | Post-quantum |"
+          echo "|---|---|---|---|---|---|"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "$status" -eq 2 ]; then
+          echo "| — | usage/I/O error | — | — | — | — |" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$output" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::e-sig verify: usage or I/O error (exit 2)"
+          exit 2
+        fi
+
+        # If the CLI ever emits non-JSON on exit 0/1, keep the real exit status
+        # instead of letting the summary formatter's failure mask it.
+        set +e
+        echo "$output" | node -e '
+          const chunks = [];
+          process.stdin.on("data", (c) => chunks.push(c));
+          process.stdin.on("end", () => {
+            const rows = JSON.parse(chunks.join(""));
+            for (const { file, verification } of rows) {
+              const c = verification.classical;
+              const pq = verification.postQuantum;
+              const result = verification.ok ? "✅ OK" : "❌ FAIL";
+              const pqCell = !pq.present ? "—" : pq.ok ? "✅ ok" : "❌ FAIL";
+              const row = [
+                file, result,
+                c.digestValid ? "valid" : "invalid",
+                c.signatureValid ? "valid" : "invalid",
+                c.signerCommonName ?? "(unknown)",
+                pqCell,
+              ];
+              process.stdout.write(`| ${row.join(" | ")} |\n`);
+              const failures = [...(c.failures ?? []), ...(pq.failures ?? [])];
+              for (const f of failures) process.stdout.write(`| | | | | | ${f} |\n`);
+            }
+          });
+        ' >> "$GITHUB_STEP_SUMMARY"
+        fmt_status=$?
+        set -e
+        if [ "$fmt_status" -ne 0 ]; then
+          echo "::warning::e-sig verify: could not format the summary (raw output below)"
+          { echo '```'; echo "$output"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+        if [ "$status" -ne 0 ]; then
+          echo "::error::e-sig verify: one or more documents failed verification (exit $status)"
+        fi
+        exit "$status"

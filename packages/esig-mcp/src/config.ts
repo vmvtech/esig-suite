@@ -61,6 +61,16 @@ export interface Config {
   identityMinLevel: IdentityLevel;
   /** https-only UUAID registry base URL. Required when `identityMinLevel` is "L2" (validated here); required per-envelope at create time when an envelope itself requests L2 (envelopes.ts). */
   uuaidRegistryUrl?: string;
+  /**
+   * The PINNED UUAID registry Ed25519 public key (64 lowercase hex) — the
+   * trust anchor L2 verifies registry-signed badges against
+   * (`keys[].publicKey`, `uuaid-registry-1`, of the registry's
+   * `/.well-known/uuaid-registry.json`). Required when `identityMinLevel` is
+   * "L2" (validated here) and per-envelope at create time (envelopes.ts);
+   * required at verify time before any network call (identity/verify.ts,
+   * `L2_NO_REGISTRY_KEY`).
+   */
+  uuaidRegistrySigningKey?: string;
   /** Seconds. `ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC`, default 900, max 3600. */
   identityChallengeTtlSec: number;
 }
@@ -246,6 +256,31 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     );
   }
 
+  // The PINNED registry Ed25519 public key — the trust anchor L2 verifies
+  // badges against (identity/badge.ts). Pinned at config time, never fetched
+  // per-request: fetching /.well-known/uuaid-registry.json on demand would
+  // let whoever controls TLS/DNS silently swap the trust anchor. Unlike the
+  // registry URL this is not pinned per envelope (the URL pin, G3, already
+  // fixes WHICH registry attests) — a registry key rotation just fails
+  // verification (fail closed) until config is updated.
+  const uuaidRegistrySigningKeyRaw = env.ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY?.trim();
+  let uuaidRegistrySigningKey: string | undefined;
+  if (uuaidRegistrySigningKeyRaw) {
+    if (!/^[0-9a-fA-F]{64}$/.test(uuaidRegistrySigningKeyRaw)) {
+      throw new ConfigError(
+        `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY must be exactly 64 hex characters (the registry's Ed25519 ` +
+          `public key, keys[].publicKey of its /.well-known/uuaid-registry.json), got ${uuaidRegistrySigningKeyRaw.length}.`,
+      );
+    }
+    uuaidRegistrySigningKey = uuaidRegistrySigningKeyRaw.toLowerCase();
+  }
+  if (identityMinLevel === "L2" && !uuaidRegistrySigningKey) {
+    throw new ConfigError(
+      'ESIG_MCP_IDENTITY_MIN_LEVEL="L2" requires ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY (the pinned registry ' +
+        "Ed25519 public key, 64 hex chars) in addition to ESIG_MCP_UUAID_REGISTRY_URL.",
+    );
+  }
+
   const identityChallengeTtlSec = parsePositiveInt(
     env.ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC,
     900,
@@ -275,6 +310,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     envelopesPerHour,
     identityMinLevel,
     uuaidRegistryUrl,
+    uuaidRegistrySigningKey,
     identityChallengeTtlSec,
   };
 }

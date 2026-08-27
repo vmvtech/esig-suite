@@ -44,6 +44,7 @@ import {
 } from "@e-sig/core";
 
 import type { Config } from "./config.js";
+import type { DocumentStore } from "./documents.js";
 import {
   writeOutboxCompletionReceipt,
   type CompletionReceiptSigner,
@@ -92,9 +93,27 @@ export interface CreateEnvelopeIdentityArgs {
   signers?: Array<{ signerId?: string; index?: number; uuaid: string }>;
 }
 
+/**
+ * §13: a PDF envelope's pinned document — the ingested bytes an envelope
+ * signs instead of rendering HTML. `docId`/`sha256` agree by construction for
+ * the shipped `FsDocumentStore` (docId IS the sha256 of the ingested bytes),
+ * but `sha256` is recomputed independently at both creation and seal time
+ * (I4) rather than assumed equal to `docId`, so this shape holds for any
+ * `DocumentStore` implementation.
+ */
+export interface EnvelopeDocumentMeta {
+  docId: string;
+  sha256: string;
+  size: number;
+  kind: "pdf";
+}
+
 export interface CreateEnvelopeArgs {
   title: string;
-  html: string;
+  /** The envelope body as HTML. Exactly one of `html`/`docId` is required (§13). */
+  html?: string;
+  /** A docId from `esig_ingest_document` — creates a PDF envelope (§13). Exactly one of `html`/`docId` is required. */
+  docId?: string;
   signers: SignerInput[];
   expiresAt?: Date;
   identity?: CreateEnvelopeIdentityArgs;
@@ -117,6 +136,8 @@ export interface CreateEnvelopeResultSummary {
   links?: Array<{ signerId: string; name: string; email: string; url: string }>;
   /** This envelope's signer-identity requirement (§12), if any was set. */
   identityPolicy?: EnvelopeIdentityPolicy;
+  /** Present only for a PDF envelope (§13, created with `docId`). */
+  document?: EnvelopeDocumentMeta;
 }
 
 /**
@@ -165,6 +186,8 @@ export interface EnvelopeStatusSummary {
   phase: EnvelopePhase;
   /** This envelope's signer-identity requirement (§12), if any was set. */
   identityPolicy?: EnvelopeIdentityPolicy;
+  /** Present only for a PDF envelope (§13, created with `docId`). */
+  document?: EnvelopeDocumentMeta;
   signers: Array<{
     signerId: string;
     name: string;
@@ -197,6 +220,8 @@ interface McpEnvelopeMetadata {
   seal?: EnvelopeSealState;
   /** §12 signer-identity policy + per-signer challenge/verified state — read/written ONLY via identity/types.ts's accessors, never spread/assigned directly. */
   identity?: import("./identity/types.js").EnvelopeIdentityMetadata;
+  /** §13: set at creation for a PDF envelope (created with `docId`), never for an HTML envelope. */
+  document?: EnvelopeDocumentMeta;
 }
 
 function mcpMeta(envelope: Envelope): McpEnvelopeMetadata | undefined {
@@ -212,6 +237,11 @@ export function derivePhase(envelope: Envelope): EnvelopePhase {
   return "awaiting_seal";
 }
 
+/** §13: this envelope's pinned PDF document metadata, if it is a PDF envelope (created with `docId`). */
+export function getEnvelopeDocument(envelope: Envelope): EnvelopeDocumentMeta | undefined {
+  return mcpMeta(envelope)?.document;
+}
+
 export interface EnvelopeServiceDeps {
   config: Config;
   envelopeStore: EnvelopeStore;
@@ -220,6 +250,14 @@ export interface EnvelopeServiceDeps {
   auditStore: AuditLogStore;
   pdfStorage: PdfStorageStore;
   delivery: DeliveryChannel;
+  /**
+   * §13: content-addressed PDF store, needed only for PDF envelopes (`docId`
+   * on `create()`, and the seal step that signs the ingested bytes directly).
+   * Optional so existing harnesses that only ever create HTML envelopes don't
+   * need to supply it; `create()`/`seal()` throw a clear error if a PDF
+   * envelope is attempted without one. `bin.ts` always supplies the real one.
+   */
+  documents?: DocumentStore;
   /** Injectable HTML→PDF renderer. Defaults to core's `renderHtmlToPdf` (needs a real Chrome). */
   render?: (html: string) => Promise<Buffer>;
   /**
@@ -323,7 +361,61 @@ export class EnvelopeService {
     if (!args.signers?.length) {
       throw new EnvelopeError("at least one signer is required");
     }
-    const htmlBytes = Buffer.byteLength(args.html ?? "", "utf8");
+
+    // §13: esig_create_envelope accepts exactly one of `html` or `docId` — a
+    // PDF envelope (docId) signs the exact ingested bytes; an HTML envelope
+    // (html) renders at seal time. Checked before touching the doc store or
+    // the rate limiter (the tool layer's zod refine gives a friendlier error
+    // first, but this is the invariant's single source of truth — every
+    // caller of this library method, not only the MCP tool, gets it).
+    const hasHtml = args.html !== undefined;
+    const hasDocId = args.docId !== undefined;
+    if (hasHtml === hasDocId) {
+      throw new EnvelopeError("exactly one of `html` or `docId` is required");
+    }
+
+    let effectiveHtml: string;
+    let documentMeta: EnvelopeDocumentMeta | undefined;
+    if (hasDocId) {
+      if (!this.deps.documents) {
+        throw new EnvelopeError(
+          "this server has no document store configured — cannot create a PDF envelope from docId",
+        );
+      }
+      const docId = args.docId!;
+      let pdfBytes: Buffer;
+      try {
+        pdfBytes = await this.deps.documents.get(docId);
+      } catch (e) {
+        throw new EnvelopeError(`could not read docId ${docId}: ${messageOf(e)}`);
+      }
+      if (!isPdfMagic(pdfBytes)) {
+        throw new EnvelopeError("docId is not a PDF");
+      }
+      if (pdfBytes.byteLength > config.maxPdfBytes) {
+        throw new EnvelopeError(
+          `docId ${docId} is ${pdfBytes.byteLength} bytes, exceeds the ${config.maxPdfBytes}-byte cap`,
+        );
+      }
+      const sha256 = crypto.createHash("sha256").update(pdfBytes).digest("hex");
+      documentMeta = { docId, sha256, size: pdfBytes.byteLength, kind: "pdf" };
+      // The cover sheet drives core's html/token/order/recordSignature flow
+      // exactly like a normal HTML envelope; it embeds the document sha256,
+      // so the identity challenge's htmlSha256 pin (unchanged mechanism,
+      // below) binds the PDF transitively (§13 "Identity challenge format
+      // unchanged").
+      effectiveHtml = buildPdfCoverSheetHtml({
+        title: args.title,
+        docId,
+        sha256,
+        size: pdfBytes.byteLength,
+        signers: args.signers,
+      });
+    } else {
+      effectiveHtml = args.html!;
+    }
+
+    const htmlBytes = Buffer.byteLength(effectiveHtml, "utf8");
     if (htmlBytes > config.maxHtmlBytes) {
       throw new EnvelopeError(`html is ${htmlBytes} bytes, exceeds the ${config.maxHtmlBytes}-byte cap`);
     }
@@ -338,6 +430,15 @@ export class EnvelopeService {
       throw new EnvelopeError(
         "identity level L2 requires ESIG_MCP_UUAID_REGISTRY_URL (https://...) to be configured on " +
           "this server — refusing to create this envelope (fail closed).",
+      );
+    }
+    // The badge trust anchor (identity/badge.ts) is as mandatory as the URL:
+    // without the pinned key no badge can be verified, so an L2 envelope
+    // would be dead on arrival at sign time.
+    if (effectiveMinLevel === "L2" && !config.uuaidRegistrySigningKey) {
+      throw new EnvelopeError(
+        "identity level L2 requires ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY (the pinned UUAID registry Ed25519 " +
+          "public key, 64 hex chars) to be configured on this server — refusing to create this envelope (fail closed).",
       );
     }
     for (const s of args.identity?.signers ?? []) {
@@ -358,7 +459,7 @@ export class EnvelopeService {
 
     this.rateLimiter.take();
 
-    const { html: sanitized, removed } = sanitizeEnvelopeHtml(args.html);
+    const { html: sanitized, removed } = sanitizeEnvelopeHtml(effectiveHtml);
     const htmlSha256 = crypto.createHash("sha256").update(sanitized, "utf8").digest("hex");
 
     const { envelope, signingTokens } = await createEnvelope({
@@ -377,7 +478,16 @@ export class EnvelopeService {
       // here instead makes the invariant hold for ANY injected EnvelopeStore,
       // not just the default Fs one — the audit row below still carries the
       // same value for the audit trail.
-      metadata: { mcp: { htmlSha256, removedTags: removed, returnLinks: config.returnLinks } },
+      // §13: `document` is present only for a PDF envelope (created with
+      // `docId`) — status()/list()/create() all surface it from here.
+      metadata: {
+        mcp: {
+          htmlSha256,
+          removedTags: removed,
+          returnLinks: config.returnLinks,
+          ...(documentMeta ? { document: documentMeta } : {}),
+        },
+      },
     });
 
     // §12: per-signer pins need real signerIds, which only exist after
@@ -458,6 +568,7 @@ export class EnvelopeService {
         delivery: config.delivery.kind,
         deliveryFailures,
         identityMinLevel: identityPolicy?.minLevel,
+        document: documentMeta,
       },
     });
 
@@ -469,6 +580,7 @@ export class EnvelopeService {
       delivery: receipts,
       ...(config.returnLinks ? { links } : {}),
       ...(identityPolicy ? { identityPolicy } : {}),
+      ...(documentMeta ? { document: documentMeta } : {}),
     };
   }
 
@@ -504,6 +616,19 @@ export class EnvelopeService {
   /** Approval-page-facing: resolve a raw token to its gate state. Never exposed as an MCP tool itself (design doc §4). */
   async resolve(token: string): Promise<TokenResolution> {
     return resolveSigningToken({ store: this.deps.envelopeStore, token });
+  }
+
+  /**
+   * Approval-page-facing (§13): read the raw ingested PDF bytes for a docId
+   * this envelope pinned at creation — `GET /sign/<token>/document.pdf`
+   * (http.ts) is the only caller. Bytes only; the caller is responsible for
+   * resolving the token to a `docId` first via {@link getEnvelopeDocument}.
+   */
+  async getDocumentBytes(docId: string): Promise<Buffer> {
+    if (!this.deps.documents) {
+      throw new EnvelopeError("this server has no document store configured — cannot read PDF envelope bytes");
+    }
+    return this.deps.documents.get(docId);
   }
 
   /**
@@ -564,6 +689,9 @@ export class EnvelopeService {
             // compared inside verifySignerIdentity before any registry call.
             pinnedRegistryUrl: policy?.registryUrl,
             configuredRegistryUrl: this.deps.config.uuaidRegistryUrl,
+            // The badge trust anchor, read fresh from config (never cached at
+            // creation — see VerifySignerIdentityInput.registrySigningKey).
+            registrySigningKey: this.deps.config.uuaidRegistrySigningKey,
             // R1: persists proof/credential/resolve-response JSON via the
             // same PdfStorageStore seam `seal()` uses for the sealed PDF.
             blobStore: this.deps.pdfStorage,
@@ -694,26 +822,55 @@ export class EnvelopeService {
       signedAt: Date;
     };
     try {
-      // I4: re-check the base html at seal time against the value pinned at
-      // creation. Nothing in this package ever mutates `envelope.html` after
-      // `create()`, so under correct operation this can only fail if a store
-      // implementation (this one or an injected one) corrupted the row — but
-      // that is exactly the case the invariant exists to catch.
-      const pinned = mcpMeta(envelope)?.htmlSha256;
-      const actual = crypto.createHash("sha256").update(envelope.html, "utf8").digest("hex");
-      if (!pinned || pinned !== actual) {
-        throw new EnvelopeError(
-          `content binding check failed for envelope ${envelope.id}: base html sha256 at seal time ` +
-            `(${actual}) does not match the value pinned at creation (${pinned ?? "none"}).`,
-        );
-      }
+      const doc = getEnvelopeDocument(envelope);
+      let pdf: Buffer;
+      let reason: string;
+      let signerName: string;
+      if (doc) {
+        // §13: PDF envelope — sign the EXACT ingested bytes directly. NO
+        // rendering, so no Chrome anywhere on this path (this.render is
+        // never called in this branch — a test can inject a `render` that
+        // throws and confirm sealing still succeeds). I4: re-verify the
+        // document sha256 pinned at creation against what the doc store
+        // returns right now, mirroring the base-html check in the `else`
+        // branch below for the same reason.
+        if (!this.deps.documents) {
+          throw new EnvelopeError(`no document store configured — cannot seal PDF envelope ${envelope.id}`);
+        }
+        pdf = await this.deps.documents.get(doc.docId);
+        const actualDocSha256 = crypto.createHash("sha256").update(pdf).digest("hex");
+        if (actualDocSha256 !== doc.sha256) {
+          throw new EnvelopeError(
+            `content binding check failed for envelope ${envelope.id}: document sha256 at seal time ` +
+              `(${actualDocSha256}) does not match the value pinned at creation (${doc.sha256}).`,
+          );
+        }
+        reason = `Signed via e-sig envelope ${envelope.id} by ${envelope.signers.length} signer(s)`;
+        signerName = envelope.signers.map((s) => s.name).join(", ");
+      } else {
+        // I4: re-check the base html at seal time against the value pinned at
+        // creation. Nothing in this package ever mutates `envelope.html` after
+        // `create()`, so under correct operation this can only fail if a store
+        // implementation (this one or an injected one) corrupted the row — but
+        // that is exactly the case the invariant exists to catch.
+        const pinned = mcpMeta(envelope)?.htmlSha256;
+        const actual = crypto.createHash("sha256").update(envelope.html, "utf8").digest("hex");
+        if (!pinned || pinned !== actual) {
+          throw new EnvelopeError(
+            `content binding check failed for envelope ${envelope.id}: base html sha256 at seal time ` +
+              `(${actual}) does not match the value pinned at creation (${pinned ?? "none"}).`,
+          );
+        }
 
-      // §12 MUST DO item 3: an "Identity attestations" block, one line per
-      // signer whose identity was verified, appended BEFORE rendering — so
-      // it is part of the sealed PDF the signature covers. Every value is
-      // agent/signer-influenced (name, uuaid) and is escaped.
-      const composed = composeEnvelopeHtml(envelope, { platformLabel: "e-sig MCP" }) + identityAttestationsHtml(envelope);
-      const pdf = await this.render(composed);
+        // §12 MUST DO item 3: an "Identity attestations" block, one line per
+        // signer whose identity was verified, appended BEFORE rendering — so
+        // it is part of the sealed PDF the signature covers. Every value is
+        // agent/signer-influenced (name, uuaid) and is escaped.
+        const composed = composeEnvelopeHtml(envelope, { platformLabel: "e-sig MCP" }) + identityAttestationsHtml(envelope);
+        pdf = await this.render(composed);
+        reason = "Envelope completed";
+        signerName = config.subjectName;
+      }
 
       const cert = await ensureActiveCert({
         store: this.deps.certStore,
@@ -736,16 +893,18 @@ export class EnvelopeService {
         pdf,
         keyPem: cert.keyPem,
         certPem: cert.certPem,
-        reason: "Envelope completed",
+        reason,
         location: "",
         contactInfo: "",
-        name: config.subjectName,
+        name: signerName,
         signingTime: signedAt,
         // §12 MUST DO item 3: "Do NOT put signer uuaids into the operator PQ
         // seal" — `pqSeal` here carries only the OPERATOR's own keys, never a
         // `uuaid` field (mode A/C, not implemented in this package, is the
         // only caller that would ever set one — see design doc §5 T4). Signer
-        // identities live in `identityAttestationsHtml` above instead.
+        // identities live in `identityAttestationsHtml` above instead (HTML
+        // envelopes only — a PDF envelope's `reason`/`name` above already name
+        // the envelope + its signers directly).
         pqSeal: pq ? { keys: pq.keys, signedAt } : undefined,
       });
 
@@ -864,13 +1023,25 @@ export class EnvelopeService {
     extra: Record<string, unknown>,
   ): Promise<void> {
     try {
+      // §13 MUST DO item 4: signatures evidence per signer — name, signedAt,
+      // and a sha256 of the drawn signature image (never the full data URL,
+      // which can be tens of KB of pixel data and is PII-adjacent).
       const signers: CompletionReceiptSigner[] = envelope.signers.map((s) => ({
         signerId: s.id,
         name: s.name,
         email: s.email,
+        signedAt: s.signedAt?.toISOString(),
+        signatureImageSha256: s.signatureImageDataUrl
+          ? crypto.createHash("sha256").update(s.signatureImageDataUrl, "utf8").digest("hex")
+          : undefined,
         identity: getSignerIdentityState(envelope, s.id)?.verified,
       }));
-      await writeOutboxCompletionReceipt(this.deps.config.dataDir, envelope, status, signers, extra);
+      // §13: `document` is present only for a PDF envelope.
+      const document = getEnvelopeDocument(envelope);
+      await writeOutboxCompletionReceipt(this.deps.config.dataDir, envelope, status, signers, {
+        ...(document ? { document } : {}),
+        ...extra,
+      });
     } catch (e) {
       process.stderr.write(
         `[esig-mcp] WARNING: could not write the outbox completion receipt for envelope ${envelope.id}: ` +
@@ -902,7 +1073,48 @@ function summarize(envelope: Envelope): EnvelopeStatusSummary {
     voidedAt: envelope.voidedAt?.toISOString(),
     sealedPdfUrl: meta?.sealedPdfUrl,
     seal: meta?.seal,
+    document: meta?.document,
   };
+}
+
+// ---------- §13: PDF envelopes ----------
+
+const PDF_MAGIC = Buffer.from("%PDF-", "ascii");
+
+/** True iff `bytes` starts with the PDF magic bytes (`%PDF-`). */
+function isPdfMagic(bytes: Buffer): boolean {
+  return bytes.length >= PDF_MAGIC.length && bytes.subarray(0, PDF_MAGIC.length).equals(PDF_MAGIC);
+}
+
+/**
+ * The cover-sheet HTML a PDF envelope drives core's html/token/order/
+ * recordSignature flow with (§13 "Core stays unchanged"). Every value is
+ * escaped; the sentence naming the document sha256 is what lets the identity
+ * challenge (§12, unchanged mechanism — its `htmlSha256` pins THIS html) bind
+ * the PDF transitively.
+ */
+function buildPdfCoverSheetHtml(input: {
+  title: string;
+  docId: string;
+  sha256: string;
+  size: number;
+  signers: SignerInput[];
+}): string {
+  const ordered = [...input.signers].sort((a, b) => (a.order ?? 1) - (b.order ?? 1));
+  const signerItems = ordered
+    .map(
+      (s) =>
+        `<li>${escapeHtml(s.name)} (${escapeHtml(s.email)})` +
+        (s.roleLabel ? ` — ${escapeHtml(s.roleLabel)}` : "") +
+        `</li>`,
+    )
+    .join("\n");
+  return (
+    `<h1>${escapeHtml(input.title)}</h1>\n` +
+    `<p>This envelope covers the PDF document <code>${escapeHtml(input.docId)}</code>, ${input.size} byte(s).</p>\n` +
+    `<p>This envelope signs the PDF document with sha256 ${escapeHtml(input.sha256)}.</p>\n` +
+    `<p>Signers, in order:</p>\n<ol>\n${signerItems}\n</ol>`
+  );
 }
 
 // ---------- §12: "Identity attestations" block appended before rendering ----------

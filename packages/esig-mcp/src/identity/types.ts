@@ -60,10 +60,11 @@ export interface SignerIdentityRegistryRecord {
   receiptId?: string;
   anchor?: unknown;
   /**
-   * R1: sha256 digest of the raw `GET /resolve/{uuaid}` response body
-   * persisted to `blobs/identity/<digest>.json` (via the same
-   * `PdfStorageStore` seam `pdfStorage` already gives `EnvelopeService`) —
-   * the full snapshot lives in the blob, never in audit metadata.
+   * R1: sha256 digest of the raw `GET /iaaso/v1/badge/{uuaid}` envelope (the
+   * registry-signed snapshot this L2 decision rests on) persisted to
+   * `blobs/identity/<digest>.json` (via the same `PdfStorageStore` seam
+   * `pdfStorage` already gives `EnvelopeService`) — the full snapshot lives
+   * in the blob, never in audit metadata.
    */
   registrySnapshotDigest?: string;
 }

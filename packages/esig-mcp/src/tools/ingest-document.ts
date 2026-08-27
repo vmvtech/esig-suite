@@ -20,10 +20,12 @@ export function registerIngestDocumentTool(server: McpServer, deps: McpServerDep
       title: "Ingest a PDF document",
       description:
         "Store PDF bytes in this server's content-addressed workdir and return a `docId` (the " +
-        "sha256 hex digest of the bytes) usable as `esig_verify_document`'s `docId` input. Pass " +
-        "EXACTLY ONE of `path` (a filesystem path confined to this server's ESIG_MCP_DOCS_ROOT) or " +
-        "`base64` (raw PDF bytes, base64-encoded). Ingesting the same bytes twice returns the same docId " +
-        "without storing a second copy.",
+        "sha256 hex digest of the bytes) usable as `esig_verify_document`'s `docId` input, or as " +
+        "`esig_create_envelope`'s `docId` input to sign this exact PDF — to sign an existing PDF, " +
+        "ingest it here first, then create an envelope with that docId; no Chrome needed anywhere " +
+        "on that path. Pass EXACTLY ONE of `path` (a filesystem path confined to this server's " +
+        "ESIG_MCP_DOCS_ROOT) or `base64` (raw PDF bytes, base64-encoded). Ingesting the same bytes " +
+        "twice returns the same docId without storing a second copy.",
       inputSchema: {
         path: z
           .string()
@@ -68,7 +70,11 @@ export function registerIngestDocumentTool(server: McpServer, deps: McpServerDep
         metadata: { size: result.size },
       });
 
-      return toolResult(`ingested ${result.size} byte(s) as docId ${result.docId}`, result);
+      return toolResult(
+        `ingested ${result.size} byte(s) as docId ${result.docId} — pass this docId to ` +
+          `esig_create_envelope to sign it as a PDF envelope (no Chrome needed)`,
+        result,
+      );
     },
   );
 }

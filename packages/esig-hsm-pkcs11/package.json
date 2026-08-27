@@ -51,7 +51,7 @@
   },
   "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-hsm-pkcs11#readme",
   "peerDependencies": {
-    "@e-sig/core": "^0.7.0",
+    "@e-sig/core": "^0.8.0",
     "pkcs11js": "^2.0.0"
   },
   "peerDependenciesMeta": {
@@ -60,7 +60,7 @@
     }
   },
   "devDependencies": {
-    "@e-sig/core": "^0.7.0",
+    "@e-sig/core": "^0.8.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.4.0",
     "vitest": "^4.1.10"

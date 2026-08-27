@@ -1,0 +1,150 @@
+<!--
+  TEMPLATE: Employment Offer Letter
+  ===================================
+  Self-contained document template for use with @e-sig/core / @e-sig/mcp
+  (esig_create_envelope / core createEnvelope). Fill every {{placeholder}}
+  below before creating an envelope from this file — see
+  examples/templates/README.md for a fill-and-send snippet.
+
+  Placeholders (mustache-style {{...}}):
+    {{offer_date}}                Date the offer letter is issued
+    {{company_name}}              Name of the employer
+    {{company_address}}           Employer's address
+    {{candidate_name}}            Full name of the candidate
+    {{job_title}}                 Offered job title
+    {{department}}                Department/team
+    {{reporting_manager}}         Manager the role reports to
+    {{start_date}}                Proposed start date
+    {{employment_type}}           e.g. "full-time, exempt" / "full-time, non-exempt" / "part-time"
+    {{work_location}}             Primary work location, e.g. "Remote (US)" or an office address
+    {{base_salary}}               Base salary/wage amount
+    {{pay_frequency}}             e.g. "annually, paid bi-weekly"
+    {{bonus_description}}         Bonus/commission terms, if any, or "Not applicable"
+    {{equity_description}}        Equity/options terms, if any, or "Not applicable"
+    {{benefits_summary}}          One-paragraph summary of benefits eligibility
+    {{at_will_state}}              State whose employment-at-will language applies
+    {{offer_expiration_date}}     Date by which the candidate must respond
+    {{hr_contact_name}}           HR contact for questions
+    {{hr_contact_email}}          HR contact email
+
+  This is a TEMPLATE, not legal advice. Employment terms (at-will language,
+  exempt/non-exempt classification, required notices) vary by state and
+  role — have counsel review before use.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Employment Offer Letter</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body {
+    font-family: Georgia, "Times New Roman", Times, serif;
+    color: #1a1a1a;
+    line-height: 1.5;
+    font-size: 12pt;
+  }
+  .page { max-width: 6.5in; margin: 0 auto; padding: 0.4in 0.3in 1in; }
+  .doc-banner {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11pt;
+    font-weight: bold;
+    text-align: center;
+    color: #5c4400;
+    background: #fff3cd;
+    border: 2px solid #b8860b;
+    padding: 10px 14px;
+    margin: 0 0 28px;
+  }
+  h1 { font-size: 16pt; text-align: center; margin: 0 0 4px; }
+  .doc-subtitle { text-align: center; font-size: 10.5pt; color: #555; margin: 0 0 20px; }
+  h2 { font-size: 12.5pt; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin: 22px 0 8px; }
+  p { margin: 0 0 10px; text-align: justify; }
+  .letterhead { margin: 0 0 20px; font-size: 10.5pt; color: #444; }
+  .letterhead .date { margin-top: 6px; }
+  .meta-table { width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-size: 10.5pt; }
+  .meta-table td { padding: 4px 8px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  .meta-table td.k { font-weight: bold; color: #444; width: 38%; }
+  .closing { margin-top: 24px; }
+  .closing .valediction { margin-top: 20px; }
+  @page { margin: 0.75in; }
+  @media print {
+    .doc-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-size: 11pt; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="doc-banner">TEMPLATE — not legal advice; have counsel review before use</div>
+
+  <div class="letterhead">
+    {{company_name}}<br>
+    {{company_address}}
+    <div class="date">{{offer_date}}</div>
+  </div>
+
+  <h1>Employment Offer Letter</h1>
+  <p class="doc-subtitle">Prepared for {{candidate_name}}</p>
+
+  <p>Dear {{candidate_name}},</p>
+
+  <p>
+    On behalf of {{company_name}} (the "Company"), we are pleased to offer you the
+    position described below. This letter summarizes the key terms of your employment;
+    it is not an employment contract for any specific duration.
+  </p>
+
+  <h2>1. Position</h2>
+  <table class="meta-table">
+    <tr><td class="k">Title</td><td>{{job_title}}</td></tr>
+    <tr><td class="k">Department</td><td>{{department}}</td></tr>
+    <tr><td class="k">Reports to</td><td>{{reporting_manager}}</td></tr>
+    <tr><td class="k">Employment type</td><td>{{employment_type}}</td></tr>
+    <tr><td class="k">Work location</td><td>{{work_location}}</td></tr>
+    <tr><td class="k">Anticipated start date</td><td>{{start_date}}</td></tr>
+  </table>
+
+  <h2>2. Compensation</h2>
+  <p><strong>Base salary/wage:</strong> {{base_salary}}, {{pay_frequency}}.</p>
+  <p><strong>Bonus/commission:</strong> {{bonus_description}}</p>
+  <p><strong>Equity:</strong> {{equity_description}}</p>
+
+  <h2>3. Benefits</h2>
+  <p>{{benefits_summary}}</p>
+
+  <h2>4. At-Will Employment</h2>
+  <p>
+    Your employment with the Company is at-will under the laws of {{at_will_state}},
+    meaning that either you or the Company may terminate the employment relationship at
+    any time, with or without cause and with or without notice. Nothing in this letter,
+    nor in any Company policy or handbook, alters this at-will relationship or creates an
+    express or implied contract of employment for any specific term.
+  </p>
+
+  <h2>5. Contingencies</h2>
+  <p>
+    This offer is contingent upon: satisfactory completion of any background check or
+    employment verification the Company requires; your ability to provide documentation
+    establishing your identity and authorization to work as required by applicable law;
+    and, if applicable, execution of the Company's standard confidentiality and
+    invention-assignment agreement.
+  </p>
+
+  <h2>6. Acceptance</h2>
+  <p>
+    Please indicate your acceptance of this offer by signing below no later than
+    {{offer_expiration_date}}. If we do not receive your signed acceptance by that date,
+    this offer will be considered withdrawn. Questions about this offer can be directed
+    to {{hr_contact_name}} at {{hr_contact_email}}.
+  </p>
+
+  <div class="closing">
+    <p>We look forward to the possibility of you joining {{company_name}}.</p>
+    <p class="valediction">Sincerely,<br>{{hr_contact_name}}<br>{{company_name}}</p>
+  </div>
+</div>
+</body>
+</html>

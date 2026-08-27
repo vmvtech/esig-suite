@@ -87,6 +87,27 @@ const { signedPdf } = await signPdf({
 
 Everything downstream (verify, post-quantum seal, envelopes) is identical either way — `signPdf` doesn't care whether the input PDF came from `renderHtmlToPdf`, a form library, or a file someone uploaded.
 
+## CLI: `esig verify`
+
+`@e-sig/core` ships a small `esig` binary that wraps `verifyDocument()` for the terminal or CI — no code, no key material (there is none to leak):
+
+```sh
+npx -y -p @e-sig/core esig verify signed.pdf
+# signed.pdf: OK
+#   digest valid:      yes
+#   signature valid:   yes
+#   signer:            E-sig (Acme Inc)
+#   timestamped:       no
+#   post-quantum:      not present
+#   failures:
+
+npx -y -p @e-sig/core esig verify *.pdf --json --require-pq --expected-uuaid uuaid:acme:agent:018f...
+```
+
+Exit codes: `0` every file verified ok, `1` at least one file failed verification, `2` a usage or I/O error (bad flag, missing file) — so a CI step can tell "the document is bad" apart from "you called this wrong". `--json` prints a single `[{file, verification}, ...]` array and nothing else to stdout; `--quiet` collapses human output to one `OK`/`FAIL` line per file. `esig --help` lists every flag.
+
+Wire it into a GitHub Actions job with the `e-sig verify` composite action — see [`docs/verify-in-ci.md`](https://github.com/vmvtech/esig-suite/blob/main/docs/verify-in-ci.md).
+
 ## RFC 3161 trusted timestamps (CAdES-T)
 
 Pass a `tsa` transport to `signPdf` to embed an RFC 3161 TimeStampToken, upgrading the signature from CAdES-B to CAdES-T. The token is added as the `id-aa-timeStampToken` unsigned attribute (OID `1.2.840.113549.1.9.16.2.14`) computed over the SignerInfo signatureValue (RFC 3161 §2.4.1). The package performs **no network egress** — you inject the POST so the package stays dependency-free — and the TSA only ever receives a **SHA-256 hash**, never the document or any PHI:

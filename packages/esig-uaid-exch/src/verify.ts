@@ -36,9 +36,9 @@
  * its extra fields silently ignored). This is also the encoding
  * `UaidSigningCredential.credentialSubject.key.publicKey` uses when it
  * carries a JWK rather than a `did:key:` string (./index.ts, schema.json:
- * 80-89 — the real tae/v1 field; the previous doc reference here,
- * `credentialSubject.authenticator.public_key_jwk`, named a field that does
- * not exist in the schema and has been corrected). A bare `"ed25519:<hex64>"` form was considered per the
+ * 80-89 — the real tae/v1 field, `credentialSubject.key.publicKey`; a
+ * previous doc reference here named a field that does not exist in the
+ * schema and has been corrected). A bare `"ed25519:<hex64>"` form was considered per the
  * build ticket and rejected: neither `createExchange` (./index.ts:141-151,
  * `AgentSigner.verificationMethod` is documented as
  * `uuaid:foundation:agent:<uuid>#sk-...`) nor any test in tests/ uses that

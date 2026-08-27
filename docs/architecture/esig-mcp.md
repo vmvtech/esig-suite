@@ -1,8 +1,10 @@
 # @e-sig/mcp — MCP server for agent-driven signing with cryptographic human approval
 
-Status: DESIGN v2 (2026-08-26). Not implemented. All API bindings in this
-document were verified against `packages/esig-core/src` at HEAD `1dc4198`
-(file:line cites below); the earlier `[BIND]` draft markers are resolved.
+Status: LIVING DESIGN. §1–§10 = v0.1 design (2026-08-26, shipped as
+`@e-sig/mcp@0.1.0`); §11 = v0.1.1 sealing state; §12 = v0.2 signer identity
+(shipped on `main` 2026-08-27, RedTeam RT-2026-08-27-04 CLOSED); §13–§14 =
+v0.3 PDF envelopes + `init`/`demo`. API bindings were verified against
+`packages/esig-core/src` (file:line cites below).
 
 ## 1. Understanding and scope
 
@@ -315,7 +317,7 @@ direction: "uuaid and iaaso integration can help signer identity."
 | none | nothing (v0.1 behavior) | — |
 | L0 asserted | signer's `uuaid` is well-formed (`isWellFormedUuaidAssertion`) and, if the envelope pinned an expected uuaid at creation, equal to it | local |
 | L1 proven | the signer presents a `DataIntegrityProof` (`eddsa-jcs-2022`, Ed25519) over a server-issued **sole-control challenge**; signature verified locally; key ↔ uuaid binding is self-asserted (IAASO L0/L1 semantics) | local, new `verifyDataIntegrityProof` / `verifyExchange` in `@e-sig/uaid-exch` |
-| L2 registry-bound | L1 plus: `GET /resolve/{uuaid}` on the configured UUAID registry lists the proof's public key (agora key binding), and any presented `UaidSigningCredential` passes `GET /verify/{credentialId}` (valid, active, notExpired); optionally the exchange is submitted and the **receipt** (validation material + anchor) is stored | network, `ESIG_MCP_UUAID_REGISTRY_URL` |
+| L2 registry-bound | L1 plus the registry attests the key: **`GET /iaaso/v1/badge/{uuaid}`** (public, registry-signed hybrid Ed25519 + ML-DSA-65) must carry `payload.subject.presentationKey = {alg:"ed25519", publicKey:<64 lowercase hex>, keyId}` byte-equal to the proof key (`/resolve/{uuaid}` carries **no agent keys** — Uuaid-Lead, live-measured 2026-08-27; a badge `404 tombstoned` refuses); any presented `UaidSigningCredential` passes `GET /verify/{credentialId}` (valid, active, notExpired **and `agent_uuaid` equal to the signer's uuaid**); optionally the exchange is submitted and the **receipt** (validation material + anchor) is stored | network, `ESIG_MCP_UUAID_REGISTRY_URL` |
 | L3–L5 | out of scope for v0.2 (DSalvus attestation, chain anchor, QES) | — |
 
 **Challenge (the sole-control evidence).** Issued per signer, single-use,
@@ -341,17 +343,23 @@ mismatched proof refuses the signature (`403`, audited
 **Policy.** `ESIG_MCP_IDENTITY_MIN_LEVEL` = `none` (default) | `L0` | `L1` |
 `L2`; `esig_create_envelope` may set `identity: {minLevel, signers[].uuaid}`
 and may only **raise** the level. L2 requires `ESIG_MCP_UUAID_REGISTRY_URL`
-(https) — refused otherwise (fail closed); the URL in force is **pinned on the
-envelope at creation** (`metadata.mcp.identity.registryUrl`) and a verify
-attempt under a different configured URL refuses with
-`L2_REGISTRY_URL_CHANGED` (RedTeam G3).
+(https) **and** `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY` (the registry's Ed25519
+public key, 64 hex, from its `/.well-known/uuaid-registry.json` — pinned at
+config time, never fetched per-request) — refused otherwise (fail closed);
+the URL in force is **pinned on the envelope at creation**
+(`metadata.mcp.identity.registryUrl`) and a verify attempt under a different
+configured URL refuses with `L2_REGISTRY_URL_CHANGED` (RedTeam G3). The
+signing key is deliberately NOT pinned per envelope: the URL pin already
+fixes which registry attests, and a registry key rotation must not strand
+already-created envelopes — a rotated key simply fails verification (fail
+closed) until config is updated.
 
 **What gets recorded.** Per signer: `{level, uuaid, keyFingerprint
 (sha256 of raw Ed25519 key), proofDigest (sha256 of JCS proof),
 credentialDigest?, verifiedAt, registry?: {resolvedAt, registrySnapshotDigest,
 credentialId?, credentialValid?, receiptId?, anchor?}}` — every digest names a
 content-addressed file under `blobs/identity/<sha256>.json` (proof,
-credential, `/resolve` snapshot)
+credential, badge snapshot)
 — in the envelope, in audit rows (`signer.identity_verified`), in the file
 outbox receipt, and as an "Identity" line in the composed signature block
 that is sealed into the PDF. Full proof JSON is kept in `blobs/`
@@ -370,7 +378,7 @@ receipt stapling from the IAASO 2701 position.
 | T10 | Forged proof | Ed25519 verified over the exact JCS challenge; unknown cryptosuite/proofPurpose → reject; key from `verificationMethod` (`did:key` Ed25519 multicodec, or a bare JWK `{kty:OKP, crv:Ed25519, x}`) and, when a signing credential is presented, it MUST equal the credential's `credentialSubject.key.publicKey` (the tae/v1 schema field — RedTeam G1 corrected the earlier `authenticator.public_key_jwk`, which does not exist); network-dereferenced methods (`did:web`, URLs) are refused |
 | T11 | Replay / cross-envelope reuse | challenge carries envelopeId + signerId + htmlSha256 + nonce + expiry; nonce single-use, consumed atomically; expired → reject |
 | T12 | Identity substitution | expected uuaid pinned at creation; mismatch refuses; minLevel can only be raised |
-| T13 | Registry trust (L2) | https only; TOFU on the registry today — documented; response shape validated; the registry URL is **pinned per envelope at creation** and a changed URL refuses (RedTeam G3); the full `/resolve` response is snapshotted into `blobs/` and its digest recorded; registry down ⇒ L2 refuses (never silently drops to L1) |
+| T13 | Registry trust (L2) | https only; the registry's badge is **verified against the pinned registry key** (`ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY`, 64 hex — hash binding + Ed25519 + freshness), so trust rests on the pinned key, not TLS alone (TOFU no longer required for the attestation itself; the ML-DSA half of the hybrid badge signature is not yet verified — Ed25519-only trust anchor); the badge's `subject.uuaid` **must equal the uuaid being proven** (a signed badge for a *different* subject that shares the presentation key is refused with `L2_BADGE_SUBJECT_MISMATCH` — blind-verifier finding 2026-08-27); the registry URL is **pinned per envelope at creation** and a changed URL refuses (RedTeam G3); the full badge envelope is snapshotted into `blobs/` and its digest recorded; registry down ⇒ L2 refuses (never silently drops to L1); a badge 404 (absent/tombstoned) refuses with `L2_UUAID_NOT_FOUND` |
 | T15 | Downgrade through an error-swallowing path | identity verification runs before `recordSignature` and structurally outside the seal `try/catch` (RedTeam G4); a throwing verifier can never lead to a recorded signature (tested) |
 
 **Clarifications after RedTeam RT-2026-08-27-04 and the build verifier:**
@@ -387,12 +395,58 @@ bytes (not the W3C double-hash form), so proof *options* are outside the
 signed bytes and `proofDigest` covers them (verifier R5).
 | T14 | PII in proofs/credentials | only digests, uuaid, key fingerprint in audit; full artifacts in content-addressed blobs |
 
+## 13. PDF envelopes — sign an existing PDF, Chrome-free, WYSIWYS (v0.3)
+
+`esig_create_envelope` accepts exactly one of `html` or `docId` (an ingested
+PDF; `%PDF-` magic required). For a PDF envelope:
+
+- **WYSIWYS by construction.** The signer views the *exact ingested bytes*
+  (`GET /sign/<token>/document.pdf`, same origin, `nosniff`, `no-store`,
+  inline, embedded in a plain same-origin iframe plus an "open" link — not
+  the sandboxed `srcdoc` iframe, which cannot host a PDF viewer), and the
+  seal signs those same bytes with core `signPdf` (+ PQ seal): the
+  `/ByteRange` covers the original document byte-for-byte. No rendering, so
+  no Chrome anywhere on this path.
+- **Core stays unchanged.** Core envelopes require `html`; a PDF envelope's
+  `html` is a generated, escaped *cover sheet* (title, docId/sha256, size,
+  signer list) that drives core's token/order/`recordSignature` flow.
+  `metadata.mcp.document = {docId, sha256, size, kind:"pdf"}`.
+- **Identity challenge format unchanged** (RedTeam re-probe trigger avoided):
+  the pinned `htmlSha256` is the cover sheet's digest, and the cover sheet
+  embeds the document sha256, so the challenge binds the PDF transitively.
+- Drawn signatures and identity records are evidence in the envelope,
+  audit, and completion receipt; the PDF's signature is invisible (standard
+  PKCS#7 detached). A rendered "signing certificate" page appended to the
+  PDF is the later Certificate-of-Completion item (needs a renderer).
+- Threat note: a malicious ingested PDF can only attack the signer's PDF
+  viewer, which is no worse than opening any PDF; the page's CSP and the
+  token model are unaffected.
+
+## 14. `esig-mcp init` and `esig-mcp demo` (v0.3)
+
+`init [--dir]` creates the data dirs, generates a passphrase into a `0600`
+env file (never overwrites without `--force`), prints an `.mcp.json` snippet
+with absolute paths, and runs the Chrome preflight. `demo [--auto]` runs an
+end-to-end, Chrome-free PDF envelope on a temp data dir with `file` delivery
+and `ESIG_MCP_RETURN_LINKS=1` (loud, demo-only): ingest the bundled
+`assets/sample.pdf`, create a one-signer envelope, print the signing URL and
+a curl one-liner; with `--auto` it performs the signature itself and prints
+the sealed PDF path plus the `verifyDocument` verdict.
+
 **Bindings (verified 2026-08-27 by scout).** `@e-sig/uaid-exch`:
 `createExchange`, `exchangeInputFromEsigEnvelope`, `jcs/jcsBytes`,
 `DataIntegrityProof`, `UaidSigningCredential`, `UaidExchange`,
 `assertCredentialUsable` (revocation.ts) — **no verifier exists; must be
 built** (`verifyDataIntegrityProof`, `verifyExchange`, did:key/JWK key
-decoding). Registry: `GET /resolve/{uuaid}` (public; response shape
-**unverified** — type it defensively), `GET /verify/{credentialId}` →
-`{valid, signatureValid, active, notExpired, reason?}`. Core:
+decoding). Registry (live-measured 2026-08-27, Uuaid-Lead evidence +
+esig-l2-live-probe): `GET /iaaso/v1/badge/{uuaid}` — registry-signed
+SignatureEnvelope `{payload, payloadHash:"0x"+sha256(JCS(payload)),
+signatures[]}`, hybrid ed25519 `uuaid-registry-1` + ml-dsa-65; payload's
+`subject.presentationKey` = `{alg:"ed25519", publicKey:<64 lowercase hex>,
+keyId}` | null (HEX — not multibase/JWK/did:key); trust anchor
+`/.well-known/uuaid-registry.json` keys[].publicKey (PIN it);
+`/resolve/{uuaid}` carries **no signer key material at all** (only
+`credentials[].signingKeyId` = AIAU's issuer key). `GET /verify/{credentialId}`
+→ `{credential_id, agent_uuaid, valid, signatureValid, active, notExpired,
+keyId}`. Core:
 `isWellFormedUuaidAssertion`. IAASO: `/Volumes/X/VMV/iaaso/artifacts/schemas/tae/v1/*`.

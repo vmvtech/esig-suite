@@ -12,13 +12,25 @@ Full design: [`docs/architecture/esig-mcp.md`](https://github.com/vmvtech/esig-s
 
 ## 60-second quickstart
 
+See the whole flow work with zero setup — no passphrase to pick, no data directory, no Chrome:
+
 ```bash
-ESIG_MCP_PASSPHRASE="a passphrase at least 24 characters long" \
-ESIG_MCP_DELIVERY=file \
-npx @e-sig/mcp
+npx @e-sig/mcp demo --auto
 ```
 
-`ESIG_MCP_DELIVERY` has no default (see "Security model" below for why) — `file` is the quickstart channel: it writes one JSON file per envelope, containing that envelope's signing link(s), to `<ESIG_MCP_DATA_DIR>/outbox/<envelopeId>.json` (mode `0600`, in a `0700` directory). Open that file to get the link a human signs from. For anything beyond a one-off try, also set a data directory:
+That ingests a bundled sample PDF, creates a one-signer envelope in a temp data dir, signs it in-process, and prints the sealed PDF's path plus an `esig_verify_document`-style verdict (`ok`, `classical.digestValid`, `postQuantum.ok`). Drop `--auto` and it prints a real signing URL instead, then waits for you to open it and sign from a browser yourself.
+
+When you're ready to wire this into an agent for real, set up a local data directory:
+
+```bash
+npx @e-sig/mcp init
+```
+
+`init` creates `./esig-data/{inbox,outbox,blobs}`, writes a `.esig-mcp.env` file (mode `0600`) with a generated `ESIG_MCP_PASSPHRASE` and `ESIG_MCP_DELIVERY=file`, prints an `.mcp.json` snippet with the absolute paths already filled in (see below), and runs the Chrome preflight (`esig-mcp` starts without Chrome either way — see "Requirements" above).
+
+`ESIG_MCP_DELIVERY` has no default (see "Security model" below for why) — `file` (what `init` picks) is the quickstart channel: it writes one JSON file per envelope, containing that envelope's signing link(s), to `<ESIG_MCP_DATA_DIR>/outbox/<envelopeId>.json` (mode `0600`, in a `0700` directory). Open that file to get the link a human signs from.
+
+Prefer to configure it by hand instead of running `init`?
 
 ```bash
 ESIG_MCP_PASSPHRASE="a passphrase at least 24 characters long" \
@@ -27,11 +39,11 @@ ESIG_MCP_DATA_DIR=./esig-data \
 npx @e-sig/mcp
 ```
 
-That starts an MCP server over stdio plus a small HTTP approval page, using a temporary filesystem-backed store when `ESIG_MCP_DATA_DIR` is left at its default.
+Either way, that starts an MCP server over stdio plus a small HTTP approval page.
 
 ### Wire it into an MCP client
 
-Claude Desktop (`claude_desktop_config.json`) or a project's `.mcp.json`:
+Claude Desktop (`claude_desktop_config.json`) or a project's `.mcp.json` — this is exactly what `esig-mcp init` prints above, with your own paths already filled in:
 
 ```json
 {
@@ -48,11 +60,78 @@ Claude Desktop (`claude_desktop_config.json`) or a project's `.mcp.json`:
 }
 ```
 
+### Install in Claude Code / Cursor / VS Code
+
+The one-liners below use `npx -y @e-sig/mcp` so nothing needs a prior global install; swap in `esig-mcp` (the package's own bin) once you've `npm install -g @e-sig/mcp` or run `esig-mcp init` as above. All three need the same three environment variables as the snippet above: `ESIG_MCP_PASSPHRASE`, `ESIG_MCP_DELIVERY`, `ESIG_MCP_DATA_DIR`.
+
+**Claude Code:**
+
+```bash
+claude mcp add esig \
+  -e ESIG_MCP_PASSPHRASE="a passphrase at least 24 characters long" \
+  -e ESIG_MCP_DELIVERY=file \
+  -e ESIG_MCP_DATA_DIR=/absolute/path/to/esig-data \
+  -- npx -y @e-sig/mcp
+```
+
+**Cursor** (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "esig": {
+      "command": "npx",
+      "args": ["-y", "@e-sig/mcp"],
+      "env": {
+        "ESIG_MCP_PASSPHRASE": "a passphrase at least 24 characters long",
+        "ESIG_MCP_DELIVERY": "file",
+        "ESIG_MCP_DATA_DIR": "/absolute/path/to/esig-data"
+      }
+    }
+  }
+}
+```
+
+**VS Code** (`.vscode/mcp.json` — note the root key is `servers`, not `mcpServers`, and each entry needs its own `type`):
+
+```json
+{
+  "servers": {
+    "esig": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@e-sig/mcp"],
+      "env": {
+        "ESIG_MCP_PASSPHRASE": "a passphrase at least 24 characters long",
+        "ESIG_MCP_DELIVERY": "file",
+        "ESIG_MCP_DATA_DIR": "/absolute/path/to/esig-data"
+      }
+    }
+  }
+}
+```
+
 The demo flow: an agent drafts an NDA with `esig_create_envelope`, a human opens the signing link from your configured delivery channel (the `file` outbox JSON in the quickstart above) and signs from their phone, the agent polls `esig_envelope_status` and files the sealed PDF, and anyone — agent or human — can later confirm it with `esig_verify_document`.
 
 ## Tools
 
 There is no tool that signs — `esig_sign_as_agent` and `esig_cosign_start` (modes A/C) are v0.2, gated behind a RedTeam review, and this server refuses to even start if `ESIG_MCP_MODES` asks for them.
+
+### Sign an existing PDF (no Chrome needed)
+
+`esig_create_envelope` accepts **exactly one of `html` or `docId`**. Pass `docId` — a docId returned by `esig_ingest_document` — to create a **PDF envelope**: the signer reviews and signs the *exact ingested bytes* (WYSIWYS — What You See Is What You Sign), served from `GET /sign/<token>/document.pdf` and shown in a plain same-origin iframe on the approval page (the sandboxed `srcdoc` iframe an HTML envelope uses cannot host a PDF viewer). At seal time this server signs those same bytes directly — **no HTML rendering, so no Chrome anywhere on this path**.
+
+```js
+const ingested = await client.callTool({ name: "esig_ingest_document", arguments: { path: "./contract.pdf" } });
+const { docId } = JSON.parse(ingested.content[0].text);
+
+await client.callTool({
+  name: "esig_create_envelope",
+  arguments: { title: "Contract", docId, signers: [{ name: "Alice", email: "alice@example.com" }] },
+});
+```
+
+`esig_create_envelope`/`esig_envelope_status`/`esig_list_envelopes` all expose a `document: {docId, sha256, size, kind:"pdf"}` field for a PDF envelope (absent for an HTML envelope). Everything else — signer order, tokenized links, the drawn-signature approval flow, `esig_reseal`, signer identity (below) — works identically to an HTML envelope; core itself is unchanged, since a PDF envelope's underlying `html` is a generated cover sheet (title, docId, sha256, byte size, signer list) that drives the same token/order/`recordSignature` flow.
 
 | Tool | Kind | What it does |
 |---|---|---|
@@ -60,8 +139,8 @@ There is no tool that signs — `esig_sign_as_agent` and `esig_cosign_start` (mo
 | `esig_envelope_status` | read | Look up one envelope's status, phase, per-signer state (including verified identity, if any — see below), seal state, and sealed PDF path once sealed. |
 | `esig_list_envelopes` | read | List envelopes for this server's tenant, optionally filtered by status. |
 | `esig_whoami` | read | This server's tenant, enabled modes, caps, seal readiness, and public cert/PQ fingerprints. Never key material. |
-| `esig_ingest_document` | prepare (audited) | Store PDF bytes in a content-addressed workdir; returns a `docId`. `path` input is confined to `ESIG_MCP_DOCS_ROOT`. |
-| `esig_create_envelope` | prepare (audited) | Create an envelope from HTML + a signer list; dispatches signing links through the configured delivery channel. Never returns a raw link unless `ESIG_MCP_RETURN_LINKS=1`. Optionally requires signer identity — see below. |
+| `esig_ingest_document` | prepare (audited) | Store PDF bytes in a content-addressed workdir; returns a `docId`, usable as `esig_create_envelope`'s `docId` to sign this exact PDF (no Chrome needed) or as `esig_verify_document`'s `docId`. `path` input is confined to `ESIG_MCP_DOCS_ROOT`. |
+| `esig_create_envelope` | prepare (audited) | Create an envelope from exactly one of `html` or `docId` (a PDF, see below) + a signer list; dispatches signing links through the configured delivery channel. Never returns a raw link unless `ESIG_MCP_RETURN_LINKS=1`. Optionally requires signer identity — see below. |
 | `esig_void_envelope` | prepare (audited) | Cancel a pending or partially-signed envelope. |
 | `esig_reseal` | prepare (audited) | Retry producing the sealed PDF for a completed envelope whose seal step failed or never ran (phase `seal_failed` / `awaiting_seal`). Refused if the envelope isn't completed yet, or is already sealed. |
 | `esig_identity_challenge` | prepare (audited) | Issue (or re-issue) the sole-control challenge a signer's wallet/agent signs to satisfy an envelope's identity requirement — see "Signer identity" below. |
@@ -127,7 +206,7 @@ control of a key, self-asserted identity," not as "verified identity."
 | `none` | Nothing (default). | No | — | No |
 | `L0` | The signer's `uuaid` is well-formed, and — if this envelope pinned an expected `uuaid` for this signer at creation — matches it. | No | No (self-asserted) | No |
 | `L1` | The signer presents an `eddsa-jcs-2022` `DataIntegrityProof` over a server-issued, single-use, 15-minute sole-control challenge, verified locally against the key in `proof.verificationMethod`. | Yes (Ed25519) | **No (self-asserted)** — proves the signer controls *a* key, not that the key belongs to the claimed `uuaid` | No |
-| `L2` | L1, plus: `ESIG_MCP_UUAID_REGISTRY_URL`'s `GET /resolve/{uuaid}` must list the proof's key; if a `credential` is presented, its `credentialSubject.key.publicKey` must equal the proof's key, and `GET /verify/{credentialId}` must say `valid && active && notExpired`. A down/unreachable/malformed registry response is a hard failure — this never silently drops to L1. The registry URL is pinned per envelope at creation; a server later reconfigured to a different `ESIG_MCP_UUAID_REGISTRY_URL` refuses (`L2_REGISTRY_URL_CHANGED`) rather than verifying against a different registry than the one the envelope committed to. | Yes | **Yes** — via the registry | Yes |
+| `L2` | L1, plus: the registry's SIGNED badge (`GET /iaaso/v1/badge/{uuaid}` — `GET /resolve/{uuaid}` carries no key material at all) must verify against the pinned `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY` (the registry's Ed25519 public key, 64 hex chars — hash binding + Ed25519 signature + freshness), its `subject.presentationKey` (64 hex chars) must equal the proof's key, and its `subject.uuaid` must equal the uuaid being proven (`L2_BADGE_SUBJECT_MISMATCH` otherwise — a badge signed for a *different* subject that happens to share the presentation key does not pass); a tombstoned/absent uuaid (badge `404`) refuses (`L2_UUAID_NOT_FOUND`). If a `credential` is presented, its `credentialSubject.key.publicKey` must equal the proof's key, and `GET /verify/{credentialId}` must say `valid && active && notExpired` with `agent_uuaid` equal to the proving uuaid. A down/unreachable/malformed registry response is a hard failure — this never silently drops to L1. The registry URL is pinned per envelope at creation; a server later reconfigured to a different `ESIG_MCP_UUAID_REGISTRY_URL` refuses (`L2_REGISTRY_URL_CHANGED`) rather than verifying against a different registry than the one the envelope committed to. | Yes | **Yes** — via the registry | Yes |
 
 **Requiring it.** Pass `identity` to `esig_create_envelope`:
 
@@ -183,9 +262,11 @@ function proveIdentity(challenge) {
 // { signatureImageDataUrl, consent: true, identityProof: { uuaid: "uuaid:...", proof: proveIdentity(challenge) } }
 ```
 
-**What gets recorded.** Per signer, once verified: `{level, uuaid, keyFingerprint, proofDigest, credentialDigest?, verifiedAt, registry?: {resolvedAt, credentialId?, credentialValid?, registrySnapshotDigest?}}` — surfaced in `esig_envelope_status`/`esig_list_envelopes`'s `signers[].identity`, audited as `signer.identity_verified` (a rejection audits `signer.identity_rejected` with `{reason, uuaid?, level}` instead), included in both the `file` outbox creation receipt and the completion receipt (`<envelopeId>.completed.json`, written on `sealed`/`seal_failed` regardless of delivery channel), and appended as an escaped "Identity attestations" line per verified signer to the composed HTML **before** it is sealed — so it's part of the signed PDF. The digests (`proofDigest`, `credentialDigest`, `registrySnapshotDigest`) name the exact content-addressed blob (`blobs/identity/<digest>.json`) the corresponding raw artifact — proof JSON, the presented credential JSON, the registry's `/resolve` response — is persisted to; only the digests/identifiers ever reach audit metadata (PII minimization), never the raw artifacts. The operator's own post-quantum seal never carries a signer's `uuaid` — that assertion is the operator's, not theirs.
+**Proof options aren't signed bytes.** `proof.created` (and `verificationMethod`/`proofPurpose`) live in the proof envelope, not in what's cryptographically signed: verification here signs `jcsBytes(challenge)` directly, diverging by construction from the W3C `eddsa-jcs-2022` double-hash cryptosuite, which would additionally hash the proof options in (see `@e-sig/uaid-exch`'s `verify.ts` module header for the full rationale). So `created` is convenience metadata a relay could alter without touching anything that gets checked. `proofDigest` (below) still covers the *entire* `proof.proof` object — `created` included — but as a `jcsBytes(proof.proof)` checksum of what was presented, not a re-derivation of the signed bytes; it's an audit anchor, not proof that `created` itself was signed.
 
-**L2 registry caveat (TOFU — G8).** `ESIG_MCP_UUAID_REGISTRY_URL` must be `https://` (no exception — unlike the webhook delivery channel, this URL is queried by the server itself on every L2 check, not a one-time operator-chosen receiver) and is **trusted on first use (TOFU)** — there is no certificate pinning of the registry's TLS endpoint here, and no pinning of *which* registry an envelope trusts beyond the per-envelope URL pin at creation (G3, above: a later reconfiguration to a different registry URL is refused, but the FIRST registry an envelope's identity policy commits to is trusted as given). Every raw `/resolve` response is snapshotted verbatim into a content-addressed blob (`blobs/identity/<sha256>.json`) with the verification record's `registry.registrySnapshotDigest` referencing it, so a TOFU decision is at least auditable after the fact even though it isn't pinned in advance.
+**What gets recorded.** Per signer, once verified: `{level, uuaid, keyFingerprint, proofDigest, credentialDigest?, verifiedAt, registry?: {resolvedAt, credentialId?, credentialValid?, registrySnapshotDigest?}}` — surfaced in `esig_envelope_status`/`esig_list_envelopes`'s `signers[].identity`, audited as `signer.identity_verified` (a rejection audits `signer.identity_rejected` with `{reason, uuaid?, level}` instead), included in both the `file` outbox creation receipt and the completion receipt (`<envelopeId>.completed.json`, written on `sealed`/`seal_failed` regardless of delivery channel), and appended as an escaped "Identity attestations" line per verified signer to the composed HTML **before** it is sealed — so it's part of the signed PDF. The digests (`proofDigest`, `credentialDigest`, `registrySnapshotDigest`) name the exact content-addressed blob (`blobs/identity/<digest>.json`) the corresponding raw artifact — proof JSON, the presented credential JSON, the registry's signed badge response — is persisted to; only the digests/identifiers ever reach audit metadata (PII minimization), never the raw artifacts. The operator's own post-quantum seal never carries a signer's `uuaid` — that assertion is the operator's, not theirs.
+
+**L2 registry trust (G8, corrected — pinned-key, not TOFU, for the attestation itself).** `ESIG_MCP_UUAID_REGISTRY_URL` must be `https://` (no exception — unlike the webhook delivery channel, this URL is queried by the server itself on every L2 check, not a one-time operator-chosen receiver). The registry's badge is verified against `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY` — the registry's pinned Ed25519 public key (64 hex chars, from its `/.well-known/uuaid-registry.json`) — via hash binding, an Ed25519 signature, and freshness, so trust in the badge itself rests on that pin, not on TLS alone. What's still trust-on-first-use (TOFU) is *which* registry an envelope trusts at all, beyond the per-envelope URL pin at creation (G3, above: a later reconfiguration to a different registry URL is refused, but the FIRST registry an envelope's identity policy commits to is trusted as given). Every badge response is snapshotted verbatim into a content-addressed blob (`blobs/identity/<sha256>.json`) with the verification record's `registry.registrySnapshotDigest` referencing it, so the URL's TOFU decision is at least auditable after the fact even though it isn't pinned in advance.
 
 ## Data directory layout
 
@@ -199,7 +280,7 @@ Everything this server persists lives under `ESIG_MCP_DATA_DIR` (default `./.esi
 | `pq-keys.json` | The tenant's post-quantum key bundle, encrypted at rest (present when `ESIG_MCP_PQ` is on). |
 | `inbox/` (`ESIG_MCP_DOCS_ROOT`) | Where a caller-supplied `path` input to `esig_verify_document` / `esig_ingest_document` is confined — never an absolute path outside it, a `..` segment, or a symlink escaping it. |
 | `outbox/` | `<envelopeId>.json` — the CREATION receipt (signing links), written only when `ESIG_MCP_DELIVERY=file`. `<envelopeId>.completed.json` — a COMPLETION receipt (R2), written on every terminal seal outcome (`sealed`/`seal_failed`) **regardless of delivery channel**, containing each signer's identity record if any. Both mode `0600`, in a `0700` directory. |
-| `blobs/` | Sealed PDFs (`<tenant>/<envelopeId>/sealed.pdf`, stored by `esig_reseal`/the automatic seal step), and — under `identity/` — content-addressed signer-identity artifacts (proof JSON, presented credential JSON, registry `/resolve` snapshots), named `<sha256-digest>.json`, the same digest recorded in `signers[].identity`. |
+| `blobs/` | Sealed PDFs (`<tenant>/<envelopeId>/sealed.pdf`, stored by `esig_reseal`/the automatic seal step), and — under `identity/` — content-addressed signer-identity artifacts (proof JSON, presented credential JSON, registry signed-badge snapshots), named `<sha256-digest>.json`, the same digest recorded in `signers[].identity`. |
 | `documents/` | Content-addressed workdir for `esig_ingest_document` (docId = sha256 of the bytes) — separate from `inbox/`: this is where *this server* stores bytes it accepted, not where a caller's `path` input is confined. |
 
 `inbox/`, `outbox/`, and `blobs/` are all created empty at startup, before any tool is ever called — the "ready" line on stderr prints their absolute paths.
@@ -239,6 +320,7 @@ Link custody, end to end: a raw signing token exists in exactly one place outsid
 | `ESIG_MCP_ENVELOPES_PER_HOUR` | `60` | Per-process rate limit on envelope creation, `esig_reseal`, and `esig_identity_challenge` (each under its own bucket). |
 | `ESIG_MCP_IDENTITY_MIN_LEVEL` | `none` | Signer-identity floor: `none` \| `L0` \| `L1` \| `L2` — see "Signer identity" above. `esig_create_envelope` may only *raise* this per envelope. |
 | `ESIG_MCP_UUAID_REGISTRY_URL` | — | `https://` UUAID registry base URL. Required when `ESIG_MCP_IDENTITY_MIN_LEVEL=L2`, or when any envelope itself requests `L2`. |
+| `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY` | — | The registry's pinned Ed25519 public key — 64 lowercase hex chars, `keys[].publicKey` (`uuaid-registry-1`) from the registry's `GET /.well-known/uuaid-registry.json`. Every registry-signed badge (`GET /iaaso/v1/badge/{uuaid}`) is verified against this pin before anything in it is trusted. Required when `ESIG_MCP_IDENTITY_MIN_LEVEL=L2`, or when any envelope itself requests `L2`. |
 | `ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC` | `900` | Sole-control challenge lifetime, in seconds. Max `3600`. |
 | `ESIG_CHROME_PATH` / `PUPPETEER_EXECUTABLE_PATH` / `CHROME_PATH` | unset (auto-detect) | Override the Chrome/Chromium executable used to seal envelopes, checked in that order; falls back to a platform scan (or `@sparticuz/chromium` on Lambda/Vercel) when unset. Only needed for sealing — see "Requirements" above and `esig_whoami`'s `sealReady`. |
 

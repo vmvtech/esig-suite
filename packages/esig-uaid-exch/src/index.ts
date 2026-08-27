@@ -40,8 +40,9 @@ export type AssuranceLevel = "L0" | "L1" | "L2" | "L3" | "L4" | "L5";
  * `/Volumes/X/VMV/iaaso/artifacts/schemas/tae/v1/signing-credential/schema.json`
  * — under RedTeam rt-verdict-ESIGMCP-V02-IDENTITY-20260827 (G1a). The prior
  * shape here (`type: ["VerifiableCredential","UaidSigningCredential"]`, a
- * root `@context`, and a `credentialSubject` carrying `id`/`principal`/
- * `authenticator.public_key_jwk`/`assurance_evidence`/`kya_hash`) was never
+ * root `@context`, and a `credentialSubject` carrying `id`/`principal`/ a
+ * nested authenticator key field (not `credentialSubject.key.publicKey`)/
+ * `assurance_evidence`/`kya_hash`) was never
  * checked against the real schema and does not match it — see CHANGELOG for
  * the full before/after diff. Both the schema root and its
  * `credentialSubject`/`scope`/`key` objects are `additionalProperties:
@@ -51,15 +52,16 @@ export type AssuranceLevel = "L0" | "L1" | "L2" | "L3" | "L4" | "L5";
  *     required `schemaVersion`, `issuedAt`, `subjectRef`; `type` narrowed
  *     from a two-element VC tuple to the schema's `const
  *     "IAASOSigningCredential"`.
- *   - `credentialSubject`: dropped `id`, `principal`,
- *     `authenticator.public_key_jwk`, `assurance_evidence`, `kya_hash` (none
+ *   - `credentialSubject`: dropped `id`, `principal`, the nested
+ *     authenticator key field, `assurance_evidence`, `kya_hash` (none
  *     exist in the schema); kept `assurance_level`; `scope` renamed/aligned
  *     to the schema's own field names (`counterparties` not
  *     `counterparty_allowlist`, `geography` not `geographies`, no
  *     `resource_pattern`/`assurance_min`); added the schema's real key
  *     object, `key: {keyId, publicKey}` (schema.json:80-89) — THIS is the
- *     field RedTeam G1 is about: the drifted `authenticator.public_key_jwk`
- *     named a field that does not exist in the schema at all.
+ *     field RedTeam G1 is about: the drifted authenticator key field
+ *     named a field that does not exist in the schema at all, and the
+ *     correct field is `credentialSubject.key.publicKey`.
  *
  * `proof` and `signatureSuite` reference the schema's own EXTERNAL
  * `common/base-object/v1.1` `$defs` (`signatureEnvelope` /

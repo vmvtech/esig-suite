@@ -28,6 +28,17 @@ Extracted from the Opendelphi production pipeline (live since 2026-05).
 Plus **`migrations/`** (a `tenant_id`-keyed schema bundle) and a **Next.js +
 Supabase starter** under `examples/nextjs-supabase`.
 
+## @e-sig/mcp — for AI agents
+
+An MCP (Model Context Protocol) server so an agent can draft, send, and track
+signature envelopes over `@e-sig/core` directly, with a human holding the pen
+by default. See [`packages/esig-mcp/README.md`](packages/esig-mcp/README.md)
+for the tool list, identity levels, and Claude Code/Cursor/VS Code install snippets.
+
+```bash
+npx @e-sig/mcp demo --auto
+```
+
 ## Quickstart (60 seconds, no services)
 
 Issue a cert → sign a PDF → verify → detect tampering, with nothing but Node:

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.vmvtech/esig-mcp",
+  "title": "e-sig MCP",
+  "description": "MCP server for agent-driven e-signature workflows over @e-sig/core — agents prepare and track envelopes; cryptographic control of signing stays with humans by default.",
+  "version": "0.3.0",
+  "repository": {
+    "url": "https://github.com/vmvtech/esig-suite",
+    "source": "github",
+    "subfolder": "packages/esig-mcp"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@e-sig/mcp",
+      "version": "0.3.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ESIG_MCP_PASSPHRASE",
+          "description": "At-rest encryption passphrase (>=24 characters) for this server's private key material.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "ESIG_MCP_DELIVERY",
+          "description": "Signing-link delivery channel: file | webhook (see README's Security model section).",
+          "isRequired": true,
+          "isSecret": false
+        },
+        {
+          "name": "ESIG_MCP_DATA_DIR",
+          "description": "Local data directory (inbox/outbox/blobs). Defaults to ./.esig-mcp.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

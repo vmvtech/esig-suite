@@ -18,7 +18,7 @@ import http from "node:http";
 import { EnvelopeError as CoreEnvelopeError, type TokenResolution } from "@e-sig/core";
 
 import type { Config } from "./config.js";
-import { derivePhase, type EnvelopeService } from "./envelopes.js";
+import { derivePhase, getEnvelopeDocument, type EnvelopeService } from "./envelopes.js";
 import type { IdentityChallengePayload } from "./identity/challenge.js";
 import { getEnvelopeIdentityPolicy, IdentityError, type IdentityLevel, type IdentityProofInput } from "./identity/types.js";
 import { EnvelopeConflictError } from "./stores.js";
@@ -160,6 +160,22 @@ function escapeText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * §13: `Content-Disposition` filename for `GET /sign/<token>/document.pdf`,
+ * derived from the envelope title. Only `[A-Za-z0-9._ -]` survive (so no
+ * quote, backslash, or path separator can ever reach the header value), runs
+ * of whitespace collapse to a single underscore, and an empty/all-stripped
+ * title falls back to a fixed name rather than an empty filename.
+ */
+function sanitizeFilename(title: string): string {
+  const cleaned = title
+    .replace(/[^A-Za-z0-9._ -]+/g, "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .slice(0, 120);
+  return cleaned.length > 0 ? cleaned : "document";
+}
+
 const GATE_SENTENCES: Record<TokenResolution["status"], string> = {
   ok: "It's your turn to sign.",
   not_your_turn: "Waiting on an earlier signer — you'll be notified when it's your turn.",
@@ -284,6 +300,7 @@ function page(opts: { title: string; sentence: string; gateClass: "ok" | "blocke
   .gate.ok { background: #eaf7ea; }
   .gate.blocked { background: #fdeceb; }
   iframe { width: 100%; height: 55vh; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
+  iframe.pdf { height: 70vh; }
   canvas { border: 1px solid #999; border-radius: 4px; touch-action: none; width: 100%; max-width: 500px; height: 160px; display: block; margin: .5rem 0; }
   .row { margin: .75rem 0; }
   button { padding: .5rem 1rem; font-size: 1rem; }
@@ -329,6 +346,7 @@ function renderApprovalPage(
   nonce: string,
   challenge: IdentityChallengePayload | undefined,
   requiredLevel: IdentityLevel,
+  token: string,
 ): { status: number; html: string } {
   if (resolution.status === "invalid") {
     // No envelope content of any kind — there is none to show, and an
@@ -347,12 +365,27 @@ function renderApprovalPage(
     resolution.status === "completed" && derivePhase(envelope) !== "sealed"
       ? SEAL_PENDING_SENTENCE
       : GATE_SENTENCES[resolution.status];
-  // The ONLY place envelope HTML is ever emitted: inside a fully sandboxed
-  // iframe (no allow-scripts, no allow-same-origin, no forms) via an
+  // §13: a PDF envelope shows the EXACT ingested bytes via a plain,
+  // same-origin `<iframe src="/sign/<token>/document.pdf">` — a sandboxed
+  // `srcdoc` iframe cannot host a PDF viewer. `frame-src` in `cspFor` above
+  // already includes `'self'`, so no CSP change is needed for this to load.
+  // For an HTML envelope, this is UNCHANGED and remains the ONLY place
+  // envelope HTML is ever emitted: inside a fully sandboxed iframe (no
+  // allow-scripts, no allow-same-origin, no forms) via an
   // HTML-attribute-escaped srcdoc (I9, T9). `envelope.html` is already the
   // sanitize.ts-stripped body set at creation (esig_create_envelope) — this
   // escaping is the second, independent layer.
-  const iframe = `<iframe sandbox srcdoc="${escapeAttr(envelope.html)}"></iframe>`;
+  const doc = getEnvelopeDocument(envelope);
+  const iframe = doc
+    ? (() => {
+        const documentUrl = `/sign/${encodeURIComponent(token)}/document.pdf`;
+        return (
+          `<iframe class="pdf" src="${escapeAttr(documentUrl)}"></iframe>\n` +
+          `<p><a href="${escapeAttr(documentUrl)}" target="_blank" rel="noopener">Open the PDF in a new tab</a></p>\n` +
+          `<p>Document sha256: <code>${escapeText(doc.sha256)}</code></p>`
+        );
+      })()
+    : `<iframe sandbox srcdoc="${escapeAttr(envelope.html)}"></iframe>`;
   const identityPanel =
     resolution.status === "ok" && requiredLevel !== "none" ? identityProofPanelHtml(requiredLevel, challenge) : "";
   const form = resolution.status === "ok" ? signFormHtml(nonce, requiredLevel !== "none") : "";
@@ -453,6 +486,54 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
         return;
       }
 
+      // §13: GET /sign/<token>/document.pdf — for PDF envelopes only,
+      // streams the EXACT ingested bytes (WYSIWYS). Checked before the plain
+      // /sign/<token> route below, same reason as /challenge above.
+      const documentMatch = /^\/sign\/([^/]+)\/document\.pdf$/.exec(route);
+      if (documentMatch) {
+        if (req.method !== "GET") {
+          sendJson(res, 405, { error: "method not allowed" }, csp);
+          return;
+        }
+        const docToken = decodeURIComponent(documentMatch[1]);
+        const ip = req.socket.remoteAddress ?? "unknown";
+        if (!limiter.allow(ip)) {
+          sendJson(res, 429, { error: "too many requests to /sign — please wait a moment and try again" }, csp);
+          return;
+        }
+        // Any resolvable state except invalid may view the document — the
+        // same "envelope is shown for context" policy the HTML iframe
+        // already follows for every other gate state (not-your-turn,
+        // already-signed, completed, voided, expired all carry an envelope).
+        const resolution = await deps.envelopes.resolve(docToken);
+        if (resolution.status === "invalid") {
+          sendJson(res, 404, { error: GATE_SENTENCES.invalid }, csp);
+          return;
+        }
+        const doc = getEnvelopeDocument(resolution.envelope);
+        if (!doc) {
+          sendJson(res, 404, { error: "this envelope has no PDF document" }, csp);
+          return;
+        }
+        let bytes: Buffer;
+        try {
+          bytes = await deps.envelopes.getDocumentBytes(doc.docId);
+        } catch (e) {
+          sendJson(res, 500, { error: `could not load document: ${messageOf(e)}` }, csp);
+          return;
+        }
+        const filename = `${sanitizeFilename(resolution.envelope.title)}.pdf`;
+        res.writeHead(200, {
+          ...SECURITY_HEADERS,
+          "content-security-policy": csp,
+          "content-type": "application/pdf",
+          "content-length": String(bytes.length),
+          "content-disposition": `inline; filename="${filename}"`,
+        });
+        res.end(bytes);
+        return;
+      }
+
       const signMatch = /^\/sign\/([^/]+)$/.exec(route);
       if (!signMatch) {
         sendJson(res, 404, { error: "not found" }, csp);
@@ -488,7 +569,7 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
             }
           }
         }
-        const rendered = renderApprovalPage(resolution, nonce, challenge, requiredLevel);
+        const rendered = renderApprovalPage(resolution, nonce, challenge, requiredLevel, token);
         sendHtml(res, rendered.status, rendered.html, csp);
         return;
       }
