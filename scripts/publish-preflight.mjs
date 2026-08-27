@@ -21,6 +21,14 @@
 //     version is not yet on the registry, dependencies first. Versions that
 //     are already live are SKIPPED, so re-running the workflow after a
 //     partial failure converges instead of dying on EPUBLISHCONFLICT.
+//   node scripts/publish-preflight.mjs --dry-run
+//     Same plan, but runs `npm publish --dry-run` ONLY for the packages the
+//     plan would publish. A bare `npm publish --dry-run --workspaces` cannot
+//     be used as the pack gate any more: npm 11 refuses a workspace whose
+//     version is already live ("cannot publish over the previously published
+//     versions") even in dry-run mode, so once any workspace sits at a
+//     published version that step fails by construction (2026-08-27 run
+//     33127544324 failed on @e-sig/hsm-pkcs11@0.1.0 this way).
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -179,41 +187,51 @@ function printPlan({ errors, actions }) {
   for (const error of errors) console.error(`\n✗ ${error}`);
 }
 
+/** npm argv for one planned publish; `dryRun` appends `--dry-run` (pack gate only). */
+export function publishArgs(pkg, tag, { dryRun = false } = {}) {
+  const args = ["publish", "-w", pkg.name, "--access", "public"];
+  // The explicit --tag flag is LOAD-BEARING, not belt-and-braces: npm ignores
+  // a workspace's publishConfig.tag when publishing via `npm publish -w`
+  // (verified on npm 10.9.3 and 11.5.1 — dry-run shows "tag latest" for
+  // @e-sig/uaid-exch despite publishConfig.tag "preview"). Without this flag
+  // the preview package would be published as `latest`.
+  if (tag !== "latest") args.push("--tag", tag);
+  if (dryRun) args.push("--dry-run");
+  return args;
+}
+
 async function main() {
   const publishMode = process.argv.includes("--publish");
+  const dryRunMode = process.argv.includes("--dry-run");
   const rootDir = process.cwd();
   const plan = await computePlan(rootDir);
-  console.log(publishMode ? "Publish plan:" : "Preflight publish plan:");
+  console.log(publishMode ? "Publish plan:" : dryRunMode ? "Pack dry-run plan:" : "Preflight publish plan:");
   printPlan(plan);
   if (plan.errors.length > 0) {
     console.error("\nPreflight FAILED — nothing was published.");
     process.exit(1);
   }
-  if (!publishMode) {
+  if (!publishMode && !dryRunMode) {
     console.log("\nPreflight OK.");
     return;
   }
   for (const { pkg, action, tag } of plan.actions) {
     if (action !== "publish") continue;
-    const args = ["publish", "-w", pkg.name, "--access", "public"];
-    // The explicit --tag flag is LOAD-BEARING, not belt-and-braces: npm ignores
-    // a workspace's publishConfig.tag when publishing via `npm publish -w`
-    // (verified on npm 10.9.3 and 11.5.1 — dry-run shows "tag latest" for
-    // @e-sig/uaid-exch despite publishConfig.tag "preview"). Without this flag
-    // the preview package would be published as `latest`.
-    if (tag !== "latest") args.push("--tag", tag);
+    const args = publishArgs(pkg, tag, { dryRun: dryRunMode });
     console.log(`\n$ npm ${args.join(" ")}`);
     const res = spawnSync("npm", args, { stdio: "inherit" });
     if (res.status !== 0) {
       console.error(
-        `\n✗ publish of ${pkg.name}@${pkg.version} failed (exit ${res.status}). ` +
-          "Fix the cause and re-run this workflow: already-published packages will be " +
-          "skipped and the remaining ones published.",
+        dryRunMode
+          ? `\n✗ pack dry-run of ${pkg.name}@${pkg.version} failed (exit ${res.status}). Nothing was published.`
+          : `\n✗ publish of ${pkg.name}@${pkg.version} failed (exit ${res.status}). ` +
+              "Fix the cause and re-run this workflow: already-published packages will be " +
+              "skipped and the remaining ones published.",
       );
       process.exit(res.status ?? 1);
     }
   }
-  console.log("\nAll packages published (or already current).");
+  console.log(dryRunMode ? "\nPack dry-run OK for every planned package." : "\nAll packages published (or already current).");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

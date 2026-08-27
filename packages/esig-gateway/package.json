@@ -8,7 +8,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "esig-assurance-gateway": "./dist/bin.js"
+    "esig-assurance-gateway": "dist/bin.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

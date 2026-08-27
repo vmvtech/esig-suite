@@ -44,7 +44,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/vmvtech/esig-suite.git",
+    "url": "git+https://github.com/vmvtech/esig-suite.git",
     "directory": "packages/esig-uuaid"
   },
   "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-uuaid#readme",

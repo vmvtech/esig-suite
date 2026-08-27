@@ -1,14 +1,14 @@
 {
   "name": "@e-sig/core",
   "version": "0.8.0",
-  "description": "Self-contained PKCS#7 PDF signing \u2014 no SaaS, no metering, no per-doc fees. Render\u2192sign\u2192verify engine + pluggable persistence interfaces + end-to-end signDocument() orchestrator.",
+  "description": "Self-contained PKCS#7 PDF signing — no SaaS, no metering, no per-doc fees. Render→sign→verify engine + pluggable persistence interfaces + end-to-end signDocument() orchestrator.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "esig": "./dist/bin/esig.js"
+    "esig": "dist/bin/esig.js"
   },
   "exports": {
     ".": {
@@ -72,7 +72,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/vmvtech/esig-suite.git",
+    "url": "git+https://github.com/vmvtech/esig-suite.git",
     "directory": "packages/esig-core"
   },
   "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-core#readme",

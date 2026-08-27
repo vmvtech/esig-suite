@@ -16,6 +16,8 @@ import {
   planPublishes,
 } from "./publish-preflight.mjs";
 
+import { publishArgs } from "./publish-preflight.mjs";
+
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 function writeManifest(dir, manifest) {
@@ -90,6 +92,21 @@ describe("discoverPackages", () => {
         "@e-sig/mcp",
       ]),
     );
+  });
+});
+
+describe("publishArgs", () => {
+  const pkg = { name: "@fix/a", version: "1.2.3" };
+  it("publishes a stable version with --access public and no --tag", () => {
+    expect(publishArgs(pkg, "latest")).toEqual(["publish", "-w", "@fix/a", "--access", "public"]);
+  });
+  it("carries a non-latest dist-tag as an explicit --tag flag (npm ignores publishConfig.tag under -w)", () => {
+    expect(publishArgs(pkg, "preview")).toEqual(["publish", "-w", "@fix/a", "--access", "public", "--tag", "preview"]);
+  });
+  it("appends --dry-run for the pack gate so only PLANNED packages are dry-run (npm 11 refuses already-live workspaces even in dry-run)", () => {
+    expect(publishArgs(pkg, "preview", { dryRun: true })).toEqual([
+      "publish", "-w", "@fix/a", "--access", "public", "--tag", "preview", "--dry-run",
+    ]);
   });
 });
 

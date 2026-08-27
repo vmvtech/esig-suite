@@ -42,7 +42,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/vmvtech/esig-suite.git",
+    "url": "git+https://github.com/vmvtech/esig-suite.git",
     "directory": "packages/esig-supabase"
   },
   "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-supabase#readme",
