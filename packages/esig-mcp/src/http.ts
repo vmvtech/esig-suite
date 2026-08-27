@@ -18,7 +18,7 @@ import http from "node:http";
 import { EnvelopeError as CoreEnvelopeError, type TokenResolution } from "@e-sig/core";
 
 import type { Config } from "./config.js";
-import type { EnvelopeService } from "./envelopes.js";
+import { derivePhase, type EnvelopeService } from "./envelopes.js";
 import { EnvelopeConflictError } from "./stores.js";
 import { messageOf } from "./tools/helpers.js";
 
@@ -168,6 +168,12 @@ const GATE_SENTENCES: Record<TokenResolution["status"], string> = {
   invalid: "This signing link is invalid or unknown.",
 };
 
+// D1: shown instead of GATE_SENTENCES.completed for a `completed` envelope
+// whose seal step hasn't produced a sealed PDF yet (phase `seal_failed` or
+// `awaiting_seal`) — the signature is recorded either way; only the sealed
+// artifact is pending.
+const SEAL_PENDING_SENTENCE = "Your signature is recorded. The operator will produce the sealed PDF.";
+
 // Vanilla-JS signature pad + consent + submit. Static apart from the CSP
 // nonce (LOW-1), so there is nothing here for agent-authored content to
 // inject into — the only dynamic content on the page (the envelope HTML)
@@ -272,16 +278,23 @@ ${opts.body}
 }
 
 function renderApprovalPage(resolution: TokenResolution, nonce: string): { status: number; html: string } {
-  const sentence = GATE_SENTENCES[resolution.status];
-
   if (resolution.status === "invalid") {
     // No envelope content of any kind — there is none to show, and an
     // invalid/guessed token must not be distinguishable from "exists but
     // you can't see it".
+    const sentence = GATE_SENTENCES.invalid;
     return { status: 404, html: page({ title: "Signing link not found", sentence, gateClass: "blocked", body: "" }) };
   }
 
   const { envelope } = resolution;
+  // D1: a `completed` envelope whose seal step hasn't produced a sealed PDF
+  // yet (phase `seal_failed` or `awaiting_seal`) shows the seal-pending
+  // sentence instead of "every signer has signed" — the signature really is
+  // recorded either way; only the sealed artifact is pending.
+  const sentence =
+    resolution.status === "completed" && derivePhase(envelope) !== "sealed"
+      ? SEAL_PENDING_SENTENCE
+      : GATE_SENTENCES[resolution.status];
   // The ONLY place envelope HTML is ever emitted: inside a fully sandboxed
   // iframe (no allow-scripts, no allow-same-origin, no forms) via an
   // HTML-attribute-escaped srcdoc (I9, T9). `envelope.html` is already the
@@ -398,6 +411,25 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
 
         try {
           const summary = await deps.envelopes.sign(token, parsed.signatureImageDataUrl);
+          // D1(a): a seal failure (or a completed envelope whose seal never
+          // ran) is NOT an error — `sign()` never throws for it, and this
+          // must not respond 500 either. The signature IS validly recorded;
+          // only the sealed PDF is still pending (retryable via
+          // esig_reseal).
+          if (summary.phase === "seal_failed" || summary.phase === "awaiting_seal") {
+            sendJson(
+              res,
+              202,
+              {
+                status: "signed",
+                envelopeId: summary.envelopeId,
+                sealed: false,
+                message: "Your signature is recorded. The operator will produce the sealed PDF.",
+              },
+              csp,
+            );
+            return;
+          }
           sendJson(
             res,
             200,

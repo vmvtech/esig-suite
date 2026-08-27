@@ -7,18 +7,33 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 /**
- * Build a successful tool result: a human-readable summary line (what an
- * agent reads first) plus JSON-safe structured content (what an agent
- * parses). `JSON.parse(JSON.stringify(...))` both guarantees the structured
- * content is plain, serializable data (no class instances, no `Buffer`s
- * leaking through) and satisfies the SDK's `Record<string, unknown>` shape
- * for `structuredContent` without an unchecked type assertion.
+ * Build a successful tool result. `JSON.parse(JSON.stringify(...))` both
+ * guarantees the structured content is plain, serializable data (no class
+ * instances, no `Buffer`s leaking through) and satisfies the SDK's
+ * `Record<string, unknown>` shape for `structuredContent` without an
+ * unchecked type assertion.
+ *
+ * D5: `content[0]` is a JSON text block MIRRORING `structuredContent` — some
+ * MCP clients only ever read `content[]` (never `structuredContent`), and
+ * for those a prose-only `content[0]` is unparseable data; `JSON.parse`ing
+ * `content[0].text` now always works. The human-readable summary line moves
+ * to `content[1]` — still present, still what a human/log skims first, just
+ * no longer index 0. When there's no structured `data` at all, there is
+ * nothing to mirror, so `content[0]` is the summary (unchanged in that one
+ * case).
  */
 export function toolResult(summary: string, data?: unknown): CallToolResult {
   const structuredContent =
     data === undefined ? undefined : (JSON.parse(JSON.stringify(data)) as Record<string, unknown>);
+  const content: CallToolResult["content"] =
+    structuredContent === undefined
+      ? [{ type: "text", text: summary }]
+      : [
+          { type: "text", text: JSON.stringify(structuredContent) },
+          { type: "text", text: summary },
+        ];
   return {
-    content: [{ type: "text", text: summary }],
+    content,
     ...(structuredContent !== undefined ? { structuredContent } : {}),
   };
 }

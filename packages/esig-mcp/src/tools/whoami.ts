@@ -54,6 +54,12 @@ export function registerWhoamiTool(server: McpServer, deps: McpServerDeps): void
         };
       }
 
+      // D2: startup Chrome/Chromium preflight — `undefined` (a harness that
+      // didn't supply it) reads as ready, matching `bin.ts`'s own default
+      // posture before it ever probes (see tools/types.ts's own comment).
+      const sealReady = deps.sealReady ?? true;
+      const sealReadyReason = deps.sealReadyReason ?? "not probed";
+
       const info = {
         tenant: config.tenant,
         subjectName: config.subjectName,
@@ -66,6 +72,8 @@ export function registerWhoamiTool(server: McpServer, deps: McpServerDeps): void
           pq: config.pq,
           returnLinks: config.returnLinks,
         },
+        sealReady,
+        sealReadyReason,
         cert: {
           // Only public identifiers of the StoredCert row — never
           // `keyPemEncrypted`, never the decrypted `keyPem`/`certPem` this
@@ -81,7 +89,8 @@ export function registerWhoamiTool(server: McpServer, deps: McpServerDeps): void
       const summary =
         `tenant "${config.tenant}", modes [${config.modes.join(",")}], ` +
         `cert fingerprint ${cert.cert.certFingerprint}` +
-        (postQuantum ? `, pq keyId ${postQuantum.keyId}` : ", post-quantum sealing disabled");
+        (postQuantum ? `, pq keyId ${postQuantum.keyId}` : ", post-quantum sealing disabled") +
+        (sealReady ? "" : `; WARNING: sealing is not available (${sealReadyReason}) — set ESIG_CHROME_PATH`);
 
       return toolResult(summary, info);
     },

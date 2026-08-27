@@ -25,6 +25,7 @@ import { registerWhoamiTool } from "./tools/whoami.js";
 import { registerIngestDocumentTool } from "./tools/ingest-document.js";
 import { registerCreateEnvelopeTool } from "./tools/create-envelope.js";
 import { registerVoidEnvelopeTool } from "./tools/void-envelope.js";
+import { registerResealEnvelopeTool } from "./tools/reseal-envelope.js";
 
 export type { McpServerDeps } from "./tools/types.js";
 
@@ -34,6 +35,7 @@ export const V0_1_TOOL_NAMES = [
   "esig_envelope_status",
   "esig_ingest_document",
   "esig_list_envelopes",
+  "esig_reseal",
   "esig_verify_document",
   "esig_void_envelope",
   "esig_whoami",
@@ -41,9 +43,9 @@ export const V0_1_TOOL_NAMES = [
 
 /**
  * Build a v0.1 `@e-sig/mcp` server: read tools (verify/status/list/whoami)
- * plus prepare tools (ingest/create/void). No sign-as-agent, no co-sign —
- * those are v0.2 and gated by `loadConfig` before this function is ever
- * reached with a mode other than H.
+ * plus prepare tools (ingest/create/void/reseal). No sign-as-agent, no
+ * co-sign — those are v0.2 and gated by `loadConfig` before this function is
+ * ever reached with a mode other than H.
  */
 export function createMcpServer(deps: McpServerDeps): McpServer {
   const server = new McpServer({ name: "esig-mcp", version: "0.1.0" });
@@ -55,6 +57,7 @@ export function createMcpServer(deps: McpServerDeps): McpServer {
   registerIngestDocumentTool(server, deps);
   registerCreateEnvelopeTool(server, deps);
   registerVoidEnvelopeTool(server, deps);
+  registerResealEnvelopeTool(server, deps);
 
   return server;
 }

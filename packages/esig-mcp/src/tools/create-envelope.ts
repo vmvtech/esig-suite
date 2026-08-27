@@ -69,6 +69,11 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
       // receipts array, since the summary line is what an agent reads first.
       const failedDeliveries = result.delivery.filter((r) => !r.ok);
 
+      // D2: `undefined` (a harness that didn't supply it) reads as ready —
+      // see tools/types.ts's own comment; `bin.ts` always supplies the real,
+      // probed value.
+      const sealReady = deps.sealReady ?? true;
+
       const summary =
         `envelope ${result.envelopeId} created with ${result.signers.length} signer(s); ` +
         `signing links delivered via "${deps.config.delivery.kind}"` +
@@ -79,9 +84,26 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
         (failedDeliveries.length > 0
           ? `; WARNING: delivery failed for ${failedDeliveries.length} signer(s): ` +
             failedDeliveries.map((r) => r.detail ?? "unknown error").join("; ")
-          : "");
+          : "") +
+        (sealReady
+          ? ""
+          : `; WARNING: no Chrome/Chromium available on this server (${deps.sealReadyReason}) — ` +
+            "this envelope can be created and signed, but the sealed PDF cannot be produced until " +
+            "sealing works (see esig_reseal)");
 
-      return toolResult(summary, result);
+      return toolResult(summary, {
+        ...result,
+        sealReady,
+        ...(sealReady
+          ? {}
+          : {
+              warning:
+                `No Chrome/Chromium is available on this server (${deps.sealReadyReason}). Signers can ` +
+                "still sign this envelope, but the sealed PDF will not be produced until sealing works " +
+                "— the envelope will land in phase seal_failed after the last signature, and the " +
+                "operator (or an agent, once resolved) can retry with esig_reseal.",
+            }),
+      });
     },
   );
 }

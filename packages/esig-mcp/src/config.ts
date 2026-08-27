@@ -145,8 +145,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
         '"file" (writes one JSON receipt per envelope under <ESIG_MCP_DATA_DIR>/outbox/, the ' +
         'quickstart channel), "console" (prints links to stderr — opt-in only, since in a stdio ' +
         "MCP deployment stderr is the agent harness's own log surface), or " +
-        '"webhook" (POSTs each link to ESIG_MCP_DELIVERY_WEBHOOK_URL). See ' +
-        "docs/architecture/esig-mcp.md §6 I11.",
+        '"webhook" (POSTs each link to ESIG_MCP_DELIVERY_WEBHOOK_URL). See invariant I11: ' +
+        "https://github.com/vmvtech/esig-suite/blob/main/docs/architecture/esig-mcp.md" +
+        "#6-security-invariants-each-becomes-a-test.",
     );
   }
   const deliveryKind = deliveryKindRaw.toLowerCase();

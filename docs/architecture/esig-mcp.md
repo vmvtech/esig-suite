@@ -284,3 +284,95 @@ human ── browser ── signing link (delivered out-of-band) ──┘
 4. Launch slot: does the MCP story lead the Show HN or follow it?
 5. Default delivery channel for v0.1: console/QR only, or also ship the
    email hook (needs SES config → more setup friction in the quickstart)?
+   *(Resolved 2026-08-27 by RedTeam G3: no default; file/console/webhook.)*
+
+## 11. Sealing state and `esig_reseal` (v0.1.1)
+
+Core's `recordSignature` persists `status: "completed"` on the last signer
+*before* the seal step runs, so sealing is modelled as its own tracked,
+retryable step: `metadata.mcp.seal = {status: "sealed" | "failed", error?,
+attempts, lastAttemptAt, sealedPdfPath?}`. A derived `phase` — `sent |
+partially_signed | awaiting_seal | sealed | seal_failed | voided | expired`
+— is what tools report. A seal failure is audited as `envelope.seal_failed`,
+`POST /sign` answers `202 {sealed:false}` (the signature *is* recorded), and
+`esig_reseal(envelopeId)` retries from stored state; `envelope.completed` is
+audited exactly once, on the successful attempt. Startup runs a
+filesystem-only Chrome preflight; `esig_whoami.sealReady` exposes it.
+
+## 12. Signer identity via UUAID + IAASO (v0.2 design, 2026-08-27)
+
+**Goal.** Bind *who signed* to a verifiable identity without inventing a new
+identity system: UUAID identities (`uuaid:<subjectClass>:<jurisdiction>:
+<authority>:<localId>` or `uuaid:foundation:<objectType>:<uuid>`, grammar in
+core `pq-seal.ts`) and IAASO TAE artifacts (`tae/v1` signing-credential /
+exchange / exchange-receipt, assurance ladder L0–L5, ADR-006). Owner
+direction: "uuaid and iaaso integration can help signer identity."
+
+**Levels (map 1:1 to the IAASO ladder; we do not define our own).**
+
+| Level | What is checked | Where |
+|---|---|---|
+| none | nothing (v0.1 behavior) | — |
+| L0 asserted | signer's `uuaid` is well-formed (`isWellFormedUuaidAssertion`) and, if the envelope pinned an expected uuaid at creation, equal to it | local |
+| L1 proven | the signer presents a `DataIntegrityProof` (`eddsa-jcs-2022`, Ed25519) over a server-issued **sole-control challenge**; signature verified locally; key ↔ uuaid binding is self-asserted (IAASO L0/L1 semantics) | local, new `verifyDataIntegrityProof` / `verifyExchange` in `@e-sig/uaid-exch` |
+| L2 registry-bound | L1 plus: `GET /resolve/{uuaid}` on the configured UUAID registry lists the proof's public key (agora key binding), and any presented `UaidSigningCredential` passes `GET /verify/{credentialId}` (valid, active, notExpired); optionally the exchange is submitted and the **receipt** (validation material + anchor) is stored | network, `ESIG_MCP_UUAID_REGISTRY_URL` |
+| L3–L5 | out of scope for v0.2 (DSalvus attestation, chain anchor, QES) | — |
+
+**Challenge (the sole-control evidence).** Issued per signer, single-use,
+15-minute TTL, JCS-canonical:
+`{type:"esig-signer-challenge/v1", envelopeId, signerId, htmlSha256, nonce(32B b64url), issuedAt, expiresAt}`.
+The nonce is stored on the signer (`metadata.identity.challenge`) and
+**consumed atomically** under the envelope store mutex when a proof is
+accepted (I3 class). Obtainable two ways: `GET /sign/<token>/challenge`
+(the human's own link) and the MCP tool `esig_identity_challenge(envelopeId,
+signerId)` (audited) so a sender-side agent can relay it to the signer's
+agent/wallet — the IAASO agent-to-agent exchange path. The challenge is not
+secret; the *proof* is what matters, and it is bound to
+envelope + signer + content digest + nonce + expiry.
+
+**Presenting a proof.** `POST /sign/<token>` gains an optional
+`identityProof: {uuaid, proof: DataIntegrityProof, credential?:
+UaidSigningCredential, exchange?: UaidExchange}`; the approval page gets an
+"attach identity proof" field (paste JSON) for humans whose wallet/agent
+produced it. Verification runs **before** `recordSignature`; a failed or
+mismatched proof refuses the signature (`403`, audited
+`signer.identity_rejected`) — never a silent downgrade.
+
+**Policy.** `ESIG_MCP_IDENTITY_MIN_LEVEL` = `none` (default) | `L0` | `L1` |
+`L2`; `esig_create_envelope` may set `identity: {minLevel, signers[].uuaid}`
+and may only **raise** the level. L2 requires `ESIG_MCP_UUAID_REGISTRY_URL`
+(https) — refused otherwise (fail closed).
+
+**What gets recorded.** Per signer: `{level, uuaid, keyFingerprint
+(sha256 of raw Ed25519 key), proofDigest (sha256 of JCS proof), verifiedAt,
+registry?: {resolvedAt, credentialId?, credentialValid?, receiptId?, anchor?}}`
+— in the envelope, in audit rows (`signer.identity_verified`), in the file
+outbox receipt, and as an "Identity" line in the composed signature block
+that is sealed into the PDF. Full proof JSON is kept in `blobs/`
+(content-addressed), not in audit metadata (PII minimization). The
+operator's PQ-seal `uuaid` stays the *operator's* assertion; signer
+identities are not written into the seal (the seal key is not theirs).
+Phase 2 (core, later): staple the signer-identity manifest into the PDF as
+an append-only incremental update under `/ByteRange`, so
+`esig_verify_document` can surface `signers[]` offline — the PDF-native
+receipt stapling from the IAASO 2701 position.
+
+**Threats added (extend §2).**
+
+| # | Threat | Mitigation |
+|---|---|---|
+| T10 | Forged proof | Ed25519 verified over the exact JCS challenge; unknown cryptosuite/proofPurpose → reject; key from `verificationMethod` (`did:key` Ed25519 multicodec) or the credential's `authenticator.public_key_jwk` only |
+| T11 | Replay / cross-envelope reuse | challenge carries envelopeId + signerId + htmlSha256 + nonce + expiry; nonce single-use, consumed atomically; expired → reject |
+| T12 | Identity substitution | expected uuaid pinned at creation; mismatch refuses; minLevel can only be raised |
+| T13 | Registry trust (L2) | https only; TOFU on the registry today — documented; response shape validated; registry down ⇒ L2 refuses (never silently drops to L1) |
+| T14 | PII in proofs/credentials | only digests, uuaid, key fingerprint in audit; full artifacts in content-addressed blobs |
+
+**Bindings (verified 2026-08-27 by scout).** `@e-sig/uaid-exch`:
+`createExchange`, `exchangeInputFromEsigEnvelope`, `jcs/jcsBytes`,
+`DataIntegrityProof`, `UaidSigningCredential`, `UaidExchange`,
+`assertCredentialUsable` (revocation.ts) — **no verifier exists; must be
+built** (`verifyDataIntegrityProof`, `verifyExchange`, did:key/JWK key
+decoding). Registry: `GET /resolve/{uuaid}` (public; response shape
+**unverified** — type it defensively), `GET /verify/{credentialId}` →
+`{valid, signatureValid, active, notExpired, reason?}`. Core:
+`isWellFormedUuaidAssertion`. IAASO: `/Volumes/X/VMV/iaaso/artifacts/schemas/tae/v1/*`.

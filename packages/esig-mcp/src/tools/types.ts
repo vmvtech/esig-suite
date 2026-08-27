@@ -24,4 +24,14 @@ export interface McpServerDeps {
    * (allowed, audited)").
    */
   auditStore: AuditLogStore;
+  /**
+   * D2: the startup Chrome/Chromium preflight (`chrome-preflight.ts`),
+   * computed once in `bin.ts` before `createMcpServer` is called. Surfaced
+   * by `esig_whoami` and `esig_create_envelope`. Optional so existing
+   * harnesses that don't care about seal readiness (most tests) don't need
+   * to supply it; a missing value is treated as "ready" — `bin.ts` always
+   * supplies the real, probed value.
+   */
+  sealReady?: boolean;
+  sealReadyReason?: string;
 }

@@ -3,6 +3,93 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
+## @e-sig/mcp 0.1.1 — 2026-08-27
+
+Fixes from a fresh-eyes onboarding audit of the published 0.1.0.
+
+### `@e-sig/mcp` 0.1.1: fix — a seal failure could strand a validly-signed envelope (P0, data-corrupting)
+
+`EnvelopeService.sign()` let core's `recordSignature` persist
+`status: "completed"` and then called the seal step; if sealing threw (most
+commonly: no Chrome/Chromium on the host) the envelope was stranded —
+`completed` with no sealed PDF, the signing token already spent (a retry hit
+409), the audit trail showing `envelope.signed` but never
+`envelope.completed`, and `POST /sign` returning `500` even though the
+signature itself was genuinely recorded.
+
+Sealing is now an explicit, retryable, tracked step. A failed attempt is
+caught and persisted as `metadata.mcp.seal = {status:"failed", error,
+attempts, lastAttemptAt}`, audited as `envelope.seal_failed` instead of
+throwing — `POST /sign` now responds `202` (`{status:"signed", sealed:false,
+message}`) rather than `500`, and `GET /sign/<token>` shows the same
+"signature recorded, sealing pending" sentence. A successful attempt sets
+`seal.status = "sealed"` and audits `envelope.completed` exactly once, for
+that attempt. `esig_envelope_status`/`esig_list_envelopes` now return a
+`phase` (`sent | partially_signed | awaiting_seal | sealed | seal_failed |
+voided | expired`) and the envelope's `seal` state. New tool `esig_reseal`
+retries the seal step for a completed-but-unsealed envelope from what's
+already stored — no re-signing needed — gated by the same hourly rate
+limiter `esig_create_envelope` uses.
+
+### `@e-sig/mcp` 0.1.1: fix — Chrome dependency was invisible until the signer's last click
+
+Sealing needs Chrome/Chromium; nothing surfaced that until the last signer
+hit "Sign" and it failed. `bin.ts` now runs a startup preflight (filesystem
+existence/executable-bit checks only — it never launches a browser) and
+prints `[esig-mcp] WARNING: no Chrome/Chromium found — envelopes can be
+created and signed but NOT sealed; set ESIG_CHROME_PATH` when nothing is
+found; the server still starts either way. `esig_whoami` returns
+`sealReady`/`sealReadyReason`; `esig_create_envelope`'s result includes
+`sealReady` and, when false, a `warning` field.
+
+### `@e-sig/mcp` 0.1.1: fix — `--help` didn't mention `ESIG_MCP_DELIVERY` as required
+
+`--help` listed only `ESIG_MCP_PASSPHRASE` as required, even though
+`ESIG_MCP_DELIVERY` has no default and refuses to start without one.
+`--help` now prints the full required/optional environment-variable table
+(with defaults) and the 60-second quickstart, to stdout (not stderr — it
+exits before the MCP stdio transport is ever constructed, so nothing has
+claimed stdout yet). New `--version` flag prints the installed package
+version.
+
+### `@e-sig/mcp` 0.1.1: successful tool results are now JSON-first
+
+`content[0]` on every *successful* tool result is now a JSON text block
+mirroring `structuredContent`, so an MCP client that only reads `content[]`
+(never `structuredContent`) can still `JSON.parse` it; the human-readable
+summary line moves to `content[1]`. Error results (`isError: true`) remain a
+single plain-text message in this release.
+
+### `@e-sig/mcp` 0.1.1: `ESIG_MCP_DATA_DIR`'s `inbox/`, `outbox/`, `blobs/` are now created at startup
+
+Previously created lazily by whichever store/channel/tool touched them
+first. The startup "ready" line on stderr now prints all four paths
+(data dir, inbox, outbox, blobs) absolute.
+
+### `@e-sig/mcp` 0.1.1: README rewrite + doc-link fixes
+
+Added a "Requirements" section (Node, Chrome-for-sealing-only, what still
+works without Chrome) at the top; replaced every relative `../../docs/…`
+link with an absolute GitHub URL (including the one inside a config-error
+message that used to point nowhere for an installed npm package);
+documented `POST /sign`'s request body and its new `202` case, the data
+directory layout, and `esig_reseal`/phase values.
+
+### `@e-sig/core` 0.7.1: docs-only README rewrite
+
+No code changes. `packages/esig-core/README.md` rewritten for the npm
+audience: leads with `npm i @e-sig/core`, a Chrome-free quickstart
+(`generateSelfSignedCert` → `signPdf` on any existing PDF → `verifyPdfSignature`
+→ tamper-and-reject) as the first example, an explicit Requirements section
+naming the Chrome env vars only `renderHtmlToPdf` needs, and every
+relative link that didn't resolve for an npm consumer (a vendored-directory
+`../adapters/*` path, a `supabase/migrations/00106…` path, `.planning/…` —
+none of which exist in this repo's actual layout) replaced with absolute
+GitHub URLs into `vmvtech/esig-suite`. Removed the "drop this directory into
+your project" vendoring narrative and its per-file install instructions,
+which no longer describe how this package is actually consumed (`npm i
+@e-sig/core`).
+
 ## 0.7.0 wave — published 2026-08-27
 
 Ships everything in this section **and** the "0.7.0 — 2026-07-07" section

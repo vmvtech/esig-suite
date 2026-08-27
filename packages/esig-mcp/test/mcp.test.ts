@@ -69,6 +69,49 @@ describe("tools/list — exact v0.1 tool surface (design doc §4)", () => {
   });
 });
 
+describe("tool results — JSON-first content ordering (D5)", () => {
+  it("content[0] is a JSON text block that JSON.parses to structuredContent; content[1] is the human summary", async () => {
+    const { mcpServer } = await buildHarness({ pq: true });
+    const client = await connectedClient(mcpServer);
+
+    const result = await client.callTool({ name: "esig_whoami", arguments: {} });
+    expect(result.isError).not.toBe(true);
+
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content).toHaveLength(2);
+    expect(content[0].type).toBe("text");
+    expect(content[1].type).toBe("text");
+
+    // content[0] must be parseable JSON mirroring structuredContent — the
+    // whole point (D5): a client that only reads content[] can JSON.parse it.
+    expect(() => JSON.parse(content[0].text)).not.toThrow();
+    expect(JSON.parse(content[0].text)).toEqual(result.structuredContent);
+
+    // content[1] is the same human-readable summary line as before —
+    // just no longer at index 0.
+    expect(content[1].text).toMatch(/tenant "test-tenant"/);
+    expect(content[1].text).not.toMatch(/^\{/); // prose, not JSON
+
+    await client.close();
+  });
+
+  it("holds for a second tool too (esig_create_envelope)", async () => {
+    const { mcpServer } = await buildHarness();
+    const client = await connectedClient(mcpServer);
+
+    const result = await client.callTool({
+      name: "esig_create_envelope",
+      arguments: { title: "D5", html: "<p>hi</p>", signers: [{ name: "Alice", email: "alice@example.com" }] },
+    });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(JSON.parse(content[0].text)).toEqual(result.structuredContent);
+    expect(content[1].text).toContain("envelope");
+    expect(content[1].text).not.toMatch(/^\{/);
+
+    await client.close();
+  });
+});
+
 describe("esig_whoami — I1 (no key egress)", () => {
   it("reports identity/caps/fingerprints and never serializes key material", async () => {
     const { mcpServer } = await buildHarness({ pq: true });

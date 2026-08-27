@@ -21,6 +21,8 @@ export {
 
 export { FsDocumentStore, type DocumentStore } from "./documents.js";
 
+export { checkSealReadiness, type SealReadiness } from "./chrome-preflight.js";
+
 export { resolveDocPath, PathEscapesRootError } from "./docs-root.js";
 
 export {
@@ -37,12 +39,15 @@ export {
   EnvelopeService,
   EnvelopeError,
   SEAL_RENDER_LAUNCH_ARGS,
+  derivePhase,
   type EnvelopeServiceDeps,
   type SignerInput,
   type CreateEnvelopeArgs,
   type CreatedSigner,
   type CreateEnvelopeResultSummary,
   type EnvelopeStatusSummary,
+  type EnvelopePhase,
+  type EnvelopeSealState,
 } from "./envelopes.js";
 
 export { verifyDocumentBytes, type VerifyOptions, type VerifyDocumentBytesResult } from "./verify.js";

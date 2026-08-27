@@ -1,6 +1,6 @@
 {
   "name": "@e-sig/mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP (Model Context Protocol) server for agent-driven e-signature workflows over @e-sig/core — agents prepare and track envelopes; cryptographic control of signing stays with humans by default (mode H, docs/architecture/esig-mcp.md).",
   "license": "MIT",
   "type": "module",
