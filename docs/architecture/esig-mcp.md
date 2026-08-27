@@ -341,11 +341,17 @@ mismatched proof refuses the signature (`403`, audited
 **Policy.** `ESIG_MCP_IDENTITY_MIN_LEVEL` = `none` (default) | `L0` | `L1` |
 `L2`; `esig_create_envelope` may set `identity: {minLevel, signers[].uuaid}`
 and may only **raise** the level. L2 requires `ESIG_MCP_UUAID_REGISTRY_URL`
-(https) — refused otherwise (fail closed).
+(https) — refused otherwise (fail closed); the URL in force is **pinned on the
+envelope at creation** (`metadata.mcp.identity.registryUrl`) and a verify
+attempt under a different configured URL refuses with
+`L2_REGISTRY_URL_CHANGED` (RedTeam G3).
 
 **What gets recorded.** Per signer: `{level, uuaid, keyFingerprint
-(sha256 of raw Ed25519 key), proofDigest (sha256 of JCS proof), verifiedAt,
-registry?: {resolvedAt, credentialId?, credentialValid?, receiptId?, anchor?}}`
+(sha256 of raw Ed25519 key), proofDigest (sha256 of JCS proof),
+credentialDigest?, verifiedAt, registry?: {resolvedAt, registrySnapshotDigest,
+credentialId?, credentialValid?, receiptId?, anchor?}}` — every digest names a
+content-addressed file under `blobs/identity/<sha256>.json` (proof,
+credential, `/resolve` snapshot)
 — in the envelope, in audit rows (`signer.identity_verified`), in the file
 outbox receipt, and as an "Identity" line in the composed signature block
 that is sealed into the PDF. Full proof JSON is kept in `blobs/`
@@ -361,10 +367,24 @@ receipt stapling from the IAASO 2701 position.
 
 | # | Threat | Mitigation |
 |---|---|---|
-| T10 | Forged proof | Ed25519 verified over the exact JCS challenge; unknown cryptosuite/proofPurpose → reject; key from `verificationMethod` (`did:key` Ed25519 multicodec) or the credential's `authenticator.public_key_jwk` only |
+| T10 | Forged proof | Ed25519 verified over the exact JCS challenge; unknown cryptosuite/proofPurpose → reject; key from `verificationMethod` (`did:key` Ed25519 multicodec, or a bare JWK `{kty:OKP, crv:Ed25519, x}`) and, when a signing credential is presented, it MUST equal the credential's `credentialSubject.key.publicKey` (the tae/v1 schema field — RedTeam G1 corrected the earlier `authenticator.public_key_jwk`, which does not exist); network-dereferenced methods (`did:web`, URLs) are refused |
 | T11 | Replay / cross-envelope reuse | challenge carries envelopeId + signerId + htmlSha256 + nonce + expiry; nonce single-use, consumed atomically; expired → reject |
 | T12 | Identity substitution | expected uuaid pinned at creation; mismatch refuses; minLevel can only be raised |
-| T13 | Registry trust (L2) | https only; TOFU on the registry today — documented; response shape validated; registry down ⇒ L2 refuses (never silently drops to L1) |
+| T13 | Registry trust (L2) | https only; TOFU on the registry today — documented; response shape validated; the registry URL is **pinned per envelope at creation** and a changed URL refuses (RedTeam G3); the full `/resolve` response is snapshotted into `blobs/` and its digest recorded; registry down ⇒ L2 refuses (never silently drops to L1) |
+| T15 | Downgrade through an error-swallowing path | identity verification runs before `recordSignature` and structurally outside the seal `try/catch` (RedTeam G4); a throwing verifier can never lead to a recorded signature (tested) |
+
+**Clarifications after RedTeam RT-2026-08-27-04 and the build verifier:**
+the challenge's `htmlSha256` is the sha256 of the *immutable base HTML pinned
+at creation* (`metadata.mcp.htmlSha256`), never the composed render, so it is
+stable across signers (G2); challenge issuance is idempotent within the TTL
+and rotates only after consumption or expiry (G5); **L1 proves control of a
+key and binds the `uuaid` only by self-assertion — only L2 binds key ↔ uuaid
+through the registry** (verifier R3); full proof / credential / registry
+snapshot artifacts live in content-addressed `blobs/` with digests in the
+signer record, and a completion receipt `<outbox>/<envelopeId>.completed.json`
+carries `signers[].identity` (verifier R1/R2); `createExchange` signs raw JCS
+bytes (not the W3C double-hash form), so proof *options* are outside the
+signed bytes and `proofDigest` covers them (verifier R5).
 | T14 | PII in proofs/credentials | only digests, uuaid, key fingerprint in audit; full artifacts in content-addressed blobs |
 
 **Bindings (verified 2026-08-27 by scout).** `@e-sig/uaid-exch`:

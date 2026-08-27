@@ -22,40 +22,75 @@
 
 export * from "./revocation.js";
 
+// ============================================================================
+// Local proof verification — did:key/JWK key resolution + eddsa-jcs-2022
+// DataIntegrityProof verification for createExchange()'s output and for
+// arbitrary JCS documents (e.g. the MCP sole-control challenge). See
+// ./verify.ts for the signed-bytes construction and its documented
+// divergence from the W3C eddsa-jcs-2022 cryptosuite.
+// ============================================================================
+
+export * from "./verify.js";
+
 export type AssuranceLevel = "L0" | "L1" | "L2" | "L3" | "L4" | "L5";
 
+/**
+ * IAASO tae/v1 Signing Credential (ADR-006). Reconciled field-for-field
+ * against the authoritative schema —
+ * `/Volumes/X/VMV/iaaso/artifacts/schemas/tae/v1/signing-credential/schema.json`
+ * — under RedTeam rt-verdict-ESIGMCP-V02-IDENTITY-20260827 (G1a). The prior
+ * shape here (`type: ["VerifiableCredential","UaidSigningCredential"]`, a
+ * root `@context`, and a `credentialSubject` carrying `id`/`principal`/
+ * `authenticator.public_key_jwk`/`assurance_evidence`/`kya_hash`) was never
+ * checked against the real schema and does not match it — see CHANGELOG for
+ * the full before/after diff. Both the schema root and its
+ * `credentialSubject`/`scope`/`key` objects are `additionalProperties:
+ * false`, so this type carries EXACTLY the fields the schema allows, no
+ * more:
+ *   - root: dropped `@context` (not a schema property at all); added the
+ *     required `schemaVersion`, `issuedAt`, `subjectRef`; `type` narrowed
+ *     from a two-element VC tuple to the schema's `const
+ *     "IAASOSigningCredential"`.
+ *   - `credentialSubject`: dropped `id`, `principal`,
+ *     `authenticator.public_key_jwk`, `assurance_evidence`, `kya_hash` (none
+ *     exist in the schema); kept `assurance_level`; `scope` renamed/aligned
+ *     to the schema's own field names (`counterparties` not
+ *     `counterparty_allowlist`, `geography` not `geographies`, no
+ *     `resource_pattern`/`assurance_min`); added the schema's real key
+ *     object, `key: {keyId, publicKey}` (schema.json:80-89) — THIS is the
+ *     field RedTeam G1 is about: the drifted `authenticator.public_key_jwk`
+ *     named a field that does not exist in the schema at all.
+ *
+ * `proof` and `signatureSuite` reference the schema's own EXTERNAL
+ * `common/base-object/v1.1` `$defs` (`signatureEnvelope` /
+ * `signatureSuite`), which this package has not fetched — typed
+ * structurally-unknown rather than guessed at.
+ */
 export interface UaidSigningCredential {
-  "@context": string[];
-  type: ["VerifiableCredential", "UaidSigningCredential"];
-  id: string;                         // uuaid:foundation:signing-credential:<uuid>
-  issuer: string;                     // uuaid:foundation:certifier:<uuid>
-  validFrom: string;                  // ISO 8601
-  validUntil: string;                 // ISO 8601, MUST be <= 24h from validFrom
+  id: string;                         // ADR-001 Profile A: uuaid:<authority>:signing-credential:<localId> (schema.json:14-18)
+  type: "IAASOSigningCredential";      // schema.json:19 (const)
+  schemaVersion: string;               // e.g. "1.0" (schema.json:20)
+  issuedAt: string;                    // ISO 8601 (schema.json:21)
+  issuer: string;                      // UUAID ref to the accredited Issuer (schema.json:22-26)
+  subjectRef: string;                  // UUAID ref to the subject this credential authorizes to sign (schema.json:27-31)
   credentialSubject: {
-    id: string;                       // agent uuaid
-    principal: string;                // did:web / did:key / did:pkh
-    scope: {
-      actions: string[];
-      resource_pattern?: string;
-      counterparty_allowlist?: string[];
-      value_ceiling?: { currency: string; amount: number };
-      geographies?: string[];
-      assurance_min?: AssuranceLevel;
+    assurance_level: AssuranceLevel;   // schema.json:37-41
+    scope: {                          // schema.json:42-79 (ADR-007 §3 constraint grammar; all present dims ANDed)
+      actions: string[];               // actionPattern[] (schema.json:48-56)
+      counterparties: string[];        // UUAID refs, or "*" (schema.json:57-62)
+      value_ceiling?: { amount: number; currency: string }; // schema.json:63-72
+      geography?: string[];            // ISO 3166-1 alpha-2, or "*" (schema.json:73-77)
     };
-    authenticator: {
-      type: "platform" | "hardware" | "hsm" | "qscd";
-      attestation?: string;           // e.g. fido-mds3:aaguid:...
-      public_key_jwk: JsonWebKey;
+    key: {                             // schema.json:80-89
+      keyId: string;
+      publicKey: string;
     };
-    assurance_level: AssuranceLevel;
-    assurance_evidence?: Array<{
-      provider: string;               // uuaid:foundation:certifier:<uuid>
-      evidence_uri: string;
-      hash: string;                   // sha256:...
-    }>;
-    kya_hash: string;                 // sha256:...
   };
-  proof: DataIntegrityProof;
+  validFrom: string;                   // ISO 8601 (schema.json:92)
+  validUntil: string;                  // ISO 8601; validUntil - validFrom <= x-iaaso-max-credential-ttl-seconds (86400s), verifier-enforced (schema.json:93-97)
+  status?: "active" | "suspended" | "revoked" | "expired"; // schema.json:98
+  proof: unknown[];                    // signatureEnvelope[] (schema.json:99-104) — external $defs, not fetched
+  signatureSuite?: unknown;            // schema.json:105 — external $defs, not fetched
 }
 
 export interface UaidExchange {

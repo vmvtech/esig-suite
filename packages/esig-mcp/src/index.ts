@@ -52,6 +52,32 @@ export {
 
 export { verifyDocumentBytes, type VerifyOptions, type VerifyDocumentBytesResult } from "./verify.js";
 
+// §12: signer identity via UUAID + IAASO (v0.2).
+export {
+  IDENTITY_LEVEL_ORDER,
+  maxIdentityLevel,
+  IdentityError,
+  getEnvelopeIdentityPolicy,
+  getSignerIdentityState,
+  type IdentityLevel,
+  type EnvelopeIdentityPolicy,
+  type SignerChallengeState,
+  type SignerIdentityRecord,
+  type SignerIdentityRegistryRecord,
+  type SignerIdentityState,
+  type EnvelopeIdentityMetadata,
+  type IdentityProofInput,
+} from "./identity/types.js";
+export {
+  issueChallenge,
+  finalizeChallenge,
+  CHALLENGE_TYPE,
+  ChallengeError,
+  type IdentityChallengePayload,
+} from "./identity/challenge.js";
+export { verifySignerIdentity } from "./identity/verify.js";
+export { RegistryClient, RegistryError, resolveListsKey, type VerifyCredentialResult } from "./identity/registry.js";
+
 export { createMcpServer, V0_1_TOOL_NAMES, type McpServerDeps } from "./server.js";
 
 export { createApprovalServer, createApprovalRequestHandler, type HttpDeps } from "./http.js";

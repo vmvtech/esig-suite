@@ -44,9 +44,22 @@ export function toolResult(summary: string, data?: unknown): CallToolResult {
  * or secret material here (see design doc §6 I1; every call site in this
  * package sources `message` from `messageOf()` below, an `EnvelopeError`'s
  * own `.message`, or a literal string this package wrote itself).
+ *
+ * D7 (finishing the D5 JSON-first change, §12 build ticket): `content[0]` is
+ * now a JSON text block (`{"error": message}`) mirroring `toolResult`'s own
+ * `content[0]`/`content[1]` split — a client that only reads `content[]` and
+ * always JSON.parses `content[0]` (never branching on `isError`) gets
+ * parseable data on both success AND error. `content[1]` stays the same
+ * plain-text summary a human/log skims first.
  */
 export function toolError(message: string): CallToolResult {
-  return { content: [{ type: "text", text: message }], isError: true };
+  return {
+    content: [
+      { type: "text", text: JSON.stringify({ error: message }) },
+      { type: "text", text: message },
+    ],
+    isError: true,
+  };
 }
 
 /** Extract a safe, actionable message from a caught value. Never returns a stack trace. */

@@ -11,6 +11,8 @@
 
 import path from "node:path";
 
+import type { IdentityLevel } from "./identity/types.js";
+
 export type EsigMcpMode = "H" | "A" | "C";
 
 export type DeliveryConfig =
@@ -55,6 +57,12 @@ export interface Config {
   maxHtmlBytes: number;
   maxPdfBytes: number;
   envelopesPerHour: number;
+  /** Signer identity floor (docs/architecture/esig-mcp.md §12 "Policy"). `esig_create_envelope` may only RAISE this per envelope, never lower it. Default "none" (v0.1 behavior — unchanged). */
+  identityMinLevel: IdentityLevel;
+  /** https-only UUAID registry base URL. Required when `identityMinLevel` is "L2" (validated here); required per-envelope at create time when an envelope itself requests L2 (envelopes.ts). */
+  uuaidRegistryUrl?: string;
+  /** Seconds. `ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC`, default 900, max 3600. */
+  identityChallengeTtlSec: number;
 }
 
 export class ConfigError extends Error {
@@ -198,6 +206,57 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     "ESIG_MCP_ENVELOPES_PER_HOUR",
   );
 
+  // ---- Signer identity (docs/architecture/esig-mcp.md §12 "Policy") ----
+
+  const identityMinLevelRaw = env.ESIG_MCP_IDENTITY_MIN_LEVEL?.trim() || "none";
+  const IDENTITY_LEVELS = ["none", "L0", "L1", "L2"] as const;
+  if (!(IDENTITY_LEVELS as readonly string[]).includes(identityMinLevelRaw)) {
+    throw new ConfigError(
+      `ESIG_MCP_IDENTITY_MIN_LEVEL="${identityMinLevelRaw}": expected one of none, L0, L1, L2.`,
+    );
+  }
+  const identityMinLevel = identityMinLevelRaw as IdentityLevel;
+
+  const uuaidRegistryUrlRaw = env.ESIG_MCP_UUAID_REGISTRY_URL?.trim();
+  let uuaidRegistryUrl: string | undefined;
+  if (uuaidRegistryUrlRaw) {
+    let parsedRegistryUrl: URL;
+    try {
+      parsedRegistryUrl = new URL(uuaidRegistryUrlRaw);
+    } catch {
+      throw new ConfigError(`ESIG_MCP_UUAID_REGISTRY_URL is not a valid URL: "${uuaidRegistryUrlRaw}"`);
+    }
+    // T13: the registry is queried over the open network at sign time —
+    // require https:// unconditionally (no escape hatch, unlike the webhook
+    // delivery channel: this URL is queried by the server itself on every L2
+    // verification, not a one-time operator-chosen local receiver).
+    if (parsedRegistryUrl.protocol !== "https:") {
+      throw new ConfigError(
+        `ESIG_MCP_UUAID_REGISTRY_URL must use https:// (got "${parsedRegistryUrl.protocol}//...").`,
+      );
+    }
+    uuaidRegistryUrl = uuaidRegistryUrlRaw.replace(/\/$/, "");
+  }
+  // Fail closed at config time when the SERVER-WIDE floor is L2: identical
+  // per-envelope validation (an envelope may RAISE its own requested level to
+  // L2 even when the config floor is lower) lives in envelopes.ts `create()`.
+  if (identityMinLevel === "L2" && !uuaidRegistryUrl) {
+    throw new ConfigError(
+      'ESIG_MCP_IDENTITY_MIN_LEVEL="L2" requires ESIG_MCP_UUAID_REGISTRY_URL (https://...) to be set.',
+    );
+  }
+
+  const identityChallengeTtlSec = parsePositiveInt(
+    env.ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC,
+    900,
+    "ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC",
+  );
+  if (identityChallengeTtlSec > 3600) {
+    throw new ConfigError(
+      `ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC must be <= 3600 (got ${identityChallengeTtlSec}).`,
+    );
+  }
+
   return {
     modes,
     passphrase,
@@ -214,5 +273,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     maxHtmlBytes,
     maxPdfBytes,
     envelopesPerHour,
+    identityMinLevel,
+    uuaidRegistryUrl,
+    identityChallengeTtlSec,
   };
 }

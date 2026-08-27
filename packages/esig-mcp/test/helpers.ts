@@ -34,6 +34,9 @@ export async function makeConfig(overrides: Partial<Config> = {}): Promise<Confi
     maxHtmlBytes: 1_000_000,
     maxPdfBytes: 25_000_000,
     envelopesPerHour: 1000,
+    identityMinLevel: "none",
+    uuaidRegistryUrl: undefined,
+    identityChallengeTtlSec: 900,
     ...overrides,
   };
 }

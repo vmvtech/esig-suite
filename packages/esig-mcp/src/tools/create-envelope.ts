@@ -22,6 +22,35 @@ const signerSchema = z.object({
     .describe("1-based signing order; equal values sign in parallel. Default 1 (all sign in any order)."),
 });
 
+const identitySignerSchema = z
+  .object({
+    signerId: z.string().optional().describe("A signerId from THIS call's own `signers` list (rarely known in advance — prefer `index`)."),
+    index: z.number().int().min(0).optional().describe("0-based position into THIS call's `signers` array."),
+    uuaid: z.string().min(1).describe("The uuaid this signer is expected to present a proof for (uuaid:<subjectClass>:<jurisdiction>:<authority>:<localId>, or the foundation form)."),
+  })
+  .refine((v) => (v.signerId !== undefined) !== (v.index !== undefined), {
+    message: "exactly one of signerId or index is required",
+  });
+
+const identitySchema = z.object({
+  minLevel: z
+    .enum(["none", "L0", "L1", "L2"])
+    .optional()
+    .describe(
+      "This envelope's signer-identity floor (docs/architecture/esig-mcp.md §12). May only RAISE this " +
+        "server's configured ESIG_MCP_IDENTITY_MIN_LEVEL, never lower it. none: no identity check (v0.1 " +
+        "behavior). L0: signer's uuaid must be well-formed (and match the pin below, if set) — asserted, " +
+        "no cryptographic proof. L1: the signer's wallet/agent must sign a server-issued sole-control " +
+        "challenge — obtain it via esig_identity_challenge or GET /sign/<token>/challenge, then present " +
+        "the resulting DataIntegrityProof as `identityProof` on POST /sign. L2: L1 plus the proof's key " +
+        "must resolve on ESIG_MCP_UUAID_REGISTRY_URL (requires that env var to be configured).",
+    ),
+  signers: z
+    .array(identitySignerSchema)
+    .optional()
+    .describe("Per-signer expected uuaid pins (T12: rejects a proof for any other uuaid). Optional even when minLevel is set."),
+});
+
 export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDeps): void {
   server.registerTool(
     "esig_create_envelope",
@@ -45,9 +74,16 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
           .string()
           .optional()
           .describe("ISO-8601 timestamp after which the envelope expires. Omit for no expiry."),
+        identity: identitySchema
+          .optional()
+          .describe(
+            "Require signer identity (UUAID + IAASO, docs/architecture/esig-mcp.md §12) before a " +
+              "signature is recorded for this envelope. Omit entirely for v0.1 behavior (no identity " +
+              "check) unless this server's own ESIG_MCP_IDENTITY_MIN_LEVEL floor already requires one.",
+          ),
       },
     },
-    async ({ title, html, signers, expiresAt }) => {
+    async ({ title, html, signers, expiresAt, identity }) => {
       let expiresAtDate: Date | undefined;
       if (expiresAt !== undefined) {
         expiresAtDate = new Date(expiresAt);
@@ -58,7 +94,7 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
 
       let result;
       try {
-        result = await deps.envelopes.create({ title, html, signers, expiresAt: expiresAtDate });
+        result = await deps.envelopes.create({ title, html, signers, expiresAt: expiresAtDate, identity });
       } catch (e) {
         return toolError(messageOf(e));
       }
@@ -81,6 +117,9 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
           ? " (ESIG_MCP_RETURN_LINKS=1: raw links are included in this result — local demo only)"
           : " (raw links are withheld from this result by design, invariants I8/T1/T8)") +
         (result.removedTags.length > 0 ? `; stripped from html: ${result.removedTags.join(", ")}` : "") +
+        (result.identityPolicy
+          ? `; requires signer identity level ${result.identityPolicy.minLevel} (esig_identity_challenge issues the sole-control challenge)`
+          : "") +
         (failedDeliveries.length > 0
           ? `; WARNING: delivery failed for ${failedDeliveries.length} signer(s): ` +
             failedDeliveries.map((r) => r.detail ?? "unknown error").join("; ")

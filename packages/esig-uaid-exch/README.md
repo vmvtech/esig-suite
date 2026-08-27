@@ -120,7 +120,41 @@ try {
 }
 ```
 
-**Note:** this module has no exchange-verification path to hook into (verification is network-side per § 8), so `assertCredentialUsable()` is exported standalone — call it before acting on a credential, i.e. before `createExchange()` / `UaidNetworkClient.submit()`.
+**Note:** this module has no revocation-check path to hook into (revocation is network-side per § 8), so `assertCredentialUsable()` is exported standalone — call it before acting on a credential, i.e. before `createExchange()` / `UaidNetworkClient.submit()`. Verifying the proofs *themselves* — no revocation check involved — is covered below.
+
+## Verifying proofs locally
+
+Every `DataIntegrityProof` this package produces (both proofs on a `UaidExchange`, or a standalone challenge proof per § 12 of the [MCP signer-identity design](../../docs/architecture/esig-mcp.md)) can be verified **offline, with no network call**, against a `did:key` or JWK public key.
+
+```ts
+import { createExchange, verifyExchange, verifyDataIntegrityProof } from "@e-sig/uaid-exch";
+
+const exchange = await createExchange(input, agentSigner, issuerSigner);
+
+// Verifies both proofs — proof[0] (agent, "authentication") and proof[1]
+// (issuer, "assertionMethod") — resolving each key from its own
+// verificationMethod (a did:key URI) unless you pass one explicitly.
+const result = verifyExchange(exchange);
+// { ok: true, agent: { ok: true, keyFingerprint, verificationMethod },
+//   issuer: { ok: true, keyFingerprint, verificationMethod }, failures: [] }
+
+if (!result.ok) console.error(result.failures); // e.g. ["agent: signature verification failed"]
+
+// Or verify a single arbitrary DataIntegrityProof over any JCS-canonicalizable
+// document (the primitive verifyExchange is built on):
+verifyDataIntegrityProof(documentWithoutProofField, someProof, {
+  expectedProofPurpose: "authentication", // optional
+  publicKey: rawEd25519PublicKeyBytes,     // optional — skips verificationMethod resolution
+});
+```
+
+Key resolution (`publicKeyFromVerificationMethod`) accepts a `did:key:z...` URI (multibase `z` = base58btc, multicodec `0xed 0x01` + 32 raw Ed25519 bytes) or a raw JWK (`{kty:"OKP", crv:"Ed25519", x}` — **exactly** those three fields; any other field, notably a private-key `d`, is rejected outright) — anything else throws `UnsupportedVerificationMethodError`. `decodeMultibase`/`encodeMultibase` (`z` = base58btc, `u` = base64url) are exported standalone too.
+
+**R6 — `uuaid:...#sk-...` verification methods are NOT independently verifiable.** `AgentSigner.verificationMethod` is documented (and used throughout this package's own tests) as a `uuaid:foundation:agent:<uuid>#sk-<label>` fragment identifier, e.g. `uuaid:foundation:agent:018f7abc#sk-2026-07-04` — this is an IDENTIFIER, not a key-encoding scheme `publicKeyFromVerificationMethod` can decode (it only understands `did:key:` URIs and raw JWKs). `verifyExchange(exchange)` called with **no options** will therefore report `agent.ok: false` (a `reason` string sourced from the internal `UnsupportedVerificationMethodError` — `verifyDataIntegrityProof`/`verifyExchange` never throw, per their own doc comments; they catch it and return `{ok:false, reason}`) for any exchange whose agent proof uses this form — that is not a bug, it is this package correctly refusing to invent a resolution for an identifier scheme it cannot cryptographically dereference. To verify such an exchange you MUST already know the agent's public key out-of-band (e.g. from a prior UUAID registry resolution) and pass it explicitly: `verifyExchange(exchange, { agentPublicKey: rawEd25519Bytes })` (same for `issuerPublicKey`). Do not treat a bare `verifyExchange(exchange)` call as sufficient proof when either `verificationMethod` uses the `uuaid:...#sk-...` form.
+
+**Signed-bytes note:** verification mirrors `createExchange()`'s actual construction — Ed25519 over `jcsBytes(document-with-proof-omitted)` directly — not the W3C `eddsa-jcs-2022` cryptosuite's `sha256(JCS(proofConfig)) || sha256(JCS(document))` double-hash. See the `src/verify.ts` module doc comment for the full divergence note.
+
+**R5 — what a proof's digest does and does not cover.** A `DataIntegrityProof`'s `created`, `verificationMethod`, and `proofPurpose` fields sit OUTSIDE the signed bytes by construction (the divergence note above: `createExchange()` signs only the document, with the whole `proof` object — including these fields — omitted). Consequently, anywhere a consumer (e.g. `@e-sig/mcp`'s signer-identity feature) computes a digest over the *entire presented proof object* (`sha256(jcs(proof))`) as an integrity/audit reference, that digest covers those mutable-by-construction fields too, not just the cryptographically-bound core — two proofs with the identical `proofValue`/signed content but a different `created` timestamp produce two different digests. Treat such a digest as "the digest of the artifact as presented," not as "the digest of what was cryptographically signed."
 
 ## Strictly opt-in
 

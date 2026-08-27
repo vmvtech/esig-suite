@@ -8,12 +8,21 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import type { IdentityLevel } from "./identity/types.js";
+
 export interface DeliveryLink {
   signerId: string;
   name: string;
   email: string;
   /** `${baseUrl}/sign/<raw token>` — treat as a secret; deliver out-of-band. */
   url: string;
+  /**
+   * Informational only (§12) — this envelope's identity requirement, so
+   * whoever relays the link to the signer's wallet/agent knows what's
+   * expected. Never a verified result (that only exists once the signer has
+   * actually presented a proof — see esig_envelope_status instead).
+   */
+  identity?: { minLevel: IdentityLevel; expectedUuaid?: string };
 }
 
 export interface Receipt {
@@ -82,7 +91,13 @@ export class FileDelivery implements DeliveryChannel {
     const payload = {
       envelopeId: envelope.id,
       title: envelope.title,
-      signers: links.map((l) => ({ signerId: l.signerId, name: l.name, email: l.email, url: l.url })),
+      signers: links.map((l) => ({
+        signerId: l.signerId,
+        name: l.name,
+        email: l.email,
+        url: l.url,
+        ...(l.identity ? { identity: l.identity } : {}),
+      })),
       createdAt: new Date().toISOString(),
     };
     await fs.writeFile(file, JSON.stringify(payload, null, 2), { encoding: "utf8", mode: 0o600 });
@@ -143,6 +158,57 @@ export class WebhookDelivery implements DeliveryChannel {
     }
     return receipts;
   }
+}
+
+// ---------- R2: outbox completion receipt ----------
+//
+// Verifier finding R2: the `file` outbox creation receipt above
+// (`<dataDir>/outbox/<envelopeId>.json`) is left exactly as-is; this is a
+// SECOND, independent receipt written once an envelope reaches a terminal
+// seal outcome (`sealed` or `seal_failed`) — regardless of which delivery
+// channel was configured (this is bookkeeping about the ENVELOPE, not about
+// dispatching a signing link, so it is not gated behind `ESIG_MCP_DELIVERY
+// =file`). Same permission discipline as the creation receipt (0700 dir /
+// 0600 file) since signer identity records can carry PII (uuaid, name).
+
+export interface CompletionReceiptSigner {
+  signerId: string;
+  name: string;
+  email: string;
+  /** This signer's verified identity record (§12), when one exists. */
+  identity?: unknown;
+}
+
+/**
+ * Write `<dataDir>/outbox/<envelopeId>.completed.json`. Returns the absolute
+ * file path written. Callers (envelopes.ts `seal()`) are expected to treat
+ * this as best-effort auxiliary bookkeeping — see that call site's own
+ * comment for why a failure here must never propagate.
+ */
+export async function writeOutboxCompletionReceipt(
+  dataDir: string,
+  envelope: { id: string; title: string },
+  status: "sealed" | "seal_failed",
+  signers: CompletionReceiptSigner[],
+  extra: Record<string, unknown> = {},
+): Promise<string> {
+  const dir = path.join(dataDir, "outbox");
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  await fs.chmod(dir, 0o700);
+
+  const file = path.join(dir, `${envelope.id}.completed.json`);
+  const payload = {
+    envelopeId: envelope.id,
+    title: envelope.title,
+    status,
+    signers,
+    ...extra,
+    recordedAt: new Date().toISOString(),
+  };
+  await fs.writeFile(file, JSON.stringify(payload, null, 2), { encoding: "utf8", mode: 0o600 });
+  await fs.chmod(file, 0o600);
+
+  return file;
 }
 
 /** Test double: records every call in-memory instead of delivering anywhere. */

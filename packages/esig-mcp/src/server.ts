@@ -26,13 +26,22 @@ import { registerIngestDocumentTool } from "./tools/ingest-document.js";
 import { registerCreateEnvelopeTool } from "./tools/create-envelope.js";
 import { registerVoidEnvelopeTool } from "./tools/void-envelope.js";
 import { registerResealEnvelopeTool } from "./tools/reseal-envelope.js";
+import { registerIdentityChallengeTool } from "./tools/identity-challenge.js";
 
 export type { McpServerDeps } from "./tools/types.js";
 
-/** The exact v0.1 tool surface, in the order registered. Kept as one list so tests can assert against it directly. */
+/**
+ * The exact tool surface, in the order registered. Kept as one list so tests
+ * can assert against it directly. `esig_identity_challenge` (§12, v0.2) is
+ * always registered — unlike modes A/C, it is read/write only against the
+ * mode-H envelope/challenge state this package already owns, gated purely by
+ * whether an envelope's identity policy is above "none" (loadConfig's I2
+ * fail-closed gate does not apply to it the way it does to modes A/C).
+ */
 export const V0_1_TOOL_NAMES = [
   "esig_create_envelope",
   "esig_envelope_status",
+  "esig_identity_challenge",
   "esig_ingest_document",
   "esig_list_envelopes",
   "esig_reseal",
@@ -58,6 +67,7 @@ export function createMcpServer(deps: McpServerDeps): McpServer {
   registerCreateEnvelopeTool(server, deps);
   registerVoidEnvelopeTool(server, deps);
   registerResealEnvelopeTool(server, deps);
+  registerIdentityChallengeTool(server, deps);
 
   return server;
 }

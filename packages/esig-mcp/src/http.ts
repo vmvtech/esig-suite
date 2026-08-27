@@ -19,6 +19,8 @@ import { EnvelopeError as CoreEnvelopeError, type TokenResolution } from "@e-sig
 
 import type { Config } from "./config.js";
 import { derivePhase, type EnvelopeService } from "./envelopes.js";
+import type { IdentityChallengePayload } from "./identity/challenge.js";
+import { getEnvelopeIdentityPolicy, IdentityError, type IdentityLevel, type IdentityProofInput } from "./identity/types.js";
 import { EnvelopeConflictError } from "./stores.js";
 import { messageOf } from "./tools/helpers.js";
 
@@ -175,13 +177,21 @@ const GATE_SENTENCES: Record<TokenResolution["status"], string> = {
 const SEAL_PENDING_SENTENCE = "Your signature is recorded. The operator will produce the sealed PDF.";
 
 // Vanilla-JS signature pad + consent + submit. Static apart from the CSP
-// nonce (LOW-1), so there is nothing here for agent-authored content to
-// inject into — the only dynamic content on the page (the envelope HTML)
-// lives entirely inside the sandboxed iframe's `srcdoc` attribute, escaped.
-// `nonce` is server-generated (`crypto.randomBytes`, never attacker input),
-// so it is interpolated directly — the same trust boundary as every other
-// server-authored literal in this file's HTML templates.
-function signFormHtml(nonce: string): string {
+// nonce (LOW-1) and the `identityRequired` boolean (server-computed from
+// this envelope's own policy, never attacker input), so there is nothing
+// here for agent-authored content to inject into — the only dynamic content
+// on the page (the envelope HTML) lives entirely inside the sandboxed
+// iframe's `srcdoc` attribute, escaped. `nonce` is server-generated
+// (`crypto.randomBytes`, never attacker input), so it is interpolated
+// directly — the same trust boundary as every other server-authored literal
+// in this file's HTML templates.
+//
+// §12 MUST DO item 5: "when level > none the submit button requires the
+// textarea non-empty" — enforced client-side here (the REAL enforcement is
+// server-side, `EnvelopeService.sign()` throwing IdentityError; this is only
+// UX so a signer without a proof gets an immediate, specific message instead
+// of a generic 403 after drawing their signature).
+function signFormHtml(nonce: string, identityRequired: boolean): string {
   return `
 <div class="row">
   <label><input type="checkbox" id="consent"> I have reviewed the document above and consent to sign electronically.</label>
@@ -229,11 +239,22 @@ function signFormHtml(nonce: string): string {
     var msg = document.getElementById('msg');
     if (!document.getElementById('consent').checked) { msg.textContent = 'Please check the consent box first.'; return; }
     if (!hasInk) { msg.textContent = 'Please draw your signature first.'; return; }
+    var body = { signatureImageDataUrl: canvas.toDataURL('image/png'), consent: true };
+    ${
+      identityRequired
+        ? `
+    var idField = document.getElementById('identityProof');
+    var idText = idField ? idField.value.trim() : '';
+    if (!idText) { msg.textContent = 'This envelope requires an identity proof — paste it in the Identity proof panel above.'; return; }
+    try { body.identityProof = JSON.parse(idText); } catch (e) { msg.textContent = 'Identity proof is not valid JSON.'; return; }
+    `
+        : ""
+    }
     msg.textContent = 'Submitting…';
     fetch(window.location.pathname, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ signatureImageDataUrl: canvas.toDataURL('image/png'), consent: true }),
+      body: JSON.stringify(body),
     })
       .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
       .then(function (res) {
@@ -267,6 +288,10 @@ function page(opts: { title: string; sentence: string; gateClass: "ok" | "blocke
   .row { margin: .75rem 0; }
   button { padding: .5rem 1rem; font-size: 1rem; }
   #msg { margin-top: 1rem; font-weight: 600; }
+  details.identity { margin: 1rem 0; border: 1px solid #ccc; border-radius: 6px; padding: .5rem 1rem; }
+  details.identity summary { cursor: pointer; font-weight: 600; }
+  details.identity textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: .8rem; margin: .5rem 0; }
+  details.identity label { display: block; font-weight: 600; margin-top: .5rem; }
 </style>
 </head>
 <body>
@@ -277,7 +302,34 @@ ${opts.body}
 </html>`;
 }
 
-function renderApprovalPage(resolution: TokenResolution, nonce: string): { status: number; html: string } {
+// §12 MUST DO item 5: "a collapsible 'Identity proof' panel containing the
+// challenge JSON (copyable) and a textarea to paste the proof JSON". Only
+// rendered when this envelope's effective identity level is above "none"
+// AND it's this signer's turn (`resolution.status === "ok"`). `challenge` is
+// `undefined` when issuing it failed (e.g. a transient store error) — the
+// panel still renders so the signer isn't blocked from seeing WHY, they just
+// don't get a pre-filled challenge to copy.
+function identityProofPanelHtml(level: IdentityLevel, challenge: IdentityChallengePayload | undefined): string {
+  const challengeJson = challenge
+    ? escapeText(JSON.stringify(challenge, null, 2))
+    : "(could not issue a challenge — reload this page to retry)";
+  return `
+<details class="identity" open>
+  <summary>Identity proof required: ${escapeText(level)}</summary>
+  <p>This envelope requires identity level <strong>${escapeText(level)}</strong> before your signature can be recorded. Have your wallet/agent sign the challenge below (an eddsa-jcs-2022 DataIntegrityProof over its exact JSON) and paste the resulting proof JSON below.</p>
+  <label for="identityChallenge">Challenge (copyable)</label>
+  <textarea id="identityChallenge" readonly rows="8" onclick="this.select()">${challengeJson}</textarea>
+  <label for="identityProof">Identity proof JSON (paste here)</label>
+  <textarea id="identityProof" rows="8" placeholder='{"uuaid":"...","proof":{...}}'></textarea>
+</details>`;
+}
+
+function renderApprovalPage(
+  resolution: TokenResolution,
+  nonce: string,
+  challenge: IdentityChallengePayload | undefined,
+  requiredLevel: IdentityLevel,
+): { status: number; html: string } {
   if (resolution.status === "invalid") {
     // No envelope content of any kind — there is none to show, and an
     // invalid/guessed token must not be distinguishable from "exists but
@@ -301,7 +353,9 @@ function renderApprovalPage(resolution: TokenResolution, nonce: string): { statu
   // sanitize.ts-stripped body set at creation (esig_create_envelope) — this
   // escaping is the second, independent layer.
   const iframe = `<iframe sandbox srcdoc="${escapeAttr(envelope.html)}"></iframe>`;
-  const form = resolution.status === "ok" ? signFormHtml(nonce) : "";
+  const identityPanel =
+    resolution.status === "ok" && requiredLevel !== "none" ? identityProofPanelHtml(requiredLevel, challenge) : "";
+  const form = resolution.status === "ok" ? signFormHtml(nonce, requiredLevel !== "none") : "";
 
   return {
     status: 200,
@@ -309,7 +363,7 @@ function renderApprovalPage(resolution: TokenResolution, nonce: string): { statu
       title: envelope.title,
       sentence,
       gateClass: resolution.status === "ok" ? "ok" : "blocked",
-      body: iframe + form,
+      body: iframe + identityPanel + form,
     }),
   };
 }
@@ -317,6 +371,7 @@ function renderApprovalPage(resolution: TokenResolution, nonce: string): { statu
 // ---------- Sign error -> HTTP status mapping ----------
 
 function statusForSignError(e: unknown): number {
+  if (e instanceof IdentityError) return 403; // §12: identity failure — never a silent downgrade
   if (e instanceof EnvelopeConflictError) return 409; // I3: a concurrent signature already won
   if (e instanceof CoreEnvelopeError) {
     switch (e.code) {
@@ -361,6 +416,43 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
         return;
       }
 
+      // §12 MUST DO item 5: GET /sign/<token>/challenge — checked before the
+      // plain /sign/<token> route below (its `[^/]+` cannot match a path
+      // containing another "/" anyway, but checking the more specific route
+      // first keeps the routing readable).
+      const challengeMatch = /^\/sign\/([^/]+)\/challenge$/.exec(route);
+      if (challengeMatch) {
+        if (req.method !== "GET") {
+          sendJson(res, 405, { error: "method not allowed" }, csp);
+          return;
+        }
+        const challengeToken = decodeURIComponent(challengeMatch[1]);
+        const ip = req.socket.remoteAddress ?? "unknown";
+        if (!limiter.allow(ip)) {
+          sendJson(res, 429, { error: "too many requests to /sign — please wait a moment and try again" }, csp);
+          return;
+        }
+        const resolution = await deps.envelopes.resolve(challengeToken);
+        if (resolution.status === "invalid") {
+          sendJson(res, 404, { status: "invalid", error: GATE_SENTENCES.invalid }, csp);
+          return;
+        }
+        if (resolution.status !== "ok") {
+          // Same gate states as GET /sign (MUST DO item 5) — informational,
+          // no challenge to issue while it isn't this signer's turn (or the
+          // envelope is already done/voided/expired).
+          sendJson(res, 409, { status: resolution.status, error: GATE_SENTENCES[resolution.status] }, csp);
+          return;
+        }
+        try {
+          const challenge = await deps.envelopes.issueIdentityChallenge(resolution.envelope.id, resolution.signer.id);
+          sendJson(res, 200, challenge, csp);
+        } catch (e) {
+          sendJson(res, 400, { error: messageOf(e) }, csp);
+        }
+        return;
+      }
+
       const signMatch = /^\/sign\/([^/]+)$/.exec(route);
       if (!signMatch) {
         sendJson(res, 404, { error: "not found" }, csp);
@@ -379,7 +471,24 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
 
       if (req.method === "GET") {
         const resolution = await deps.envelopes.resolve(token);
-        const rendered = renderApprovalPage(resolution, nonce);
+        // §12: show the required level + a pre-filled challenge whenever
+        // it's this signer's turn and this envelope requires identity.
+        // `getEnvelopeIdentityPolicy` reads the ALREADY-fetched envelope —
+        // no extra store round trip beyond `resolve()` itself.
+        let requiredLevel: IdentityLevel = "none";
+        let challenge: IdentityChallengePayload | undefined;
+        if (resolution.status === "ok") {
+          requiredLevel = getEnvelopeIdentityPolicy(resolution.envelope)?.minLevel ?? "none";
+          if (requiredLevel !== "none") {
+            try {
+              challenge = await deps.envelopes.issueIdentityChallenge(resolution.envelope.id, resolution.signer.id);
+            } catch {
+              // Non-fatal for page rendering (identityProofPanelHtml handles
+              // `undefined`) — the signer can reload to retry.
+            }
+          }
+        }
+        const rendered = renderApprovalPage(resolution, nonce, challenge, requiredLevel);
         sendHtml(res, rendered.status, rendered.html, csp);
         return;
       }
@@ -391,7 +500,7 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
           return;
         }
 
-        let parsed: { signatureImageDataUrl?: unknown; consent?: unknown };
+        let parsed: { signatureImageDataUrl?: unknown; consent?: unknown; identityProof?: unknown };
         try {
           const raw = await readBody(req, MAX_SIGN_BODY_BYTES);
           parsed = JSON.parse(raw.toString("utf8"));
@@ -409,8 +518,22 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
           return;
         }
 
+        // §12 "Presenting a proof": shape-checked minimally here (uuaid
+        // present) — the rest (proof/credential/exchange) is verified inside
+        // identity/verify.ts, which never throws anything but IdentityError
+        // for a malformed/missing/invalid proof.
+        let identityProof: IdentityProofInput | undefined;
+        if (parsed.identityProof !== undefined) {
+          const raw = parsed.identityProof;
+          if (!raw || typeof raw !== "object" || typeof (raw as Record<string, unknown>).uuaid !== "string") {
+            sendJson(res, 400, { error: "identityProof.uuaid (string) is required when identityProof is present" }, csp);
+            return;
+          }
+          identityProof = raw as unknown as IdentityProofInput;
+        }
+
         try {
-          const summary = await deps.envelopes.sign(token, parsed.signatureImageDataUrl);
+          const summary = await deps.envelopes.sign(token, parsed.signatureImageDataUrl, identityProof);
           // D1(a): a seal failure (or a completed envelope whose seal never
           // ran) is NOT an error — `sign()` never throws for it, and this
           // must not respond 500 either. The signature IS validly recorded;
@@ -442,7 +565,10 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
             csp,
           );
         } catch (e) {
-          sendJson(res, statusForSignError(e), { error: messageOf(e) }, csp);
+          // §12 MUST DO item 5: "identity failure -> 403 {error, reason}".
+          const body: Record<string, unknown> = { error: messageOf(e) };
+          if (e instanceof IdentityError) body.reason = e.reason;
+          sendJson(res, statusForSignError(e), body, csp);
         }
         return;
       }

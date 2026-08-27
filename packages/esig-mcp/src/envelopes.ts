@@ -27,6 +27,7 @@ import {
   createEnvelope,
   ensureActiveCert,
   ensureActivePqKeys,
+  isWellFormedUuaidAssertion,
   recordSignature,
   renderHtmlToPdf,
   resolveSigningToken,
@@ -43,7 +44,27 @@ import {
 } from "@e-sig/core";
 
 import type { Config } from "./config.js";
-import type { DeliveryChannel, DeliveryLink, Receipt } from "./delivery.js";
+import {
+  writeOutboxCompletionReceipt,
+  type CompletionReceiptSigner,
+  type DeliveryChannel,
+  type DeliveryLink,
+  type Receipt,
+} from "./delivery.js";
+import { issueChallenge, type IdentityChallengePayload } from "./identity/challenge.js";
+import { RegistryClient } from "./identity/registry.js";
+import {
+  getEnvelopeIdentityPolicy,
+  getSignerIdentityState,
+  IdentityError,
+  maxIdentityLevel,
+  setEnvelopeIdentityPolicy,
+  type EnvelopeIdentityPolicy,
+  type IdentityLevel,
+  type IdentityProofInput,
+  type SignerIdentityRecord,
+} from "./identity/types.js";
+import { verifySignerIdentity } from "./identity/verify.js";
 import { sanitizeEnvelopeHtml } from "./sanitize.js";
 import { listEnvelopes } from "./stores.js";
 import { messageOf } from "./tools/helpers.js";
@@ -63,11 +84,20 @@ export interface SignerInput {
   order?: number;
 }
 
+/** `esig_create_envelope`'s optional `identity` input (docs/architecture/esig-mcp.md §12 "Policy"). */
+export interface CreateEnvelopeIdentityArgs {
+  /** May only RAISE the server's configured `ESIG_MCP_IDENTITY_MIN_LEVEL` floor, never lower it. */
+  minLevel?: IdentityLevel;
+  /** Per-signer expected uuaid pin (T12). Exactly one of `signerId`/`index` per entry — `index` is a 0-based position into THIS call's `signers` array (server-generated ids don't exist yet at request time). */
+  signers?: Array<{ signerId?: string; index?: number; uuaid: string }>;
+}
+
 export interface CreateEnvelopeArgs {
   title: string;
   html: string;
   signers: SignerInput[];
   expiresAt?: Date;
+  identity?: CreateEnvelopeIdentityArgs;
 }
 
 export interface CreatedSigner {
@@ -85,6 +115,8 @@ export interface CreateEnvelopeResultSummary {
   delivery: Receipt[];
   /** Present ONLY when config.returnLinks is true (I8). */
   links?: Array<{ signerId: string; name: string; email: string; url: string }>;
+  /** This envelope's signer-identity requirement (§12), if any was set. */
+  identityPolicy?: EnvelopeIdentityPolicy;
 }
 
 /**
@@ -131,6 +163,8 @@ export interface EnvelopeStatusSummary {
   status: string;
   /** D1(c): a finer-grained state than `status` alone — see {@link EnvelopePhase}. */
   phase: EnvelopePhase;
+  /** This envelope's signer-identity requirement (§12), if any was set. */
+  identityPolicy?: EnvelopeIdentityPolicy;
   signers: Array<{
     signerId: string;
     name: string;
@@ -138,6 +172,8 @@ export interface EnvelopeStatusSummary {
     status: string;
     order: number;
     signedAt?: string;
+    /** Present once this signer's identity has been verified (§12 "What gets recorded"). */
+    identity?: SignerIdentityRecord;
   }>;
   createdAt: string;
   completedAt?: string;
@@ -159,6 +195,8 @@ interface McpEnvelopeMetadata {
   pqMldsa65Fpr?: string;
   /** D1: explicit, retryable seal state — see `EnvelopeService.seal()`/`.reseal()`. */
   seal?: EnvelopeSealState;
+  /** §12 signer-identity policy + per-signer challenge/verified state — read/written ONLY via identity/types.ts's accessors, never spread/assigned directly. */
+  identity?: import("./identity/types.js").EnvelopeIdentityMetadata;
 }
 
 function mcpMeta(envelope: Envelope): McpEnvelopeMetadata | undefined {
@@ -184,6 +222,20 @@ export interface EnvelopeServiceDeps {
   delivery: DeliveryChannel;
   /** Injectable HTML→PDF renderer. Defaults to core's `renderHtmlToPdf` (needs a real Chrome). */
   render?: (html: string) => Promise<Buffer>;
+  /**
+   * G4 (RedTeam rt-verdict-ESIGMCP-V02-IDENTITY-20260827, MED): injectable
+   * identity verifier, defaulting to the real `verifySignerIdentity`
+   * (identity/verify.ts). Exists so a test can prove the downgrade-path
+   * invariant directly — inject one that THROWS (a plain `Error`, not an
+   * `IdentityError`) and confirm `sign()` still never records a signature,
+   * still writes no `envelope.signed` audit row, and the throw still
+   * propagates all the way to `POST /sign` as a non-2xx response — i.e.
+   * that identity verification really does sit structurally OUTSIDE the
+   * `seal()` error-swallowing try/catch (see `sign()` below: the identity
+   * check runs, and can throw straight out of this function, well before
+   * `recordSignature`/`seal()` are ever reached).
+   */
+  verifySignerIdentity?: typeof verifySignerIdentity;
   /** Injectable clock, for deterministic tests. */
   now?: () => Date;
 }
@@ -250,12 +302,18 @@ export class EnvelopeService {
   private readonly render: (html: string) => Promise<Buffer>;
   private readonly now: () => Date;
   private readonly rateLimiter: HourlyRateLimiter;
+  /** §12 L2: undefined whenever no registry URL is configured — `verifySignerIdentity` fails closed on that (never silently skips L2). */
+  private readonly registryClient?: RegistryClient;
+  /** G4: the real verifier by default; injectable so a test can prove the downgrade-path invariant with one that throws (see `EnvelopeServiceDeps.verifySignerIdentity`). */
+  private readonly verifyIdentity: typeof verifySignerIdentity;
 
   constructor(private readonly deps: EnvelopeServiceDeps) {
     this.render =
       deps.render ?? ((html) => renderHtmlToPdf({ html, launchArgs: [...SEAL_RENDER_LAUNCH_ARGS] }));
     this.now = deps.now ?? (() => new Date());
     this.rateLimiter = new HourlyRateLimiter(deps.config.envelopesPerHour, this.now);
+    this.registryClient = deps.config.uuaidRegistryUrl ? new RegistryClient(deps.config.uuaidRegistryUrl) : undefined;
+    this.verifyIdentity = deps.verifySignerIdentity ?? verifySignerIdentity;
   }
 
   /** `esig_create_envelope`. Sanitizes, caps, rate-limits, mints tokens, delivers links, audits, and returns NO raw tokens by default (I8). */
@@ -268,6 +326,34 @@ export class EnvelopeService {
     const htmlBytes = Buffer.byteLength(args.html ?? "", "utf8");
     if (htmlBytes > config.maxHtmlBytes) {
       throw new EnvelopeError(`html is ${htmlBytes} bytes, exceeds the ${config.maxHtmlBytes}-byte cap`);
+    }
+
+    // §12 "Policy": the effective level may only RAISE the server's
+    // configured floor, never lower it. Validated BEFORE any write (fail
+    // closed) — an L2 request with no registry configured refuses at
+    // creation, matching config.ts's identical server-wide-floor check.
+    const requestedMinLevel = args.identity?.minLevel ?? "none";
+    const effectiveMinLevel = maxIdentityLevel(config.identityMinLevel, requestedMinLevel);
+    if (effectiveMinLevel === "L2" && !config.uuaidRegistryUrl) {
+      throw new EnvelopeError(
+        "identity level L2 requires ESIG_MCP_UUAID_REGISTRY_URL (https://...) to be configured on " +
+          "this server — refusing to create this envelope (fail closed).",
+      );
+    }
+    for (const s of args.identity?.signers ?? []) {
+      if (!isWellFormedUuaidAssertion(s.uuaid)) {
+        throw new EnvelopeError(`identity.signers[].uuaid is not a well-formed uuaid: "${s.uuaid}"`);
+      }
+      const hasSignerId = s.signerId !== undefined;
+      const hasIndex = s.index !== undefined;
+      if (hasSignerId === hasIndex) {
+        throw new EnvelopeError("each identity.signers[] entry needs exactly one of signerId or index");
+      }
+      if (hasIndex && (s.index! < 0 || s.index! >= args.signers.length)) {
+        throw new EnvelopeError(
+          `identity.signers[].index ${s.index} is out of range for ${args.signers.length} signer(s)`,
+        );
+      }
     }
 
     this.rateLimiter.take();
@@ -294,6 +380,32 @@ export class EnvelopeService {
       metadata: { mcp: { htmlSha256, removedTags: removed, returnLinks: config.returnLinks } },
     });
 
+    // §12: per-signer pins need real signerIds, which only exist after
+    // creation — `index` resolves against `envelope.signers`, which core
+    // preserves in the same order as the `args.signers` this call submitted.
+    // One extra write, right after insert and before this envelope's id/
+    // tokens are handed to anyone — nothing else can be racing it yet.
+    let identityPolicy: EnvelopeIdentityPolicy | undefined;
+    const identitySigners = args.identity?.signers ?? [];
+    if (effectiveMinLevel !== "none" || identitySigners.length > 0) {
+      const policySigners: Record<string, { expectedUuaid?: string }> = {};
+      for (const s of identitySigners) {
+        const signerId = s.signerId ?? envelope.signers[s.index!].id;
+        policySigners[signerId] = { expectedUuaid: s.uuaid };
+      }
+      identityPolicy = {
+        minLevel: effectiveMinLevel,
+        signers: policySigners,
+        // G3: pin the registry URL this envelope commits to, ONLY when L2
+        // will actually consult one (the earlier fail-closed check above
+        // already guarantees config.uuaidRegistryUrl is set whenever
+        // effectiveMinLevel is "L2").
+        ...(effectiveMinLevel === "L2" ? { registryUrl: config.uuaidRegistryUrl } : {}),
+      };
+      setEnvelopeIdentityPolicy(envelope, identityPolicy);
+      await this.deps.envelopeStore.update(envelope);
+    }
+
     const links: DeliveryLink[] = signingTokens.map((t) => {
       const signer = envelope.signers.find((s) => s.id === t.signerId)!;
       return {
@@ -301,6 +413,14 @@ export class EnvelopeService {
         name: signer.name,
         email: signer.email,
         url: `${config.baseUrl}/sign/${t.token}`,
+        // Informational only (never a verified record — that only exists
+        // after this signer actually presents a proof): lets the file-outbox
+        // receipt (delivery.ts) tell whoever relays the link what identity
+        // level/uuaid pin this signer is expected to satisfy (§12 "What gets
+        // recorded" — file outbox receipt).
+        ...(identityPolicy
+          ? { identity: { minLevel: identityPolicy.minLevel, expectedUuaid: identityPolicy.signers[signer.id]?.expectedUuaid } }
+          : {}),
       };
     });
 
@@ -337,6 +457,7 @@ export class EnvelopeService {
         signerCount: envelope.signers.length,
         delivery: config.delivery.kind,
         deliveryFailures,
+        identityMinLevel: identityPolicy?.minLevel,
       },
     });
 
@@ -347,6 +468,7 @@ export class EnvelopeService {
       removedTags: removed,
       delivery: receipts,
       ...(config.returnLinks ? { links } : {}),
+      ...(identityPolicy ? { identityPolicy } : {}),
     };
   }
 
@@ -384,8 +506,93 @@ export class EnvelopeService {
     return resolveSigningToken({ store: this.deps.envelopeStore, token });
   }
 
-  /** Approval-page-facing: record a drawn signature; attempts to seal the document when this was the last signer. */
-  async sign(token: string, signatureImageDataUrl: string): Promise<EnvelopeStatusSummary> {
+  /**
+   * `esig_identity_challenge` / `GET /sign/<token>/challenge` (§12
+   * "Challenge"). Rate-limited under the SAME hourly limiter `create()`
+   * draws from (label `"challenge"`, distinct bucket from the default
+   * `"envelope-creation"` one), audited `signer.challenge_issued`.
+   */
+  async issueIdentityChallenge(envelopeId: string, signerId: string): Promise<IdentityChallengePayload> {
+    this.rateLimiter.take("challenge");
+    const payload = await issueChallenge({
+      store: this.deps.envelopeStore,
+      tenantId: this.deps.config.tenant,
+      envelopeId,
+      signerId,
+      ttlSec: this.deps.config.identityChallengeTtlSec,
+      now: this.now,
+    });
+    await this.deps.auditStore.insert({
+      tenantId: this.deps.config.tenant,
+      action: "signer.challenge_issued",
+      targetTable: "envelope",
+      targetId: envelopeId,
+      metadata: { signerId, expiresAt: payload.expiresAt },
+    });
+    return payload;
+  }
+
+  /**
+   * Approval-page-facing: record a drawn signature; attempts to seal the
+   * document when this was the last signer. §12: when this envelope's
+   * effective identity level is above "none", `identityProof` is verified
+   * BEFORE core `recordSignature` runs — a rejection throws
+   * {@link IdentityError} (http.ts maps it to 403) and NO signature is
+   * recorded; success persists the signer's identity record + audits
+   * `signer.identity_verified`, then (and only then) falls through to
+   * `recordSignature` below.
+   */
+  async sign(token: string, signatureImageDataUrl: string, identityProof?: IdentityProofInput): Promise<EnvelopeStatusSummary> {
+    const gate = await resolveSigningToken({ store: this.deps.envelopeStore, token });
+    if (gate.status === "ok") {
+      const policy = getEnvelopeIdentityPolicy(gate.envelope);
+      const minLevel = policy?.minLevel ?? "none";
+      if (minLevel !== "none") {
+        const expectedUuaid = policy?.signers[gate.signer.id]?.expectedUuaid;
+        let record: SignerIdentityRecord | undefined;
+        try {
+          record = await this.verifyIdentity({
+            store: this.deps.envelopeStore,
+            tenantId: this.deps.config.tenant,
+            envelopeId: gate.envelope.id,
+            signerId: gate.signer.id,
+            minLevel,
+            expectedUuaid,
+            proof: identityProof,
+            registry: this.registryClient,
+            // G3: pinned at creation vs. read fresh from config right now —
+            // compared inside verifySignerIdentity before any registry call.
+            pinnedRegistryUrl: policy?.registryUrl,
+            configuredRegistryUrl: this.deps.config.uuaidRegistryUrl,
+            // R1: persists proof/credential/resolve-response JSON via the
+            // same PdfStorageStore seam `seal()` uses for the sealed PDF.
+            blobStore: this.deps.pdfStorage,
+            now: this.now,
+          });
+        } catch (e) {
+          if (e instanceof IdentityError) {
+            await this.deps.auditStore.insert({
+              tenantId: this.deps.config.tenant,
+              action: "signer.identity_rejected",
+              targetTable: "envelope",
+              targetId: gate.envelope.id,
+              metadata: { signerId: gate.signer.id, reason: e.reason, uuaid: e.uuaid, level: e.level },
+            });
+          }
+          throw e;
+        }
+        if (record) {
+          await this.deps.auditStore.insert({
+            tenantId: this.deps.config.tenant,
+            action: "signer.identity_verified",
+            targetTable: "envelope",
+            targetId: gate.envelope.id,
+            metadata: { signerId: gate.signer.id, uuaid: record.uuaid, level: record.level, keyFingerprint: record.keyFingerprint },
+          });
+        }
+      }
+    }
+
     let envelope = await recordSignature({
       store: this.deps.envelopeStore,
       token,
@@ -501,7 +708,11 @@ export class EnvelopeService {
         );
       }
 
-      const composed = composeEnvelopeHtml(envelope, { platformLabel: "e-sig MCP" });
+      // §12 MUST DO item 3: an "Identity attestations" block, one line per
+      // signer whose identity was verified, appended BEFORE rendering — so
+      // it is part of the sealed PDF the signature covers. Every value is
+      // agent/signer-influenced (name, uuaid) and is escaped.
+      const composed = composeEnvelopeHtml(envelope, { platformLabel: "e-sig MCP" }) + identityAttestationsHtml(envelope);
       const pdf = await this.render(composed);
 
       const cert = await ensureActiveCert({
@@ -530,6 +741,11 @@ export class EnvelopeService {
         contactInfo: "",
         name: config.subjectName,
         signingTime: signedAt,
+        // §12 MUST DO item 3: "Do NOT put signer uuaids into the operator PQ
+        // seal" — `pqSeal` here carries only the OPERATOR's own keys, never a
+        // `uuaid` field (mode A/C, not implemented in this package, is the
+        // only caller that would ever set one — see design doc §5 T4). Signer
+        // identities live in `identityAttestationsHtml` above instead.
         pqSeal: pq ? { keys: pq.keys, signedAt } : undefined,
       });
 
@@ -573,6 +789,8 @@ export class EnvelopeService {
         targetId: envelope.id,
         metadata: { error: errorMessage, attempts },
       });
+
+      await this.writeCompletionReceiptBestEffort(updated, "seal_failed", { error: errorMessage, attempts });
 
       return updated;
     }
@@ -619,7 +837,46 @@ export class EnvelopeService {
       },
     });
 
+    await this.writeCompletionReceiptBestEffort(updated, "sealed", { sealedPdfUrl: artifact.uploadedUrl, attempts });
+
     return updated;
+  }
+
+  /**
+   * R2 (verifier finding): a COMPLETION receipt at
+   * `<dataDir>/outbox/<envelopeId>.completed.json`, distinct from and
+   * additional to the `file`-channel CREATION receipt (delivery.ts,
+   * unchanged) — written on every terminal seal outcome regardless of which
+   * delivery channel is configured (this is bookkeeping about the envelope
+   * completing, not about dispatching a signing link).
+   *
+   * Deliberately best-effort: `seal()` NEVER throws for a seal failure (its
+   * own header comment), and it must not start doing so here either — a
+   * disk hiccup writing this SECONDARY artifact must never make an
+   * otherwise-successful (or already-recorded-failed) seal outcome look
+   * like a `sign()` failure to the caller. A write failure is reported once
+   * to stderr and otherwise swallowed; the audit trail above remains the
+   * authoritative record either way.
+   */
+  private async writeCompletionReceiptBestEffort(
+    envelope: Envelope,
+    status: "sealed" | "seal_failed",
+    extra: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const signers: CompletionReceiptSigner[] = envelope.signers.map((s) => ({
+        signerId: s.id,
+        name: s.name,
+        email: s.email,
+        identity: getSignerIdentityState(envelope, s.id)?.verified,
+      }));
+      await writeOutboxCompletionReceipt(this.deps.config.dataDir, envelope, status, signers, extra);
+    } catch (e) {
+      process.stderr.write(
+        `[esig-mcp] WARNING: could not write the outbox completion receipt for envelope ${envelope.id}: ` +
+          `${messageOf(e)} (the audit trail — envelope.completed/envelope.seal_failed — is unaffected).\n`,
+      );
+    }
   }
 }
 
@@ -630,6 +887,7 @@ function summarize(envelope: Envelope): EnvelopeStatusSummary {
     title: envelope.title,
     status: envelope.status,
     phase: derivePhase(envelope),
+    identityPolicy: getEnvelopeIdentityPolicy(envelope),
     signers: envelope.signers.map((s) => ({
       signerId: s.id,
       name: s.name,
@@ -637,6 +895,7 @@ function summarize(envelope: Envelope): EnvelopeStatusSummary {
       status: s.status,
       order: s.order,
       signedAt: s.signedAt?.toISOString(),
+      identity: getSignerIdentityState(envelope, s.id)?.verified,
     })),
     createdAt: envelope.createdAt.toISOString(),
     completedAt: envelope.completedAt?.toISOString(),
@@ -644,4 +903,31 @@ function summarize(envelope: Envelope): EnvelopeStatusSummary {
     sealedPdfUrl: meta?.sealedPdfUrl,
     seal: meta?.seal,
   };
+}
+
+// ---------- §12: "Identity attestations" block appended before rendering ----------
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/**
+ * One line per signer whose identity was verified (§12 MUST DO item 3): name,
+ * uuaid, level, key fingerprint (when there is one — absent at L0), verified
+ * at. Returns `""` when no signer on this envelope has a verified identity
+ * (nothing to append — most envelopes, v0.1 behavior unchanged).
+ */
+function identityAttestationsHtml(envelope: Envelope): string {
+  const rows: string[] = [];
+  for (const signer of envelope.signers) {
+    const record = getSignerIdentityState(envelope, signer.id)?.verified;
+    if (!record) continue;
+    rows.push(
+      `<div>${escapeHtml(signer.name)} — uuaid ${escapeHtml(record.uuaid)}, level ${escapeHtml(record.level)}` +
+        (record.keyFingerprint ? `, key fingerprint ${escapeHtml(record.keyFingerprint)}` : "") +
+        `, verified at ${escapeHtml(record.verifiedAt)}</div>`,
+    );
+  }
+  if (rows.length === 0) return "";
+  return `\n<section class="identity-attestations"><h3>Identity attestations</h3>\n${rows.join("\n")}\n</section>`;
 }

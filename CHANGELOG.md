@@ -3,6 +3,240 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
+## @e-sig/mcp 0.2.0 — 2026-08-27
+
+### `@e-sig/mcp` 0.2.0: add signer identity via UUAID + IAASO (docs/architecture/esig-mcp.md §12)
+
+Bind *who signed* to a verifiable identity, without inventing a new identity
+system: UUAID identifiers and the IAASO assurance ladder (`none`/`L0`/`L1`/
+`L2`, ADR-006). Off by default — set `ESIG_MCP_IDENTITY_MIN_LEVEL` server-wide
+and/or `identity: {minLevel, signers[].uuaid}` per envelope (may only
+*raise* the server floor, never lower it).
+
+**Docs honesty (verifier R3):** `L1` proves control of a *key* — it binds
+the presented `uuaid` to that key only by the signer's own **self-assertion**
+(the signer says "this uuaid is mine" and proves they hold the matching
+private key; nothing here checks that assertion against anything external).
+Only `L2` binds key↔uuaid via the UUAID registry. Read `L1` as "sole
+control of a key, self-asserted identity" — not as "verified identity" —
+until `L2` is in play.
+
+- `L0` (asserted) — the signer's `uuaid` is well-formed and, if pinned at
+  creation, matches it. No cryptographic proof, no key↔uuaid binding at all.
+- `L1` (proven, self-asserted binding) — the signer presents an
+  `eddsa-jcs-2022` `DataIntegrityProof` (new `@e-sig/uaid-exch` dependency:
+  `verifyChallengeProof`, `publicKeyFromVerificationMethod`) over a
+  server-issued, single-use, 15-minute sole-control challenge (`type,
+  envelopeId, signerId, htmlSha256, nonce, issuedAt, expiresAt`) — obtained
+  via the new MCP tool `esig_identity_challenge(envelopeId, signerId)` or
+  `GET /sign/<token>/challenge` (same gate states as `GET /sign`), and
+  presented as `identityProof` on `POST /sign`. This proves the presenter
+  controls the private key behind `proof.verificationMethod`; it does
+  **not** prove that key belongs to the claimed `uuaid` — that binding is
+  self-asserted until `L2`. The nonce is consumed atomically alongside the
+  verified record, in one read-CAS-write (I3 class), only once every
+  required check for the requested level has already passed — a proof is
+  never accepted twice, and a proof over one envelope's challenge is
+  rejected against another's.
+- `L2` (registry-bound — key↔uuaid actually verified) — L1 plus
+  `ESIG_MCP_UUAID_REGISTRY_URL`'s `GET /resolve/{uuaid}` must list the
+  proof's key, and (if a `credential` is presented) its
+  `credentialSubject.key.publicKey` must equal the proof's key, and
+  `GET /verify/{credentialId}` must say `valid && active && notExpired`. A
+  down/unreachable/malformed registry response is a hard failure — this
+  never silently drops to L1 (`ESIG_MCP_UUAID_REGISTRY_URL` is validated
+  `https://`-only at config time and, for a per-envelope request, at
+  creation time, and is *pinned per envelope* at creation — see below).
+
+A rejected identity throws a typed `IdentityError` — `POST /sign` maps it to
+`403 {error, reason}`; `esig_create_envelope`/`esig_envelope_status`/
+`esig_list_envelopes` expose the policy and each signer's verified record
+(`{level, uuaid, keyFingerprint, proofDigest, credentialDigest?, verifiedAt,
+registry?: {resolvedAt, credentialId?, credentialValid?,
+registrySnapshotDigest?, receiptId?, anchor?}}`); the `file` outbox receipt
+carries the identity requirement; a verified signer gets an escaped
+"Identity attestations" line in the composed HTML *before* it is sealed.
+Full artifacts (proof/credential JSON, the registry's `/resolve` response
+snapshot) are persisted content-addressed to `blobs/identity/<sha256>.json`
+(never in audit metadata — only digests and identifiers, PII minimization);
+the operator's own post-quantum seal never carries a signer's `uuaid`.
+
+New env vars: `ESIG_MCP_IDENTITY_MIN_LEVEL` (default `none`),
+`ESIG_MCP_UUAID_REGISTRY_URL`, `ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC` (default
+`900`, max `3600`).
+
+`toolError()` now returns `content[0]` as a JSON `{"error": message}` text
+block (mirroring `toolResult()`'s own JSON-first `content[0]`) with the same
+plain-text summary moved to `content[1]` — finishes the JSON-first change
+0.1.1 started for successful results.
+
+New dependency: `@e-sig/uaid-exch@^0.1.0-preview.2` (workspace).
+
+### `@e-sig/mcp` 0.2.0: signer-identity hardening (2026-08-27 — closing RedTeam rt-verdict-ESIGMCP-V02-IDENTITY-20260827 APPROVE_WITH_GAPS, plus a blind-verifier pass)
+
+- **G1 (HIGH) — the key whitelist named a field that does not exist.**
+  `identityProof.credential.credentialSubject.authenticator.public_key_jwk`
+  was never a real field in `@e-sig/uaid-exch`'s `UaidSigningCredential`
+  (see that package's own entry below for the type reconciliation). When a
+  `credential` is presented alongside a proof, its
+  `credentialSubject.key.publicKey` (the real tae/v1 field) is now decoded
+  (did:key or a `{kty:"OKP",crv:"Ed25519",x}` JWK — never a
+  network-dereferenced form like did:web or an http(s) URL) and MUST equal
+  the proof's own key; a mismatch is rejected (`L1_CREDENTIAL_KEY_MISMATCH`),
+  at whatever level the credential is presented at, not only L2.
+- **G2 (MED) — htmlSha256 anchoring confirmed and pinned.** The sole-control
+  challenge's `htmlSha256` is now read from the IMMUTABLE
+  `metadata.mcp.htmlSha256` pinned at creation (`identity/types.ts`'s new
+  `getPinnedHtmlSha256`), never recomputed from `envelope.html` (which would
+  silently track any future drift) and never derived from the
+  composed/render HTML (which only ever exists as a local variable at seal
+  time). A new test signs with signer 1 and confirms signer 2's
+  subsequently-issued challenge still names the same digest.
+- **G3 (MED) — the registry URL is pinned per envelope at creation.** A new
+  `identityPolicy.registryUrl` (set only when `minLevel` is `L2`) is compared
+  against the server's CURRENTLY configured `ESIG_MCP_UUAID_REGISTRY_URL` at
+  verify time, before any network call; a mismatch refuses with
+  `L2_REGISTRY_URL_CHANGED` — closing the window where repointing the
+  registry between an envelope's creation and a signer's proof would
+  silently change which registry attests the key↔uuaid binding for an
+  already-issued envelope.
+- **G4 (MED) — identity verification confirmed structurally outside the
+  seal-time try/catch.** `EnvelopeService.sign()` runs identity verification
+  BEFORE `recordSignature`, with no enclosing try/catch that could swallow a
+  non-`IdentityError` throw — a new test injects a verifier
+  (`EnvelopeServiceDeps.verifySignerIdentity`, a new DI seam added for this
+  test) that throws a plain `Error` and confirms: the signature is never
+  recorded, `POST /sign` never returns 2xx, and no `envelope.signed` audit
+  row is written.
+- **G5 (LOW) — challenge re-issue is now idempotent within TTL.**
+  `esig_identity_challenge` / `GET /sign/<token>/challenge` return the SAME
+  live, unconsumed, unexpired challenge on re-issue instead of rotating the
+  nonce — a nonce is only ever rotated when the prior one is missing,
+  consumed, or expired. (`signerId` was already validated as belonging to
+  the target envelope, and the per-IP rate limit is unchanged.)
+- **G6 (LOW) — JWK hygiene.** `@e-sig/uaid-exch`'s
+  `publicKeyFromVerificationMethod` now accepts ONLY the exact
+  `{kty, crv, x}` triple — any additional field (notably a private-key `d`)
+  is rejected outright, never silently ignored.
+- **G7 (LOW) — registry-sourced/attacker-supplied strings are bounded before
+  use.** `identityProof.credential.id`, `credentialSubject.key.keyId`, and
+  the registry's `verifyCredential` `reason` text are now length-capped
+  (256) and control-character-rejected before reaching an `IdentityError`
+  message or an audit row. `uuaid` itself was already length-capped (255)
+  and charset-restricted (`[A-Za-z0-9_-]`) by core's
+  `isWellFormedUuaidAssertion` — unchanged, just confirmed and cited.
+- **G8 (LOW) — TOFU conditions for L2 documented** (see the README section
+  below): https-only, no key pinning yet, and the full `/resolve` response
+  is now snapshotted to a content-addressed blob (R1) with the verification
+  record referencing its digest.
+- **R1 (verifier) — identity artifacts are now actually persisted.** The
+  proof JSON, the presented credential JSON (if any), and the registry's
+  `/resolve` response snapshot (L2) are written to
+  `blobs/identity/<sha256>.json` via the same `PdfStorageStore` seam
+  `EnvelopeService` already holds for the sealed PDF — never in audit
+  metadata. `proofDigest` (pre-existing) is now literally the digest that
+  names its own blob file; `credentialDigest` and
+  `registry.registrySnapshotDigest` are new, present only when applicable.
+- **R2 (verifier) — a COMPLETION receipt.** `<dataDir>/outbox/
+  <envelopeId>.completed.json` is now written on every terminal seal outcome
+  (`sealed` or `seal_failed`), regardless of which delivery channel is
+  configured, containing `signers[].identity` — distinct from, and in
+  addition to, the pre-existing CREATION receipt (unchanged). Best-effort:
+  a failure to write it never turns an otherwise-successful (or
+  already-recorded-failed) seal into a `sign()`-level error.
+- **R4** — same as G5 above.
+- **R5 (verifier, no code change)** — see the `@e-sig/uaid-exch` entry
+  below: `DataIntegrityProof` fields outside the signed bytes (`created`,
+  etc.) mean `proofDigest` covers the exact proof object presented,
+  including those mutable-by-construction fields, not just the signed core.
+- **R6 (verifier, no code change)** — see the `@e-sig/uaid-exch` README:
+  `AgentSigner.verificationMethod` forms like `uuaid:...#sk-...` are
+  unverifiable by `verifyExchange` without `opts.agentPublicKey`.
+
+No public API removed; `EnvelopeServiceDeps.verifySignerIdentity` (G4) and
+`VerifySignerIdentityInput.pinnedRegistryUrl`/`.configuredRegistryUrl` (G3)/
+`.blobStore` (R1) are new, optional fields — every existing call site is
+unaffected.
+
+## @e-sig/uaid-exch 0.1.0-preview.2 — 2026-08-27
+
+### `@e-sig/uaid-exch` 0.1.0-preview.2: add local proof verification (`verifyExchange`, `verifyDataIntegrityProof`, `verifyChallengeProof`)
+
+Until now this package could only *create* signed exchanges
+(`createExchange`) — checking a proof required a round-trip to the UUAID
+registry. New `src/verify.ts`, re-exported from the package root:
+
+- `verifyExchange(exchange, opts?)` — verifies both `DataIntegrityProof`s a
+  `createExchange()` output carries (`proof[0]` agent/`authentication`,
+  `proof[1]` issuer/`assertionMethod`, the fixed order `createExchange`
+  itself constructs), resolving each signer's key from its own
+  `verificationMethod` unless `opts.agentPublicKey`/`opts.issuerPublicKey`
+  overrides it. Returns `{ ok, agent, issuer, failures[] }` and never throws.
+- `verifyDataIntegrityProof(document, proof, opts?)` — the primitive
+  `verifyExchange` is built on, for any single `eddsa-jcs-2022` proof over a
+  JCS-canonicalizable `document` (with `proof` already omitted). Rejects an
+  unknown proof type/cryptosuite, a `proofPurpose` mismatch (when
+  `opts.expectedProofPurpose` is given), a bad multibase `proofValue`, a
+  wrong-length public key, or a bad signature — all fail-closed as
+  `{ ok: false, reason }`, matching this package's existing
+  `verifyRevocationListIntegrity` convention.
+- `verifyChallengeProof(challenge, proof, opts?)` — thin alias of the above
+  for a standalone document with no embedded `proof` field, e.g. the MCP
+  sole-control challenge (docs/architecture/esig-mcp.md § 12).
+- `publicKeyFromVerificationMethod(vm)` — resolves the raw 32-byte Ed25519
+  key from a `did:key:z...` URI (multibase + Ed25519 multicodec `0xed 0x01`)
+  or a raw JWK (`{kty:"OKP", crv:"Ed25519", x}`); anything else throws the
+  new `UnsupportedVerificationMethodError`.
+- `decodeMultibase`/`encodeMultibase` — dependency-free `z` (base58btc) /
+  `u` (base64url) codecs, exported standalone.
+
+**Signed-bytes note (divergence from the W3C `eddsa-jcs-2022` cryptosuite,
+intentional, documented in `src/verify.ts`):** `createExchange()`
+(`src/index.ts:229-234`) signs `jcsBytes(document-with-proof-omitted)`
+directly — it does not build the W3C construction's
+`sha256(JCS(proofConfig)) || sha256(JCS(document))`. Verification mirrors
+`createExchange` exactly, for interop with our own artifacts, and a proof
+computed the W3C way over an identical document+key is (correctly) rejected
+— pinned by a dedicated test in `tests/verify.test.ts`.
+
+No new dependencies (base58btc, base64url, and multicodec parsing are all
+inline; Ed25519 verification uses `node:crypto`).
+
+### `@e-sig/uaid-exch` 0.1.0-preview.2: `UaidSigningCredential` reconciled against the real tae/v1 schema (RedTeam G1a); JWK hygiene (G6)
+
+**G1(a) — the `UaidSigningCredential` TS type was never checked against the
+authoritative schema and did not match it.** Reconciled field-for-field
+against `/Volumes/X/VMV/iaaso/artifacts/schemas/tae/v1/signing-credential/
+schema.json`, which is `additionalProperties: false` at both the root and
+`credentialSubject`/`scope`/`key`:
+
+| | Before | After |
+|---|---|---|
+| root `type` | `["VerifiableCredential", "UaidSigningCredential"]` | `"IAASOSigningCredential"` (schema `const`) |
+| root `@context` | `string[]` (required) | **removed** — not a schema property |
+| root, added | — | `schemaVersion`, `issuedAt`, `subjectRef` (all required by the schema) |
+| `credentialSubject.id` | `string` (agent uuaid) | **removed** — not a schema property |
+| `credentialSubject.principal` | `string` | **removed** — not a schema property |
+| `credentialSubject.authenticator.public_key_jwk` | `JsonWebKey` | **removed** — this is the field RedTeam G1 flagged: it does not exist in the schema at all |
+| `credentialSubject.assurance_evidence` | optional array | **removed** — not a schema property |
+| `credentialSubject.kya_hash` | `string` | **removed** — not a schema property |
+| `credentialSubject.key` | *(did not exist)* | **added**: `{keyId: string, publicKey: string}` (schema.json:80-89) — the REAL field a key check belongs on |
+| `credentialSubject.scope.counterparty_allowlist` | optional | renamed to `counterparties` (required, matches schema) |
+| `credentialSubject.scope.geographies` | optional | renamed to `geography` (matches schema) |
+| `credentialSubject.scope.resource_pattern` / `.assurance_min` | optional | **removed** — not schema properties |
+| `proof` | `DataIntegrityProof` (singular) | `unknown[]` — the schema's `proof` is an array of an EXTERNAL `signatureEnvelope` shape (`common/base-object/v1.1` `$defs`, not fetched), not this package's own `DataIntegrityProof` |
+| `signatureSuite` | *(did not exist)* | **added**, `unknown` (also external, not fetched) |
+
+`RevocableCredential = Pick<UaidSigningCredential, "id"|"validFrom"|
+"validUntil">` (revocation.ts) is unaffected — all three fields still exist
+with the same `string` type. No other file in this package or `@e-sig/mcp`
+constructed a full `UaidSigningCredential` literal or read the removed
+fields (checked); only a type-only import.
+
+**G6 — JWK hygiene.** `publicKeyFromVerificationMethod` now rejects a JWK
+carrying ANY field beyond `{kty, crv, x}` — most notably a private-key `d`
+(RFC 8037 §2) — instead of silently ignoring extras.
+
 ## @e-sig/mcp 0.1.1 — 2026-08-27
 
 Fixes from a fresh-eyes onboarding audit of the published 0.1.0.

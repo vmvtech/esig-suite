@@ -66,6 +66,21 @@ const OPTIONAL_ENV_VARS: ReadonlyArray<[name: string, defaultValue: string, note
   ["ESIG_MCP_MAX_PDF_BYTES", "26214400", "Ingested/sealed PDF size cap (25 MiB)."],
   ["ESIG_MCP_ENVELOPES_PER_HOUR", "60", "Per-process rate limit on envelope creation (and esig_reseal)."],
   [
+    "ESIG_MCP_IDENTITY_MIN_LEVEL",
+    "none",
+    "Signer-identity floor: none | L0 | L1 | L2 (docs/architecture/esig-mcp.md §12). esig_create_envelope may only RAISE this per envelope.",
+  ],
+  [
+    "ESIG_MCP_UUAID_REGISTRY_URL",
+    "—",
+    "https:// UUAID registry base URL. Required when ESIG_MCP_IDENTITY_MIN_LEVEL=L2 (or any envelope requests L2).",
+  ],
+  [
+    "ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC",
+    "900",
+    "Sole-control challenge lifetime in seconds. Max 3600.",
+  ],
+  [
     "ESIG_CHROME_PATH / PUPPETEER_EXECUTABLE_PATH / CHROME_PATH",
     "unset",
     "Chrome/Chromium executable override, checked in this order. Only needed for sealing — envelopes " +
