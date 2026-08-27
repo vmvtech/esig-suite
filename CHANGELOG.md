@@ -3,7 +3,23 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
-## Unreleased
+## 0.7.0 wave — published 2026-08-27
+
+Ships everything in this section **and** the "0.7.0 — 2026-07-07" section
+below in one publish: `@e-sig/core@0.7.0`, `@e-sig/supabase@0.3.1`,
+`@e-sig/uuaid@0.1.1`, `@e-sig/uaid-exch@0.1.0-preview.1` (tag `preview`),
+`@e-sig/worm@0.1.0`, `@e-sig/hsm-pkcs11@0.1.0`, and the new
+`@e-sig/mcp@0.1.0`. `@e-sig/react@0.2.1` was already current.
+
+### `@e-sig/mcp` 0.1.0: new package — agent-driven signing with human approval
+
+An MCP server over `@e-sig/core` that lets an untrusted-by-default AI agent
+ingest documents, create multi-signer envelopes, poll status, and verify
+signed PDFs, while signing stays with humans via single-use tokenized links
+in a built-in approval page. Signing tokens never cross MCP; link delivery
+is an explicit operator channel (`ESIG_MCP_DELIVERY`: file outbox, opt-in
+console, https webhook). Design and threat model:
+`docs/architecture/esig-mcp.md`. RedTeam-reviewed before publish.
 
 ### `@e-sig/core`: fix signature-dictionary injection via `signPdf` options (security)
 
@@ -87,7 +103,7 @@ e-sig-signed PDFs, at the request of the UUAID registry lane.
 - One additive break for consumers doing exact-shape assertions:
   `PqSealVerification` gained `uuaidOk`.
 
-## 0.7.0 — 2026-07-07 (not yet published; npm `latest` is `0.6.0`)
+## 0.7.0 — 2026-07-07 (published 2026-08-27 as part of the wave above)
 
 The "tech behind the add-ons" release: every self-serve vertical add-on now
 ships real, tested capability — not a label and a price.
