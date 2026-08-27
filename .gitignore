@@ -1,5 +1,7 @@
 node_modules/
 dist/
+infra/provisioning/lambda/handlers/
+infra/provisioning/packaged-template.yaml
 *.log
 .DS_Store
 .env

@@ -1,0 +1,19 @@
+{
+  "name": "@e-sig/waitlist-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "First-party e-sig pricing waitlist intake API.",
+  "type": "commonjs",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1103.0",
+    "@aws-sdk/client-lambda": "3.1103.0",
+    "@aws-sdk/client-sqs": "3.1103.0"
+  },
+  "scripts": {
+    "canary": "node src/run-canary.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

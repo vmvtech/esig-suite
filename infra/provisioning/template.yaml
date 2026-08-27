@@ -1,0 +1,396 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: e-sig Cloud provisioning control plane (checkout remains separately gated)
+
+Parameters:
+  StripeWebhookSecretArn:
+    Type: String
+    Description: ARN of the Secrets Manager secret containing the Stripe webhook secret
+    AllowedPattern: ^arn:aws[a-zA-Z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:.+$
+  OperationalWorkerEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      IAM gate only. Keep false until the fail-closed worker entrypoint is
+      replaced by an explicitly composed Dynamo/provider runtime.
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [14, 30, 60, 90, 120, 150, 180, 365]
+  WebhookReservedConcurrency:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 50
+  WorkerReservedConcurrency:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 20
+
+Conditions:
+  OperationalWorkerIsEnabled: !Equals [!Ref OperationalWorkerEnabled, "true"]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    Tracing: Active
+    Environment:
+      Variables:
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+
+Resources:
+  HttpApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/http-api/${AWS::StackName}
+      RetentionInDays: !Ref LogRetentionDays
+
+  ProvisioningHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      AccessLogSettings:
+        DestinationArn: !GetAtt HttpApiAccessLogGroup.Arn
+        Format: '{"requestId":"$context.requestId","routeKey":"$context.routeKey","status":"$context.status","responseLatency":"$context.responseLatency"}'
+
+  ControlPlaneTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: e-sig:managed-by
+          Value: cloud-provisioning
+
+  ProvisioningDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - Key: e-sig:managed-by
+          Value: cloud-provisioning
+
+  ProvisioningQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      VisibilityTimeout: 1800
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ProvisioningDeadLetterQueue.Arn
+        maxReceiveCount: 5
+      Tags:
+        - Key: e-sig:managed-by
+          Value: cloud-provisioning
+
+  ProvisioningQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref ProvisioningQueue, !Ref ProvisioningDeadLetterQueue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: sqs:*
+            Resource:
+              - !GetAtt ProvisioningQueue.Arn
+              - !GetAtt ProvisioningDeadLetterQueue.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  CustomerStackExecutionRole:
+    Type: AWS::IAM::Role
+    Condition: OperationalWorkerIsEnabled
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CreateRetainedCustomerDataPlane
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: CreateTaggedCustomerKey
+                Effect: Allow
+                Action: kms:CreateKey
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/e-sig:managed-by: cloud-provisioning
+              - Sid: ManageTaggedCustomerKeys
+                Effect: Allow
+                Action:
+                  - kms:DescribeKey
+                  - kms:EnableKey
+                  - kms:DisableKey
+                  - kms:EnableKeyRotation
+                  - kms:GetKeyPolicy
+                  - kms:PutKeyPolicy
+                  - kms:ListResourceTags
+                  - kms:TagResource
+                  - kms:UntagResource
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/e-sig:managed-by: cloud-provisioning
+              - Sid: CustomerS3Resources
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:GetBucketPolicy
+                  - s3:PutBucketPolicy
+                  - s3:GetBucketTagging
+                  - s3:PutBucketTagging
+                  - s3:GetBucketVersioning
+                  - s3:PutBucketVersioning
+                  - s3:GetEncryptionConfiguration
+                  - s3:PutEncryptionConfiguration
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:GetBucketOwnershipControls
+                  - s3:PutBucketOwnershipControls
+                Resource: !Sub arn:${AWS::Partition}:s3:::esig-*
+              - Sid: CustomerQueueResources
+                Effect: Allow
+                Action:
+                  - sqs:CreateQueue
+                  - sqs:GetQueueAttributes
+                  - sqs:SetQueueAttributes
+                  - sqs:TagQueue
+                  - sqs:UntagQueue
+                Resource: !Sub arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:esig-*
+
+  WebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/
+      Handler: handlers/webhook.handler
+      Description: Verify, claim, and enqueue Stripe webhook events
+      Timeout: 10
+      MemorySize: 256
+      ReservedConcurrentExecutions: !Ref WebhookReservedConcurrency
+      Environment:
+        Variables:
+          CONTROL_PLANE_TABLE: !Ref ControlPlaneTable
+          PROVISIONING_QUEUE_URL: !Ref ProvisioningQueue
+          STRIPE_WEBHOOK_SECRET_ARN: !Ref StripeWebhookSecretArn
+      Events:
+        StripeWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ProvisioningHttpApi
+            Path: /webhooks/stripe
+            Method: POST
+            PayloadFormatVersion: "2.0"
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ControlPlaneTable.Arn
+            - Effect: Allow
+              Action: sqs:SendMessage
+              Resource: !GetAtt ProvisioningQueue.Arn
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref StripeWebhookSecretArn
+
+  WebhookFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${WebhookFunction}
+      RetentionInDays: !Ref LogRetentionDays
+
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/
+      Handler: handlers/worker.handler
+      Description: Fail-closed provisioning worker composition boundary
+      Timeout: 300
+      MemorySize: 512
+      ReservedConcurrentExecutions: !Ref WorkerReservedConcurrency
+      Events:
+        ProvisioningJobs:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ProvisioningQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
+              Resource: !GetAtt ProvisioningQueue.Arn
+            - !If
+              - OperationalWorkerIsEnabled
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:TransactWriteItems
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt ControlPlaneTable.Arn
+              - !Ref AWS::NoValue
+            - !If
+              - OperationalWorkerIsEnabled
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:DescribeStacks
+                  - cloudformation:UpdateStack
+                Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/esig-dedicated-*/*
+              - !Ref AWS::NoValue
+            - !If
+              - OperationalWorkerIsEnabled
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt CustomerStackExecutionRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: cloudformation.amazonaws.com
+              - !Ref AWS::NoValue
+            - !If
+              - OperationalWorkerIsEnabled
+              - Effect: Allow
+                Action:
+                  - secretsmanager:CreateSecret
+                  - secretsmanager:DescribeSecret
+                Resource: !Sub arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:e-sig/cloud/activation/*
+              - !Ref AWS::NoValue
+            - !If
+              - OperationalWorkerIsEnabled
+              - Effect: Allow
+                Action:
+                  - secretsmanager:CreateSecret
+                  - secretsmanager:GetSecretValue
+                Resource: !Sub arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:e-sig/cloud/database-password/*
+              - !Ref AWS::NoValue
+
+  WorkerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${WorkerFunction}
+      RetentionInDays: !Ref LogRetentionDays
+
+  WebhookErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Stripe webhook Lambda errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref WebhookFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  WebhookServerErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Stripe webhook HTTP API 5xx responses
+      Namespace: AWS/ApiGateway
+      MetricName: 5xx
+      Dimensions:
+        - Name: ApiId
+          Value: !Ref ProvisioningHttpApi
+        - Name: Stage
+          Value: $default
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ProvisioningDeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Provisioning jobs exhausted retries
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ProvisioningDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ProvisioningQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Provisioning jobs have not completed within the expected window
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ProvisioningQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 900
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  StripeWebhookUrl:
+    Value: !Sub https://${ProvisioningHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/webhooks/stripe
+  ControlPlaneTableName:
+    Value: !Ref ControlPlaneTable
+  ProvisioningQueueUrl:
+    Value: !Ref ProvisioningQueue
+  ProvisioningQueueArn:
+    Value: !GetAtt ProvisioningQueue.Arn
+  CustomerStackExecutionRoleArn:
+    Condition: OperationalWorkerIsEnabled
+    Value: !GetAtt CustomerStackExecutionRole.Arn

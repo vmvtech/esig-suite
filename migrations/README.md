@@ -18,10 +18,21 @@ bundle per tenant, RLS mirroring `org_signing_certs` (tenant-member read,
 (`@e-sig/core`) through `SupabasePqKeyStore` (`@e-sig/supabase`). Independent of
 0002 — apply any time after 0001.
 
+`0004_esig_cloud_tenants.sql` adds the managed Cloud organization, membership,
+entitlement, API-key-hash, and provisioning records. It replaces 0001's
+deny-all membership stub with an RLS predicate backed by `esig_memberships`,
+and exposes service-role-only, idempotent RPCs to provision, activate, and
+disable a tenant without deleting immutable evidence. The provisioning RPC
+generates the first API credential inside its transaction, persists only its
+SHA-256, and returns plaintext only on the creating call. A separate reissue
+RPC rotates the key after a commit-unknown/pre-handoff failure; duplicate
+provisioning calls otherwise return the existing credential ID with no
+plaintext.
+
 ## Apply it
 
 - **Supabase:** copy each file into
-  `supabase/migrations/<timestamp>_<name>.sql` (0001 before 0002) and
+  `supabase/migrations/<timestamp>_<name>.sql` (apply in numeric order) and
   `supabase db push` (or `supabase db reset` locally). The Storage section of
   0001 uses `storage.buckets` / `storage.objects`, which exist on Supabase.
 - **Plain Postgres:** `psql -1 "$DATABASE_URL" -f 0001_esig_self_contained.sql`
@@ -32,7 +43,7 @@ bundle per tenant, RLS mirroring `org_signing_certs` (tenant-member read,
 
 ## You MUST do two things
 
-1. **Replace `esig_tenant_member(uuid)`.** It ships as a deny-by-default stub
+1. **Replace `esig_tenant_member(uuid)` or apply 0004.** It ships as a deny-by-default stub
    (returns `false`). Set its body to your tenant-membership predicate so members
    can read their certs / audit rows / signed PDFs. Example:
    ```sql
@@ -42,6 +53,8 @@ bundle per tenant, RLS mirroring `org_signing_certs` (tenant-member read,
                     WHERE m.tenant_id = t AND m.user_id = auth.uid());
    $$;
    ```
+   Managed e-sig Cloud deployments apply 0004 instead; its predicate reads the
+   `esig_memberships` table and keeps API-key hashes service-only.
 2. **Wire `tenant_id`** to your org/tenant key. The tables key on `tenant_id`;
    `@e-sig/supabase` defaults to that column. If your column is different
    (e.g. an existing `org_id`), pass `{ tenantColumn: 'org_id' }` to the store

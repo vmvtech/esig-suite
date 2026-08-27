@@ -1,0 +1,704 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: First-party e-sig pricing waitlist intake API
+
+Parameters:
+  LogRetentionDays:
+    Type: Number
+    Default: 30
+    AllowedValues: [14, 30, 60, 90, 120, 150, 180, 365]
+  ProductionRetentionDays:
+    Type: Number
+    Default: 180
+    MinValue: 30
+    MaxValue: 180
+    Description: Automatic TTL for unverified production waitlist submissions
+  SmokeTestTtlHours:
+    Type: Number
+    Default: 24
+    MinValue: 1
+    MaxValue: 168
+    Description: Retention for submissions whose normalized email domain is example.com
+  ReservedConcurrency:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 20
+  WafRateLimit:
+    Type: Number
+    Default: 50
+    MinValue: 10
+    MaxValue: 1000
+    Description: Maximum requests from one source IP in each five-minute WAF window
+  WaitlistNotifierEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Keep false until the cross-account broker queue policy is wired
+  WaitlistBrokerQueueUrl:
+    Type: String
+    Default: https://sqs.us-east-1.amazonaws.com/633740007231/esig-mail-enqueue-standard.fifo
+    AllowedValues:
+      - https://sqs.us-east-1.amazonaws.com/633740007231/esig-mail-enqueue-standard.fifo
+    Description: Exact approved Standard-lane FIFO broker queue URL
+  WaitlistBrokerQueueArn:
+    Type: String
+    Default: arn:aws:sqs:us-east-1:633740007231:esig-mail-enqueue-standard.fifo
+    AllowedValues:
+      - arn:aws:sqs:us-east-1:633740007231:esig-mail-enqueue-standard.fifo
+    Description: Exact approved Standard-lane FIFO broker queue ARN used for IAM
+  WaitlistBrokerKmsKeyArn:
+    Type: String
+    Default: not-configured
+    AllowedPattern: ^(?:not-configured|arn:aws:kms:us-east-1:633740007231:key/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$
+    Description: Exact Standard-account broker queue CMK ARN; required for canary and activation
+  WaitlistNotifierActivationPreflight:
+    Type: String
+    Default: not-approved
+    AllowedValues: [not-approved, proof-and-backfill-verified]
+    Description: Explicit gate set only after exact lane proof and converged metadata-only outbox backfill
+  WaitlistReaderEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Keep false until an exact IAM reader principal is approved
+  WaitlistReaderPrincipalArn:
+    Type: String
+    Default: not-configured
+    AllowedPattern: ^(?:not-configured|arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512})$
+    ConstraintDescription: Must be one exact IAM role ARN; account root, IAM users, and wildcards are not accepted
+    Description: Exact agent or cross-project IAM role allowed to assume the scoped reader invoke role
+  WaitlistReaderActivationPreflight:
+    Type: String
+    Default: not-approved
+    AllowedValues: [not-approved, opaque-ids-verified]
+    Description: Explicit gate set only after every retained private row has an opaque random-v1 lookup ID
+
+Rules:
+  ProducerDeploymentBoundary:
+    Assertions:
+      - Assert: !Equals [!Ref AWS::AccountId, "456453427852"]
+        AssertDescription: Waitlist producer must deploy only in account 456453427852
+      - Assert: !Equals [!Ref AWS::Region, us-east-1]
+        AssertDescription: Waitlist producer must deploy only in us-east-1
+  NotifierActivationGuard:
+    RuleCondition: !Equals [!Ref WaitlistNotifierEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref WaitlistNotifierActivationPreflight, proof-and-backfill-verified]
+        AssertDescription: Fresh exact lane proof and a converged metadata-only outbox backfill are required before enabling the notifier
+      - Assert: !Not [!Equals [!Ref WaitlistBrokerKmsKeyArn, not-configured]]
+        AssertDescription: Exact broker CMK ARN is required before enabling the notifier
+  ReaderActivationGuard:
+    RuleCondition: !Equals [!Ref WaitlistReaderEnabled, "true"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref WaitlistReaderPrincipalArn, not-configured]]
+        AssertDescription: Exact non-root IAM reader principal ARN is required before enabling the reader
+      - Assert: !Equals [!Ref WaitlistReaderActivationPreflight, opaque-ids-verified]
+        AssertDescription: Converged opaque ID migration is required before enabling the reader
+
+Conditions:
+  WaitlistNotifierIsEnabled: !Equals [!Ref WaitlistNotifierEnabled, "true"]
+  WaitlistBrokerAccessIsConfigured: !Not [!Equals [!Ref WaitlistBrokerKmsKeyArn, not-configured]]
+  WaitlistReaderIsEnabled: !And
+    - !Equals [!Ref WaitlistReaderEnabled, "true"]
+    - !Not [!Equals [!Ref WaitlistReaderPrincipalArn, not-configured]]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    Environment:
+      Variables:
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+
+Resources:
+  WaitlistTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: submission_key
+          AttributeType: S
+        - AttributeName: submission_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: submission_key
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: submission-id-index
+          KeySchema:
+            - AttributeName: submission_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - company
+              - contact_permission_status
+              - created_at
+              - email
+              - email_verification_status
+              - expected_monthly_envelopes
+              - name
+              - offer
+              - privacy_notice_version
+              - record_type
+              - submission_id_version
+              - use_case
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      TimeToLiveSpecification:
+        AttributeName: expires_at_epoch
+        Enabled: true
+      Tags:
+        - Key: e-sig:managed-by
+          Value: waitlist-api
+        - Key: e-sig:data-classification
+          Value: customer-contact
+
+  WaitlistNotificationOutboxTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: outbox_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: outbox_key
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+      TimeToLiveSpecification:
+        AttributeName: expires_at_epoch
+        Enabled: true
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      Tags:
+        - Key: e-sig:managed-by
+          Value: waitlist-api
+        - Key: e-sig:data-classification
+          Value: notification-metadata
+
+  WaitlistFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src/handler.handler
+      Description: Validate and deduplicate first-party pricing waitlist submissions
+      Timeout: 5
+      MemorySize: 128
+      ReservedConcurrentExecutions: !Ref ReservedConcurrency
+      Environment:
+        Variables:
+          ALLOWED_ORIGIN: https://e-sig.org
+          PRODUCTION_RETENTION_DAYS: !Ref ProductionRetentionDays
+          SMOKE_TEST_TTL_HOURS: !Ref SmokeTestTtlHours
+          WAITLIST_OUTBOX_TABLE_NAME: !Ref WaitlistNotificationOutboxTable
+          WAITLIST_TABLE_NAME: !Ref WaitlistTable
+      Events:
+        SubmitWaitlist:
+          Type: Api
+          Properties:
+            RestApiId: !Ref WaitlistRestApi
+            Path: /waitlist
+            Method: POST
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Sid: AtomicWriteOnlyToWaitlistAndOutbox
+              Effect: Allow
+              Action: dynamodb:TransactWriteItems
+              Resource:
+                - !GetAtt WaitlistTable.Arn
+                - !GetAtt WaitlistNotificationOutboxTable.Arn
+
+  WaitlistFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${WaitlistFunction}
+      RetentionInDays: !Ref LogRetentionDays
+
+  WaitlistReaderExecutionRole:
+    Type: AWS::IAM::Role
+    Condition: WaitlistReaderIsEnabled
+    Properties:
+      RoleName: !Sub ${AWS::StackName}-reader-execution
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: query-exact-submission-id-index
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: QueryOnlySubmissionIdIndex
+                Effect: Allow
+                Action: dynamodb:Query
+                Resource: !Sub ${WaitlistTable.Arn}/index/submission-id-index
+              - Sid: WriteOnlyReaderOperationalLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-waitlist-reader:*
+      Tags:
+        - Key: e-sig:managed-by
+          Value: waitlist-api
+        - Key: e-sig:purpose
+          Value: private-submission-reader
+
+  WaitlistReaderFunction:
+    Type: AWS::Serverless::Function
+    Condition: WaitlistReaderIsEnabled
+    DependsOn: WaitlistReaderLogGroup
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-waitlist-reader
+      CodeUri: .
+      Handler: src/reader.handler
+      Description: IAM-only exact submission ID lookup for authorized operations
+      Timeout: 5
+      MemorySize: 128
+      ReservedConcurrentExecutions: 2
+      Role: !GetAtt WaitlistReaderExecutionRole.Arn
+      Environment:
+        Variables:
+          WAITLIST_SUBMISSION_ID_INDEX_NAME: submission-id-index
+          WAITLIST_TABLE_NAME: !Ref WaitlistTable
+      Tags:
+        e-sig:managed-by: waitlist-api
+        e-sig:purpose: private-submission-reader
+
+  WaitlistReaderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: WaitlistReaderIsEnabled
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-waitlist-reader
+      RetentionInDays: !Ref LogRetentionDays
+
+  WaitlistReaderInvokeRole:
+    Type: AWS::IAM::Role
+    Condition: WaitlistReaderIsEnabled
+    Properties:
+      RoleName: !Sub ${AWS::StackName}-reader-invoke
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ExactApprovedReaderPrincipal
+            Effect: Allow
+            Principal:
+              AWS: !Ref WaitlistReaderPrincipalArn
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: invoke-exact-waitlist-reader
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: InvokeOnlyWaitlistReader
+                Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt WaitlistReaderFunction.Arn
+      Tags:
+        - Key: e-sig:managed-by
+          Value: waitlist-api
+        - Key: e-sig:purpose
+          Value: private-submission-reader-invoke
+
+  WaitlistNotifierDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+      Tags:
+        - Key: e-sig:managed-by
+          Value: waitlist-api
+        - Key: e-sig:purpose
+          Value: notifier-failures
+
+  WaitlistNotifierDeadLetterQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref WaitlistNotifierDeadLetterQueue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: sqs:*
+            Resource: !GetAtt WaitlistNotifierDeadLetterQueue.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  WaitlistNotifierRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: esig-waitlist-production-mail-producer
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: LambdaAssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: waitlist-mail-producer
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: WriteOnlyNotifierLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-waitlist-notifier:*
+      Tags:
+        - Key: e-sig:managed-by
+          Value: waitlist-api
+        - Key: e-sig:purpose
+          Value: mail-producer
+
+  WaitlistNotifierStreamAccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: waitlist-mail-producer-stream-access
+      Roles: [!Ref WaitlistNotifierRole]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ReadOnlySanitizedOutboxStream
+            Effect: Allow
+            Action:
+              - dynamodb:DescribeStream
+              - dynamodb:GetRecords
+              - dynamodb:GetShardIterator
+              - dynamodb:ListStreams
+            Resource: !GetAtt WaitlistNotificationOutboxTable.StreamArn
+          - Sid: SendOnlyToLocalFailureQueue
+            Effect: Allow
+            Action: sqs:SendMessage
+            Resource: !GetAtt WaitlistNotifierDeadLetterQueue.Arn
+
+  WaitlistNotifierBrokerAccessPolicy:
+    Type: AWS::IAM::Policy
+    Condition: WaitlistBrokerAccessIsConfigured
+    Properties:
+      PolicyName: waitlist-mail-producer-broker-access
+      Roles: [!Ref WaitlistNotifierRole]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: SendOnlyToExactBrokerQueue
+            Effect: Allow
+            Action: sqs:SendMessage
+            Resource: !Ref WaitlistBrokerQueueArn
+          - Sid: UseOnlyExactBrokerQueueKey
+            Effect: Allow
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: !Ref WaitlistBrokerKmsKeyArn
+            Condition:
+              StringEquals:
+                kms:ViaService: sqs.us-east-1.amazonaws.com
+                kms:EncryptionContext:aws:sqs:queue-arn: arn:aws:sqs:us-east-1:633740007231:esig-mail-enqueue-standard.fifo
+          - Sid: ReadOnlyExactActivationProofHead
+            Effect: Allow
+            Action: dynamodb:GetItem
+            Resource: arn:aws:dynamodb:us-east-1:633740007231:table/esig-mail-broker-idempotency-standard
+            Condition:
+              ForAllValues:StringEquals:
+                dynamodb:LeadingKeys:
+                  - activation-proof-head:esig.waitlist.sales.v1
+          - Sid: DecryptOnlyExactActivationProofTable
+            Effect: Allow
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+            Resource: !Ref WaitlistBrokerKmsKeyArn
+            Condition:
+              StringEquals:
+                kms:ViaService: dynamodb.us-east-1.amazonaws.com
+                kms:EncryptionContext:aws:dynamodb:tableName: esig-mail-broker-idempotency-standard
+
+  WaitlistNotifierFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: WaitlistNotifierStreamAccessPolicy
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-waitlist-notifier
+      CodeUri: .
+      Handler: src/notifier.handler
+      Role: !GetAtt WaitlistNotifierRole.Arn
+      Description: Forward eligible waitlist inserts to the fixed cross-account sales broker route
+      Timeout: 15
+      MemorySize: 128
+      ReservedConcurrentExecutions: 2
+      Environment:
+        Variables:
+          PRODUCER_ACCOUNT_ID: !Ref AWS::AccountId
+          PRODUCER_REGION: !Ref AWS::Region
+          WAITLIST_BROKER_KMS_KEY_ARN: !Ref WaitlistBrokerKmsKeyArn
+          WAITLIST_BROKER_QUEUE_ARN: !Ref WaitlistBrokerQueueArn
+          WAITLIST_BROKER_QUEUE_URL: !Ref WaitlistBrokerQueueUrl
+      Events:
+        WaitlistInsertStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt WaitlistNotificationOutboxTable.StreamArn
+            Enabled: !If [WaitlistNotifierIsEnabled, true, false]
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 5
+            BisectBatchOnFunctionError: true
+            MaximumRecordAgeInSeconds: 86400
+            MaximumRetryAttempts: 5
+            ParallelizationFactor: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName":["INSERT"],"dynamodb":{"NewImage":{"record_type":{"S":["waitlist_notification_outbox"]}}}}'
+            DestinationConfig:
+              OnFailure:
+                Type: SQS
+                Destination: !GetAtt WaitlistNotifierDeadLetterQueue.Arn
+  WaitlistNotifierFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-waitlist-notifier
+      RetentionInDays: !Ref LogRetentionDays
+
+  WaitlistNotifierDeadLetterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Waitlist broker notifications exhausted stream retries
+      AlarmActions:
+        - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:opsitem:2#CATEGORY=Availability"
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt WaitlistNotifierDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  WaitlistRestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub ${AWS::StackName}-waitlist-api
+      Description: Regional first-party waitlist form API protected by AWS WAF
+      StageName: Prod
+      DisableExecuteApiEndpoint: false
+      EndpointConfiguration:
+        Type: REGIONAL
+      MinimumCompressionSize: 1024
+      Cors:
+        AllowHeaders: "'Content-Type'"
+        AllowMethods: "'POST,OPTIONS'"
+        AllowOrigin: "'https://e-sig.org'"
+        MaxAge: "'600'"
+      MethodSettings:
+        - ResourcePath: "/*"
+          HttpMethod: "*"
+          DataTraceEnabled: false
+          LoggingLevel: "OFF"
+          MetricsEnabled: true
+          ThrottlingBurstLimit: 20
+          ThrottlingRateLimit: 10
+      Tags:
+        e-sig:managed-by: waitlist-api
+
+  WaitlistWebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub ${AWS::StackName}-waitlist
+      Description: Per-IP abuse boundary for public waitlist intake
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: esig-waitlist-waf
+        SampledRequestsEnabled: false
+      Rules:
+        - Name: RateLimitPerIp
+          Priority: 0
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              AggregateKeyType: IP
+              EvaluationWindowSec: 300
+              Limit: !Ref WafRateLimit
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: esig-waitlist-rate-limit
+            SampledRequestsEnabled: false
+
+  WaitlistWebAclAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    DependsOn: WaitlistRestApiProdStage
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks: [E3005]
+    Properties:
+      ResourceArn: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}::/restapis/${WaitlistRestApi}/stages/Prod
+      WebACLArn: !GetAtt WaitlistWebAcl.Arn
+
+  WaitlistFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Waitlist Lambda invocation errors
+      AlarmActions:
+        - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:opsitem:2#CATEGORY=Availability"
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref WaitlistFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  WaitlistFunctionThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Waitlist Lambda was throttled
+      AlarmActions:
+        - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:opsitem:2#CATEGORY=Availability"
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref WaitlistFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  WaitlistApiServerErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Waitlist REST API 5xx responses
+      AlarmActions:
+        - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:opsitem:2#CATEGORY=Availability"
+      Namespace: AWS/ApiGateway
+      MetricName: 5XXError
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub ${AWS::StackName}-waitlist-api
+        - Name: Stage
+          Value: Prod
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  WaitlistWafBlocksAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Waitlist WAF blocked sustained per-IP traffic
+      AlarmActions:
+        - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:opsitem:3#CATEGORY=Security"
+      Namespace: AWS/WAFV2
+      MetricName: BlockedRequests
+      Dimensions:
+        - Name: WebACL
+          Value: esig-waitlist-waf
+        - Name: Rule
+          Value: esig-waitlist-rate-limit
+        - Name: Region
+          Value: !Ref AWS::Region
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  WaitlistApiUrl:
+    Description: Browser form POST endpoint
+    Value: !Sub https://${WaitlistRestApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/Prod/waitlist
+  WaitlistTableName:
+    Value: !Ref WaitlistTable
+  WaitlistOpaqueIdWriterVersion:
+    Description: Marker proving new private and outbox rows use independent random lookup IDs
+    Value: opaque-id-random-v1
+  WaitlistSubmissionIdIndexName:
+    Description: Exact opaque ID lookup index; no scan is required
+    Value: submission-id-index
+  WaitlistReaderActivationInput:
+    Description: Non-secret deployment inputs required to create reader resources
+    Value: WaitlistReaderEnabled=true WaitlistReaderPrincipalArn=arn:aws:iam::ACCOUNT_ID:role/EXACT_ROLE_NAME
+  WaitlistReaderRequestContract:
+    Description: Direct Lambda invocation payload; callers must never log the sensitive response
+    Value: '{"submissionId":"wl_<24-lowercase-hex>"}'
+  WaitlistReaderResponseFields:
+    Description: Fixed success projection returned by the direct Lambda interface
+    Value: submissionId,email,name,company,expectedMonthlyEnvelopes,useCase,offer,createdAt,consent
+  WaitlistReaderFunctionName:
+    Condition: WaitlistReaderIsEnabled
+    Value: !Ref WaitlistReaderFunction
+  WaitlistReaderInvokeRoleArn:
+    Condition: WaitlistReaderIsEnabled
+    Value: !GetAtt WaitlistReaderInvokeRole.Arn
+  WaitlistReaderAssumeRoleCommand:
+    Condition: WaitlistReaderIsEnabled
+    Description: Obtain short-lived credentials as the exact trusted principal
+    Value: !Sub aws sts assume-role --role-arn ${WaitlistReaderInvokeRole.Arn} --role-session-name esig-waitlist-reader
+  WaitlistNotificationOutboxTableName:
+    Value: !Ref WaitlistNotificationOutboxTable
+  WaitlistNotificationOutboxStreamArn:
+    Value: !GetAtt WaitlistNotificationOutboxTable.StreamArn
+  WaitlistOutboxWriterVersion:
+    Description: Marker proving the deployed intake handler atomically writes metadata-only outbox v1 records
+    Value: metadata-outbox-v1
+  WaitlistFunctionName:
+    Value: !Ref WaitlistFunction
+  WaitlistWebAclArn:
+    Value: !GetAtt WaitlistWebAcl.Arn
+  WaitlistWafBlocksAlarmName:
+    Value: !Ref WaitlistWafBlocksAlarm
+  WaitlistNotifierFunctionName:
+    Value: !Ref WaitlistNotifierFunction
+  WaitlistNotifierRoleArn:
+    Value: !GetAtt WaitlistNotifierRole.Arn
+  WaitlistNotifierDeadLetterQueueUrl:
+    Value: !Ref WaitlistNotifierDeadLetterQueue
+  WaitlistBrokerKmsKeyArn:
+    Value: !Ref WaitlistBrokerKmsKeyArn
+  WaitlistActivationProofReadContract:
+    Description: Direct notifier invocation used by the deployment gate; response is non-secret proof metadata only
+    Value: '{"invocationType":"waitlist-activation-proof-read-v1"}'

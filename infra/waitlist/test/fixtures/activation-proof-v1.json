@@ -1,0 +1,59 @@
+{
+  "canaryNonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "checks": {
+    "agentAccess": {
+      "evidenceId": "agents:fixture:20260806",
+      "esigLeadId": "e67f6847-3b64-473a-99e3-9469fe945538",
+      "esigOpsId": "b7d97106-ecfa-4fb9-8117-32f5515f0c9b",
+      "granted": true
+    }
+  },
+  "expiresAt": "2026-08-07T11:55:00.000Z",
+  "gmailDelivery": {
+    "canaryNonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "evidenceId": "sesr_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "metadataOnly": true,
+    "receiptId": "sesr_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "sesMessageId": "ses-message-fixture-123",
+    "sqsMessageId": "12345678-1234-1234-1234-123456789abc",
+    "status": "delivered"
+  },
+  "inboundSesDelivery": {
+    "canaryNonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "evidenceId": "sesr_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "metadataOnly": true,
+    "receiptId": "sesr_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sesMessageId": "ses-message-fixture-123",
+    "sqsMessageId": "12345678-1234-1234-1234-123456789abc",
+    "status": "delivered"
+  },
+  "kmsKeyArn": "arn:aws:kms:us-east-1:633740007231:key/01234567-89ab-cdef-0123-456789abcdef",
+  "mailbox": "waitlist@e-sig.org",
+  "mailboxReady": true,
+  "mxDomain": "e-sig.org",
+  "mxVerified": true,
+  "proofAccountId": "633740007231",
+  "proofRegion": "us-east-1",
+  "producerRoleArn": "arn:aws:iam::456453427852:role/esig-waitlist-production-mail-producer",
+  "queueArn": "arn:aws:sqs:us-east-1:633740007231:esig-mail-enqueue-standard.fifo",
+  "route": "esig.waitlist.sales.v1",
+  "schemaVersion": 1,
+  "sesMessageId": "ses-message-fixture-123",
+  "sesReceiptRuleSetActive": true,
+  "sesRecipientCoverage": [
+    "e-sig.org",
+    "waitlist@e-sig.org"
+  ],
+  "sqsMessageId": "12345678-1234-1234-1234-123456789abc",
+  "sqsSequenceNumber": "000000000000000000018849496460467696128",
+  "stalwartDelivery": {
+    "canaryNonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "evidenceId": "stalwart_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "metadataOnly": true,
+    "receiptId": "stalwart_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sesMessageId": "ses-message-fixture-123",
+    "sqsMessageId": "12345678-1234-1234-1234-123456789abc",
+    "status": "delivered"
+  },
+  "verifiedAt": "2026-08-06T11:55:00.000Z"
+}

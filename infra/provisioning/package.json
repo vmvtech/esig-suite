@@ -1,0 +1,38 @@
+{
+  "name": "@e-sig/cloud-provisioning",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fail-closed e-sig Cloud provisioning control plane.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "bundle": "npm run build && esbuild src/handlers/webhook.ts src/handlers/worker.ts --bundle --platform=node --target=node22 --format=esm --loader:.sql=text --outdir=lambda/handlers --sourcemap --sources-content=false --legal-comments=none",
+    "clean": "rm -rf dist coverage .vitest",
+    "package:control-plane": "bash scripts/package-control-plane.sh",
+    "deploy:control-plane": "bash scripts/deploy-control-plane.sh",
+    "test": "vitest run",
+    "test:supabase": "bash scripts/test-supabase.sh",
+    "test:templates": "bash scripts/validate-templates.sh",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudformation": "^3.1103.0",
+    "@aws-sdk/client-dynamodb": "^3.1103.0",
+    "@aws-sdk/client-secrets-manager": "^3.1103.0",
+    "@aws-sdk/client-sqs": "^3.1103.0",
+    "@aws-sdk/lib-dynamodb": "^3.1103.0",
+    "stripe": "^22.4.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.162",
+    "@types/node": "^22.0.0",
+    "esbuild": "0.28.1",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.10"
+  }
+}

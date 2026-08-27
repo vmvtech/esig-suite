@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Retained per-customer e-sig Cloud data plane
+
+Parameters:
+  TenantId:
+    Type: String
+    Description: Opaque deterministic tenant identifier
+    AllowedPattern: ^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$
+  SubscriptionId:
+    Type: String
+    Description: Stripe subscription identifier used only as an opaque resource tag
+    AllowedPattern: ^sub_[A-Za-z0-9]+$
+  SupabaseProjectRef:
+    Type: String
+    Description: Dedicated Supabase project reference
+    AllowedPattern: ^[a-z0-9]{8,64}$
+  SigningEnabled:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+
+Conditions:
+  SigningIsEnabled: !Equals [!Ref SigningEnabled, "true"]
+
+Resources:
+  CustomerKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub e-sig retained data key for tenant ${TenantId}
+      Enabled: !If [SigningIsEnabled, true, false]
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnableAccountAdministration
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: "*"
+      Tags:
+        - Key: e-sig:managed-by
+          Value: cloud-provisioning
+        - Key: e-sig:tenant-id
+          Value: !Ref TenantId
+        - Key: e-sig:subscription-id
+          Value: !Ref SubscriptionId
+        - Key: e-sig:supabase-project-ref
+          Value: !Ref SupabaseProjectRef
+
+  DocumentBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt CustomerKey.Arn
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: e-sig:managed-by
+          Value: cloud-provisioning
+        - Key: e-sig:tenant-id
+          Value: !Ref TenantId
+        - Key: e-sig:subscription-id
+          Value: !Ref SubscriptionId
+        - Key: e-sig:supabase-project-ref
+          Value: !Ref SupabaseProjectRef
+
+  DocumentBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Bucket: !Ref DocumentBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt DocumentBucket.Arn
+              - !Sub ${DocumentBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  SigningDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      KmsMasterKeyId: !GetAtt CustomerKey.Arn
+      KmsDataKeyReusePeriodSeconds: 300
+      MessageRetentionPeriod: 1209600
+      Tags:
+        - Key: e-sig:managed-by
+          Value: cloud-provisioning
+        - Key: e-sig:tenant-id
+          Value: !Ref TenantId
+        - Key: e-sig:subscription-id
+          Value: !Ref SubscriptionId
+        - Key: e-sig:supabase-project-ref
+          Value: !Ref SupabaseProjectRef
+
+  SigningQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      KmsMasterKeyId: !GetAtt CustomerKey.Arn
+      KmsDataKeyReusePeriodSeconds: 300
+      VisibilityTimeout: 180
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt SigningDeadLetterQueue.Arn
+        maxReceiveCount: 5
+      Tags:
+        - Key: e-sig:managed-by
+          Value: cloud-provisioning
+        - Key: e-sig:tenant-id
+          Value: !Ref TenantId
+        - Key: e-sig:subscription-id
+          Value: !Ref SubscriptionId
+        - Key: e-sig:supabase-project-ref
+          Value: !Ref SupabaseProjectRef
+
+  SigningQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Queues: [!Ref SigningQueue, !Ref SigningDeadLetterQueue]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: sqs:*
+            Resource:
+              - !GetAtt SigningQueue.Arn
+              - !GetAtt SigningDeadLetterQueue.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+Outputs:
+  KmsKeyId:
+    Value: !Ref CustomerKey
+  KmsKeyArn:
+    Value: !GetAtt CustomerKey.Arn
+  DocumentBucketName:
+    Value: !Ref DocumentBucket
+  DocumentBucketArn:
+    Value: !GetAtt DocumentBucket.Arn
+  SigningQueueUrl:
+    Value: !Ref SigningQueue
+  SigningQueueArn:
+    Value: !GetAtt SigningQueue.Arn
+  SigningDeadLetterQueueUrl:
+    Value: !Ref SigningDeadLetterQueue
+  SigningDeadLetterQueueArn:
+    Value: !GetAtt SigningDeadLetterQueue.Arn
