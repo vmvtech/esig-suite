@@ -49,7 +49,7 @@ jobs:
         run: node scripts/publish-preflight.mjs
       # Validate packing (files list, prepublishOnly) without touching npm.
       - name: Pack dry-run
-        run: npm publish --dry-run --workspaces
+        run: node scripts/publish-preflight.mjs --dry-run
       # Publishes workspaces dependencies-first, skipping versions already on
       # the registry — re-running after a partial failure converges instead of
       # dying on the first already-published package. Dist-tags come from each
