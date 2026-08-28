@@ -23,6 +23,20 @@ export interface DeliveryLink {
    * actually presented a proof — see esig_envelope_status instead).
    */
   identity?: { minLevel: IdentityLevel; expectedUuaid?: string };
+  /**
+   * §17 seam 2: present when this signer should be reached over Pillar
+   * (uuaid-to-uuaid) instead of, or alongside, `url` — a `DeliveryChannel`
+   * that doesn't understand Pillar (file/console/webhook/email) simply
+   * ignores this field and delivers `url` as it always has. Shape matches
+   * the `@e-sig/pillar-bridge` contract byte-for-byte (packages/
+   * esig-pillar-bridge/src/types.ts `DeliveryLink.pillar`).
+   */
+  pillar?: {
+    /** The signer's `uuaid:foundation:agent:<localId>`. */
+    uuaid: string;
+    /** The signer's raw Ed25519 public key, 64 lowercase hex chars. */
+    publicKey: string;
+  };
 }
 
 export interface Receipt {
@@ -109,6 +123,7 @@ export class FileDelivery implements DeliveryChannel {
         email: l.email,
         url: l.url,
         ...(l.identity ? { identity: l.identity } : {}),
+        ...(l.pillar ? { pillar: l.pillar } : {}),
       })),
       createdAt: new Date().toISOString(),
     };

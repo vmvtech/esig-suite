@@ -18,10 +18,17 @@ import http from "node:http";
 import { EnvelopeError as CoreEnvelopeError, type TokenResolution } from "@e-sig/core";
 
 import type { Config } from "./config.js";
-import { derivePhase, getEnvelopeDocument, type EnvelopeService } from "./envelopes.js";
+import { derivePhase, getEnvelopeDocument, getPillarUnregisteredSignerIds, type EnvelopeService } from "./envelopes.js";
 import { stripControlChars } from "./email/templates.js";
 import type { IdentityChallengePayload } from "./identity/challenge.js";
-import { getEnvelopeIdentityPolicy, IdentityError, type IdentityLevel, type IdentityProofInput } from "./identity/types.js";
+import {
+  getEnvelopeIdentityPolicy,
+  getSignerIdentityState,
+  IDENTITY_LEVEL_ORDER,
+  IdentityError,
+  type IdentityLevel,
+  type IdentityProofInput,
+} from "./identity/types.js";
 import { EnvelopeConflictError } from "./stores.js";
 import { messageOf } from "./tools/helpers.js";
 
@@ -373,12 +380,28 @@ function identityProofPanelHtml(level: IdentityLevel, challenge: IdentityChallen
 </details>`;
 }
 
+/** §17 seam 3: shown INSTEAD of the paste panel above when a proof relayed out-of-band (e.g. over Pillar) already satisfies this envelope's identity requirement — the human just signs, nothing to paste. */
+function identityAlreadyVerifiedHtml(level: IdentityLevel): string {
+  return `
+<details class="identity" open>
+  <summary>Identity verified: ${escapeText(level)}</summary>
+  <p>Your identity was already verified out-of-band (level <strong>${escapeText(level)}</strong> or higher) — nothing to paste here. Just review the document above and sign below.</p>
+</details>`;
+}
+
+/** §17 seam 2 RT G2: shown above the sign form for a signer whose Pillar-asserted uuaid had no UUAID registry badge at creation (the envelope was still created because ESIG_MCP_PILLAR_ALLOW_UNREGISTERED=1 was set). */
+function pillarUnregisteredNoticeHtml(): string {
+  return `<div class="gate blocked">Unregistered signer: this signer's Pillar identity has no UUAID registry attestation. The sender's server allowed this envelope to be created anyway (ESIG_MCP_PILLAR_ALLOW_UNREGISTERED=1) — proceed only if you trust the sender.</div>`;
+}
+
 function renderApprovalPage(
   resolution: TokenResolution,
   nonce: string,
   challenge: IdentityChallengePayload | undefined,
   requiredLevel: IdentityLevel,
   token: string,
+  /** §17 seam 3: true when a pre-verified identity record (accepted out-of-band, e.g. over Pillar) already satisfies `requiredLevel` for this signer — swaps the paste panel for a short confirmation and the sign form no longer requires pasting anything. */
+  identityAlreadySatisfied = false,
 ): { status: number; html: string } {
   if (resolution.status === "invalid") {
     // No envelope content of any kind — there is none to show, and an
@@ -427,8 +450,19 @@ function renderApprovalPage(
       })()
     : `<iframe sandbox srcdoc="${escapeAttr(envelope.html)}"></iframe>`;
   const identityPanel =
-    resolution.status === "ok" && requiredLevel !== "none" ? identityProofPanelHtml(requiredLevel, challenge) : "";
-  const form = resolution.status === "ok" ? signFormHtml(nonce, requiredLevel !== "none") : "";
+    resolution.status === "ok" && requiredLevel !== "none"
+      ? identityAlreadySatisfied
+        ? identityAlreadyVerifiedHtml(requiredLevel)
+        : identityProofPanelHtml(requiredLevel, challenge)
+      : "";
+  // §17 seam 2 RT G2: an unregistered-signer notice, when this signer's
+  // Pillar identity had no registry attestation at creation.
+  const pillarNotice =
+    resolution.status === "ok" && getPillarUnregisteredSignerIds(envelope)?.includes(resolution.signer.id)
+      ? pillarUnregisteredNoticeHtml()
+      : "";
+  const form =
+    resolution.status === "ok" ? signFormHtml(nonce, requiredLevel !== "none" && !identityAlreadySatisfied) : "";
 
   return {
     status: 200,
@@ -436,7 +470,7 @@ function renderApprovalPage(
       title: envelope.title,
       sentence,
       gateClass: resolution.status === "ok" ? "ok" : "blocked",
-      body: iframe + identityPanel + form,
+      body: iframe + pillarNotice + identityPanel + form,
     }),
   };
 }
@@ -645,6 +679,7 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
         // no extra store round trip beyond `resolve()` itself.
         let requiredLevel: IdentityLevel = "none";
         let challenge: IdentityChallengePayload | undefined;
+        let identityAlreadySatisfied = false;
         if (resolution.status === "ok") {
           // §16: once per signer (EnvelopeService.recordViewed is idempotent
           // and never throws) — awaited so the event is durably recorded
@@ -653,15 +688,26 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
           await deps.envelopes.recordViewed(resolution.envelope.id, resolution.signer.id);
           requiredLevel = getEnvelopeIdentityPolicy(resolution.envelope)?.minLevel ?? "none";
           if (requiredLevel !== "none") {
-            try {
-              challenge = await deps.envelopes.issueIdentityChallenge(resolution.envelope.id, resolution.signer.id);
-            } catch {
-              // Non-fatal for page rendering (identityProofPanelHtml handles
-              // `undefined`) — the signer can reload to retry.
+            // §17 seam 3: an out-of-band proof (e.g. relayed over Pillar)
+            // may have already been accepted for this signer
+            // (`EnvelopeService.acceptPreVerifiedIdentity`) — when it
+            // satisfies `requiredLevel`, the page shows a confirmation
+            // instead of the paste panel and `POST /sign` needs no
+            // `identityProof` at all (`sign()`'s own `preVerifiedOk` check).
+            const preVerified = getSignerIdentityState(resolution.envelope, resolution.signer.id)?.verified;
+            identityAlreadySatisfied =
+              preVerified !== undefined && IDENTITY_LEVEL_ORDER[preVerified.level] >= IDENTITY_LEVEL_ORDER[requiredLevel];
+            if (!identityAlreadySatisfied) {
+              try {
+                challenge = await deps.envelopes.issueIdentityChallenge(resolution.envelope.id, resolution.signer.id);
+              } catch {
+                // Non-fatal for page rendering (identityProofPanelHtml handles
+                // `undefined`) — the signer can reload to retry.
+              }
             }
           }
         }
-        const rendered = renderApprovalPage(resolution, nonce, challenge, requiredLevel, token);
+        const rendered = renderApprovalPage(resolution, nonce, challenge, requiredLevel, token, identityAlreadySatisfied);
         sendHtml(res, rendered.status, rendered.html, csp);
         return;
       }

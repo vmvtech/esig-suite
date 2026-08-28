@@ -10,6 +10,17 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServerDeps } from "./types.js";
 import { messageOf, toolError, toolResult } from "./helpers.js";
 
+const pillarSignerSchema = z.object({
+  uuaid: z
+    .string()
+    .min(1)
+    .describe("The signer's uuaid:foundation:agent:<localId> — must be derivable from `publicKey` (localIdFromEd25519Key), or this call is refused."),
+  publicKey: z
+    .string()
+    .length(64)
+    .describe("The signer's raw Ed25519 public key, 64 lowercase hex characters."),
+});
+
 const signerSchema = z.object({
   name: z.string().min(1).describe("Signer's display name."),
   email: z.string().min(1).describe("Signer's email address (used for display and delivery only)."),
@@ -20,6 +31,14 @@ const signerSchema = z.object({
     .min(1)
     .optional()
     .describe("1-based signing order; equal values sign in parallel. Default 1 (all sign in any order)."),
+  pillar: pillarSignerSchema
+    .optional()
+    .describe(
+      "Reach this signer over Pillar (uuaid-to-uuaid, docs/architecture/esig-mcp.md §17) instead of/alongside " +
+        "email — requires the optional @e-sig/pillar-bridge to be configured. `publicKey` must derive `uuaid`; " +
+        "when a UUAID registry is configured, its badge for `uuaid` must also attest `publicKey` (or the server " +
+        "must have opted in with ESIG_MCP_PILLAR_ALLOW_UNREGISTERED=1).",
+    ),
 });
 
 const identitySignerSchema = z
@@ -48,15 +67,18 @@ const exactlyOneOfHtmlOrDocId = z
 
 const identitySchema = z.object({
   minLevel: z
-    .enum(["none", "L0", "L1", "L2"])
+    .enum(["none", "L0", "L1", "L1p", "L2"])
     .optional()
     .describe(
-      "This envelope's signer-identity floor (docs/architecture/esig-mcp.md §12). May only RAISE this " +
+      "This envelope's signer-identity floor (docs/architecture/esig-mcp.md §12, §17). May only RAISE this " +
         "server's configured ESIG_MCP_IDENTITY_MIN_LEVEL, never lower it. none: no identity check (v0.1 " +
         "behavior). L0: signer's uuaid must be well-formed (and match the pin below, if set) — asserted, " +
         "no cryptographic proof. L1: the signer's wallet/agent must sign a server-issued sole-control " +
         "challenge — obtain it via esig_identity_challenge or GET /sign/<token>/challenge, then present " +
-        "the resulting DataIntegrityProof as `identityProof` on POST /sign. L2: L1 plus the registry " +
+        "the resulting DataIntegrityProof as `identityProof` on POST /sign. L1p: like L1, but the signer's " +
+        "uuaid must be a uuaid:foundation:agent:<localId> whose local id is itself derived from the proof's " +
+        "Ed25519 key (self-authenticating — no registry needed; a foundation:agent uuaid that does NOT " +
+        "derive from its own proof key is refused, never silently accepted at L1). L2: L1 plus the registry " +
         "(ESIG_MCP_UUAID_REGISTRY_URL) must attest the proof's key<->uuaid binding via its signed badge — " +
         "requires that env var AND ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY (the registry's pinned Ed25519 public key).",
     ),

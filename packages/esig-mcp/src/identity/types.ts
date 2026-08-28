@@ -7,9 +7,15 @@
 import type { Envelope } from "@e-sig/core";
 import type { DataIntegrityProof, UaidExchange, UaidSigningCredential } from "@e-sig/uaid-exch";
 
-export type IdentityLevel = "none" | "L0" | "L1" | "L2";
+/**
+ * Ladder: none < L0 < L1 < L1p < L2. `L1p` (§17 seam 1, v0.5) sits between
+ * `L1` and `L2`: it is stronger than plain `L1` (key<->uuaid binding holds
+ * by construction — self-authenticating, no registry needed) but weaker
+ * than `L2` (no third-party/registry attestation of the binding).
+ */
+export type IdentityLevel = "none" | "L0" | "L1" | "L1p" | "L2";
 
-export const IDENTITY_LEVEL_ORDER: Record<IdentityLevel, number> = { none: 0, L0: 1, L1: 2, L2: 3 };
+export const IDENTITY_LEVEL_ORDER: Record<IdentityLevel, number> = { none: 0, L0: 1, L1: 2, L1p: 3, L2: 4 };
 
 /** The stronger of two levels — the ONLY direction `esig_create_envelope`'s requested level may move config's floor (design doc §12 "Policy": "may only raise"). */
 export function maxIdentityLevel(a: IdentityLevel, b: IdentityLevel): IdentityLevel {

@@ -32,6 +32,13 @@ describe("dist/bin.js --help / --version (D3)", () => {
     expect(res.stdout).toMatch(/ESIG_CHROME_PATH/);
     expect(res.stdout.toLowerCase()).toMatch(/quickstart/);
     expect(res.stdout).toMatch(/npx @e-sig\/mcp/);
+    // §17 seams 2-4 (v0.5): Pillar env vars listed in --help.
+    expect(res.stdout).toMatch(/ESIG_PILLAR_HOME/);
+    expect(res.stdout).toMatch(/ESIG_PILLAR_PASSPHRASE/);
+    expect(res.stdout).toMatch(/ESIG_PILLAR_CARRIERS/);
+    expect(res.stdout).toMatch(/ESIG_PILLAR_SUBSCRIBERS/);
+    expect(res.stdout).toMatch(/ESIG_PILLAR_PROOF_POLL/);
+    expect(res.stdout).toMatch(/ESIG_MCP_PILLAR_ALLOW_UNREGISTERED/);
   });
 
   it("--version: exit 0, stdout has the package.json version, stderr empty", () => {
@@ -184,4 +191,89 @@ describe("dist/bin.js startup — G2 (verifier finding): ESIG_MCP_SMTP_ALLOW_UNV
     expect(res.stderr).not.toMatch(/ALLOW_UNVERIFIED_TLS/);
     expect(res.stderr).toMatch(/ready/);
   }, 15_000);
+});
+
+describe("dist/bin.js startup — Pillar (§17 seams 2-4, v0.5, build ticket item 6)", () => {
+  it("ESIG_MCP_DELIVERY=pillar with a short ESIG_PILLAR_PASSPHRASE -> non-zero exit + clear error, never reaches 'ready'", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "esig-mcp-bin-pillar-short-pass-"));
+    const res = spawnSync("node", [BIN], {
+      env: {
+        ...process.env,
+        ESIG_MCP_PASSPHRASE: PASSPHRASE,
+        ESIG_MCP_DELIVERY: "pillar",
+        ESIG_MCP_DATA_DIR: dataDir,
+        ESIG_MCP_HTTP_PORT: "18939",
+        ESIG_PILLAR_PASSPHRASE: "too-short",
+        ESIG_PILLAR_CARRIERS: "https://pillar.example.com/v1/envelopes",
+      },
+      encoding: "utf8",
+      input: "",
+      timeout: 10_000,
+    });
+
+    expect(res.status).not.toBe(0);
+    expect(res.stdout).toBe("");
+    expect(res.stderr).toMatch(/configuration error/);
+    expect(res.stderr).toMatch(/ESIG_PILLAR_PASSPHRASE/);
+    expect(res.stderr).toMatch(/24/);
+    expect(res.stderr).not.toMatch(/ready/);
+  }, 15_000);
+
+  it("ESIG_MCP_DELIVERY=pillar with no ESIG_PILLAR_CARRIERS -> non-zero exit + clear error", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "esig-mcp-bin-pillar-no-carriers-"));
+    const res = spawnSync("node", [BIN], {
+      env: {
+        ...process.env,
+        ESIG_MCP_PASSPHRASE: PASSPHRASE,
+        ESIG_MCP_DELIVERY: "pillar",
+        ESIG_MCP_DATA_DIR: dataDir,
+        ESIG_MCP_HTTP_PORT: "18940",
+        ESIG_PILLAR_PASSPHRASE: "a".repeat(24),
+      },
+      encoding: "utf8",
+      input: "",
+      timeout: 10_000,
+    });
+
+    expect(res.status).not.toBe(0);
+    expect(res.stderr).toMatch(/configuration error/);
+    expect(res.stderr).toMatch(/ESIG_PILLAR_CARRIERS/);
+    expect(res.stderr).not.toMatch(/ready/);
+  }, 15_000);
+
+  it(
+    "ESIG_MCP_DELIVERY=pillar with a VALID config but no bridge available (loader override) -> non-zero exit, " +
+      "clear error naming the install command, never reaches 'ready'",
+    async () => {
+      const dataDir = await mkdtemp(path.join(os.tmpdir(), "esig-mcp-bin-pillar-loader-absent-"));
+      const res = spawnSync("node", [BIN], {
+        env: {
+          ...process.env,
+          ESIG_MCP_PASSPHRASE: PASSPHRASE,
+          ESIG_MCP_DELIVERY: "pillar",
+          ESIG_MCP_DATA_DIR: dataDir,
+          ESIG_MCP_HTTP_PORT: "18941",
+          ESIG_PILLAR_PASSPHRASE: "a".repeat(24),
+          ESIG_PILLAR_CARRIERS: "https://pillar.example.com/v1/envelopes",
+          // TEST-ONLY seam (pillar-loader.ts's resolvePillarLoader): forces
+          // the "package not installed" error path deterministically,
+          // regardless of whether @e-sig/pillar-bridge actually resolves in
+          // this checkout (it does, via npm workspace hoisting — see
+          // pillar-loader.ts's own comment on this override).
+          ESIG_MCP_PILLAR_LOADER_TEST_OVERRIDE: "throw",
+        },
+        encoding: "utf8",
+        input: "",
+        timeout: 10_000,
+      });
+
+      expect(res.status).not.toBe(0);
+      expect(res.stdout).toBe("");
+      expect(res.stderr).toMatch(/configuration error/);
+      expect(res.stderr).toMatch(/@e-sig\/pillar-bridge/);
+      expect(res.stderr).toMatch(/npm install/);
+      expect(res.stderr).not.toMatch(/ready/);
+    },
+    15_000,
+  );
 });

@@ -73,6 +73,19 @@ export async function runInit(argv: string[]): Promise<void> {
     "# ESIG_MCP_EVENTS_WEBHOOK_URL=https://your-app.example.com/esig-events",
     "# ESIG_MCP_EVENTS_WEBHOOK_SECRET=",
     "",
+    "# Pillar (agent-to-agent) delivery + events + identity proofs",
+    "# (docs/architecture/esig-mcp.md §17) — commented out; requires the",
+    "# optional peer dependency @e-sig/pillar-bridge (npm install",
+    "# @e-sig/pillar-bridge). Uncomment to route signing links to",
+    "# signers[].pillar targets over Pillar instead of/alongside email.",
+    "# ESIG_MCP_DELIVERY=pillar",
+    "# ESIG_PILLAR_HOME=" + path.join(dataDir, "pillar"),
+    "# ESIG_PILLAR_PASSPHRASE=",
+    "# ESIG_PILLAR_CARRIERS=https://pillar.uuaid.org/v1/envelopes",
+    "# ESIG_PILLAR_SUBSCRIBERS=[]",
+    "# ESIG_PILLAR_PROOF_POLL=1",
+    "# ESIG_MCP_PILLAR_ALLOW_UNREGISTERED=0",
+    "",
   ];
   // `fs.writeFile`'s own `mode` option is masked by the process umask
   // (delivery.ts's `FileDelivery` follows the identical pattern) — re-assert

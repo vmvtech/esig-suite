@@ -16,6 +16,8 @@ export {
   type RemindersConfig,
   type EventsConfig,
   type EventsWebhookConfig,
+  type PillarConfig,
+  type PillarSubscriber,
 } from "./config.js";
 
 export { sanitizeEnvelopeHtml, type SanitizeResult } from "./sanitize.js";
@@ -84,12 +86,16 @@ export {
   type EventDeliveryStatus,
 } from "./events/queue.js";
 
+// §17 seam 4: event fan-out to registered sinks (e.g. the Pillar bridge's).
+export { EventDispatcher, type EventSink, type EventDispatcherDeps } from "./events/sinks.js";
+
 export {
   EnvelopeService,
   EnvelopeError,
   SEAL_RENDER_LAUNCH_ARGS,
   derivePhase,
   getEnvelopeDocument,
+  getPillarUnregisteredSignerIds,
   getSignerReminderState,
   type EnvelopeServiceDeps,
   type SignerInput,
@@ -128,9 +134,31 @@ export {
   ChallengeError,
   type IdentityChallengePayload,
 } from "./identity/challenge.js";
-export { verifySignerIdentity } from "./identity/verify.js";
+export {
+  verifySignerIdentity,
+  localIdFromEd25519Key,
+  uuaidFromEd25519Key,
+  FOUNDATION_AGENT_UUAID_PREFIX,
+  FOUNDATION_AGENT_UUAID_RE,
+} from "./identity/verify.js";
 export { RegistryClient, RegistryError, RegistryNotFoundError, type VerifyCredentialResult } from "./identity/registry.js";
 export { BadgeError, verifyRegistryBadge, hexToBytes, type BadgePayload, type BadgePresentationKey } from "./identity/badge.js";
+export type { IdentityProofSource, IdentityProofEvent } from "./identity/proof-source.js";
+
+// §17 seams 2-4: the optional Pillar bridge loader — exported so tests can
+// inject a fake `PillarLoader` without ever importing `@e-sig/pillar-bridge`
+// or `@uuaid/pillar` themselves.
+export {
+  defaultPillarLoader,
+  resolvePillarLoader,
+  type PillarLoader,
+  type PillarBridgeModule,
+  type PillarBridgeIdentity,
+  type PillarBridgeDeliveryChannel,
+  type PillarBridgeEventSink,
+  type PillarBridgeProofSource,
+  type PillarBridgeIdentityProofEvent,
+} from "./pillar-loader.js";
 
 export { createMcpServer, V0_1_TOOL_NAMES, type McpServerDeps } from "./server.js";
 

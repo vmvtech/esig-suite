@@ -88,7 +88,11 @@ function makeTestWallet() {
   return { did, sign };
 }
 
-const TEST_UUAID = "uuaid:foundation:agent:22222222-2222-2222-2222-222222222222";
+// v0.5 (§17 seam 1): NOT a foundation:agent uuaid — see identity.test.ts's
+// TEST_UUAID for why (this test's wallet key has no relationship to this
+// literal string, so a foundation:agent form would trip the new
+// opportunistic L1p derivation check).
+const TEST_UUAID = "uuaid:person:us:ca:22222222-2222-2222-2222-222222222222";
 
 describe("PDF envelopes (design doc §13) — full flow, Chrome-free", () => {
   it(

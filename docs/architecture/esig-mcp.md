@@ -317,6 +317,7 @@ direction: "uuaid and iaaso integration can help signer identity."
 | none | nothing (v0.1 behavior) | — |
 | L0 asserted | signer's `uuaid` is well-formed (`isWellFormedUuaidAssertion`) and, if the envelope pinned an expected uuaid at creation, equal to it | local |
 | L1 proven | the signer presents a `DataIntegrityProof` (`eddsa-jcs-2022`, Ed25519) over a server-issued **sole-control challenge**; signature verified locally; key ↔ uuaid binding is self-asserted (IAASO L0/L1 semantics) | local, new `verifyDataIntegrityProof` / `verifyExchange` in `@e-sig/uaid-exch` |
+| L1p self-authenticating (v0.5, §17 seam 1) | L1, plus: when the signer's `uuaid` is `uuaid:foundation:agent:<localId>` (Pillar's own identity form, IAASO-3050), `localId` must equal `localIdFromEd25519Key(proof key)` — the uuaid derives from the proof's own Ed25519 key **by construction**, no registry needed; a `foundation:agent`-shaped uuaid whose local id does NOT derive from the proof key is refused (`L1P_KEY_UUAID_MISMATCH`), never silently accepted as plain L1; when a registry happens to be configured and carries a badge for the same uuaid, a disagreeing `presentationKey` is refused too (`L2_L1P_DISAGREEMENT`) | local, `identity/verify.ts` `localIdFromEd25519Key`/`uuaidFromEd25519Key` — no dependency on `@e-sig/pillar-bridge` |
 | L2 registry-bound | L1 plus the registry attests the key: **`GET /iaaso/v1/badge/{uuaid}`** (public, registry-signed hybrid Ed25519 + ML-DSA-65) must carry `payload.subject.presentationKey = {alg:"ed25519", publicKey:<64 lowercase hex>, keyId}` byte-equal to the proof key (`/resolve/{uuaid}` carries **no agent keys** — Uuaid-Lead, live-measured 2026-08-27; a badge `404 tombstoned` refuses); any presented `UaidSigningCredential` passes `GET /verify/{credentialId}` (valid, active, notExpired **and `agent_uuaid` equal to the signer's uuaid**); optionally the exchange is submitted and the **receipt** (validation material + anchor) is stored | network, `ESIG_MCP_UUAID_REGISTRY_URL` |
 | L3–L5 | out of scope for v0.2 (DSalvus attestation, chain anchor, QES) | — |
 
@@ -567,8 +568,11 @@ hex(sha256(rawEd25519PubKey)[0..16])` formatted `8-4-4-4-12`
 (keychain.mjs `_localIdFromKey`) — **self-authenticating**: anyone can check
 that a key owns the uuaid without a registry, and Pillar's own `seal()`
 refuses to encrypt to a key that does not derive the recipient's uuaid. It
-carries no payment/escrow layer (the "escrow/RAIL" lessons refer to another
-system — **unverified which**). RedTeam 2026-08-25: protocol sound; one MEDIUM
+carried no payment/escrow layer at alpha.5; **alpha.12 adds `src/escrow/**`
+(evm-rail, zilligon-rail — the "escrow/RAIL" lessons refer to this module;
+measured from the npm tarball by the Stage A worker, 2026-08-28)** — out of
+scope for the bridge, which loads only the envelope/identity/carrier
+closure. RedTeam 2026-08-25: protocol sound; one MEDIUM
 (no domain-separation string in transport signatures) slated for v1.1.
 
 **Why it fits.** Everything e-sig lacked for the *agent* side of signing

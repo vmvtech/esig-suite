@@ -12,6 +12,7 @@
 import path from "node:path";
 
 import type { IdentityLevel } from "./identity/types.js";
+import { uuaidFromEd25519Key } from "./identity/verify.js";
 
 export type EsigMcpMode = "H" | "A" | "C";
 
@@ -45,7 +46,16 @@ export type DeliveryConfig =
       subjectPrefix?: string;
       smtp?: SmtpDeliveryConfig;
       ses?: SesDeliveryConfig;
-    };
+    }
+  /**
+   * §17 seam 2 (v0.5): signing links/challenges for `signers[].pillar`
+   * targets travel as sealed `esig:m` envelopes over UUAID's Pillar
+   * substrate instead of a URL a human clicks. The actual channel
+   * (`PillarDelivery`) lives in the optional `@e-sig/pillar-bridge`
+   * package, dynamically loaded (`pillar-loader.ts`) — this Config only
+   * records the selection + the settings under `Config.pillar` below.
+   */
+  | { kind: "pillar" };
 
 /** `ESIG_MCP_REMINDERS` (§15 "Reminders"). Empty `durationsMs` (the default) means reminders are off. */
 export interface RemindersConfig {
@@ -64,6 +74,34 @@ export interface EventsWebhookConfig {
 export interface EventsConfig {
   /** Undefined means lifecycle events are still logged (`metadata.mcp.events[]`, `esig_list_events`) but never POSTed anywhere. */
   webhook?: EventsWebhookConfig;
+}
+
+/** One `ESIG_PILLAR_SUBSCRIBERS[]` entry — an agent this server may seal lifecycle events / signing targets to. */
+export interface PillarSubscriber {
+  /** `uuaid:foundation:agent:<localId>` — must be derived by `publicKey` (validated at config load, `identity/verify.ts` `uuaidFromEd25519Key`). */
+  uuaid: string;
+  /** Raw Ed25519 public key, 64 lowercase hex chars. */
+  publicKey: string;
+}
+
+/**
+ * §17 seams 2-4 (v0.5): settings for the optional `@e-sig/pillar-bridge`
+ * package, dynamically loaded (`pillar-loader.ts`) — `undefined` unless
+ * `ESIG_MCP_DELIVERY=pillar` or `ESIG_PILLAR_SUBSCRIBERS` is set (the
+ * events/proof seams can be wired even when a different channel delivers
+ * signing links).
+ */
+export interface PillarConfig {
+  /** `ESIG_PILLAR_HOME`, default `<dataDir>/pillar` — where the bridge keeps its keychain. */
+  home: string;
+  /** `ESIG_PILLAR_PASSPHRASE` — encrypts the Pillar keychain at rest. RT G4: same >=24 floor as `ESIG_MCP_PASSPHRASE`. */
+  passphrase: string;
+  /** `ESIG_PILLAR_CARRIERS`, comma-separated https:// store-and-forward carrier URLs. */
+  carriers: string[];
+  /** `ESIG_PILLAR_SUBSCRIBERS`, parsed + validated. Empty when unset. */
+  subscribers: PillarSubscriber[];
+  /** `ESIG_PILLAR_PROOF_POLL` seconds between inbox polls for identity proofs (seam 3). Default 1 when delivery=pillar. */
+  proofPollSec: number;
 }
 
 export interface Config {
@@ -133,6 +171,17 @@ export interface Config {
   allowInsecureEventsWebhook: boolean;
   /** `ESIG_MCP_ALLOW_PRIVATE_WEBHOOK` — shared by both webhook channels (T18); re-checked on every send and at startup (bin.ts F4). */
   allowPrivateWebhook: boolean;
+  /**
+   * §17 seam 2 RT G2: `ESIG_MCP_PILLAR_ALLOW_UNREGISTERED` — when a
+   * registry is configured and a `signers[].pillar` uuaid has no badge
+   * there (404), `esig_create_envelope` refuses UNLESS this is set, in
+   * which case the envelope is created anyway (audited
+   * `signer.pillar_unregistered`, surfaced on the approval page). Never
+   * relaxes anything else about L2/registry verification.
+   */
+  pillarAllowUnregistered: boolean;
+  /** §17 seams 2-4: present only when `ESIG_MCP_DELIVERY=pillar` or `ESIG_PILLAR_SUBSCRIBERS` is set. */
+  pillar?: PillarConfig;
 }
 
 export class ConfigError extends Error {
@@ -315,9 +364,16 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       }
       delivery = { kind: "email", transport: "ses", from, replyTo, subjectPrefix, ses: { region } };
     }
+  } else if (deliveryKind === "pillar") {
+    // §17 seam 2: the real channel (PillarDelivery) lives in the optional
+    // @e-sig/pillar-bridge package — the settings it needs are parsed below
+    // (Config.pillar), shared with seams 3/4 which can be wired even when a
+    // DIFFERENT delivery channel is selected (ESIG_PILLAR_SUBSCRIBERS set
+    // with e.g. ESIG_MCP_DELIVERY=file).
+    delivery = { kind: "pillar" };
   } else {
     throw new ConfigError(
-      `ESIG_MCP_DELIVERY="${deliveryKindRaw}": expected "file", "console", "webhook", or "email".`,
+      `ESIG_MCP_DELIVERY="${deliveryKindRaw}": expected "file", "console", "webhook", "email", or "pillar".`,
     );
   }
 
@@ -342,10 +398,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   // ---- Signer identity (docs/architecture/esig-mcp.md §12 "Policy") ----
 
   const identityMinLevelRaw = env.ESIG_MCP_IDENTITY_MIN_LEVEL?.trim() || "none";
-  const IDENTITY_LEVELS = ["none", "L0", "L1", "L2"] as const;
+  const IDENTITY_LEVELS = ["none", "L0", "L1", "L1p", "L2"] as const;
   if (!(IDENTITY_LEVELS as readonly string[]).includes(identityMinLevelRaw)) {
     throw new ConfigError(
-      `ESIG_MCP_IDENTITY_MIN_LEVEL="${identityMinLevelRaw}": expected one of none, L0, L1, L2.`,
+      `ESIG_MCP_IDENTITY_MIN_LEVEL="${identityMinLevelRaw}": expected one of none, L0, L1, L1p, L2.`,
     );
   }
   const identityMinLevel = identityMinLevelRaw as IdentityLevel;
@@ -472,6 +528,92 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     eventsWebhook = { url: eventsWebhookUrlRaw, secret: eventsWebhookSecretRaw };
   }
 
+  // ---- Pillar (agent-to-agent) integration (docs/architecture/esig-mcp.md §17, v0.5) ----
+
+  const pillarAllowUnregistered = env.ESIG_MCP_PILLAR_ALLOW_UNREGISTERED === "1";
+
+  const pillarSubscribersRaw = env.ESIG_PILLAR_SUBSCRIBERS?.trim();
+  const subscribers: PillarSubscriber[] = [];
+  if (pillarSubscribersRaw) {
+    let parsedSubscribers: unknown;
+    try {
+      parsedSubscribers = JSON.parse(pillarSubscribersRaw);
+    } catch (e) {
+      throw new ConfigError(`ESIG_PILLAR_SUBSCRIBERS is not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (!Array.isArray(parsedSubscribers)) {
+      throw new ConfigError("ESIG_PILLAR_SUBSCRIBERS must be a JSON array of {uuaid, publicKey}.");
+    }
+    parsedSubscribers.forEach((entry: unknown, i: number) => {
+      if (!entry || typeof entry !== "object") {
+        throw new ConfigError(`ESIG_PILLAR_SUBSCRIBERS[${i}] must be an object {uuaid, publicKey}.`);
+      }
+      const { uuaid, publicKey } = entry as Record<string, unknown>;
+      if (typeof uuaid !== "string" || typeof publicKey !== "string") {
+        throw new ConfigError(`ESIG_PILLAR_SUBSCRIBERS[${i}] must have string "uuaid" and "publicKey" fields.`);
+      }
+      if (!/^[0-9a-fA-F]{64}$/.test(publicKey)) {
+        throw new ConfigError(
+          `ESIG_PILLAR_SUBSCRIBERS[${i}].publicKey must be 64 hex characters (raw Ed25519 public key), got ${publicKey.length}.`,
+        );
+      }
+      const publicKeyLower = publicKey.toLowerCase();
+      const derived = uuaidFromEd25519Key(Buffer.from(publicKeyLower, "hex"));
+      if (derived !== uuaid) {
+        throw new ConfigError(
+          `ESIG_PILLAR_SUBSCRIBERS[${i}]: publicKey derives uuaid "${derived}", not the configured "${uuaid}" — ` +
+            "each subscriber's key must derive its own uuaid.",
+        );
+      }
+      subscribers.push({ uuaid, publicKey: publicKeyLower });
+    });
+  }
+
+  const pillarNeeded = deliveryKind === "pillar" || pillarSubscribersRaw !== undefined;
+  let pillar: PillarConfig | undefined;
+  if (pillarNeeded) {
+    const home = env.ESIG_PILLAR_HOME?.trim() || path.join(dataDir, "pillar");
+
+    const pillarPassphrase = env.ESIG_PILLAR_PASSPHRASE ?? "";
+    if (pillarPassphrase.length < MIN_PASSPHRASE_LEN) {
+      throw new ConfigError(
+        `ESIG_PILLAR_PASSPHRASE is required and must be at least ${MIN_PASSPHRASE_LEN} characters ` +
+          '(RT G4) when ESIG_MCP_DELIVERY="pillar" or ESIG_PILLAR_SUBSCRIBERS is set — it encrypts the ' +
+          "Pillar keychain at rest.",
+      );
+    }
+
+    const carriersRaw = env.ESIG_PILLAR_CARRIERS?.trim();
+    if (!carriersRaw) {
+      throw new ConfigError(
+        'ESIG_PILLAR_CARRIERS is required (comma-separated https:// store-and-forward carrier URLs) when ' +
+          'ESIG_MCP_DELIVERY="pillar" or ESIG_PILLAR_SUBSCRIBERS is set.',
+      );
+    }
+    const carriers = carriersRaw
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (carriers.length === 0) {
+      throw new ConfigError("ESIG_PILLAR_CARRIERS resolved to no carrier URLs.");
+    }
+    for (const c of carriers) {
+      let parsedCarrier: URL;
+      try {
+        parsedCarrier = new URL(c);
+      } catch {
+        throw new ConfigError(`ESIG_PILLAR_CARRIERS entry is not a valid URL: "${c}"`);
+      }
+      if (parsedCarrier.protocol !== "https:") {
+        throw new ConfigError(`ESIG_PILLAR_CARRIERS entry must use https:// (got "${c}").`);
+      }
+    }
+
+    const proofPollSec = parsePositiveInt(env.ESIG_PILLAR_PROOF_POLL, 1, "ESIG_PILLAR_PROOF_POLL");
+
+    pillar = { home, passphrase: pillarPassphrase, carriers, subscribers, proofPollSec };
+  }
+
   return {
     modes,
     passphrase,
@@ -498,6 +640,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     allowInsecureWebhook,
     allowInsecureEventsWebhook,
     allowPrivateWebhook,
+    pillarAllowUnregistered,
+    pillar,
   };
 }
 

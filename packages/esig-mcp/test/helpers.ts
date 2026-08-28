@@ -43,6 +43,8 @@ export async function makeConfig(overrides: Partial<Config> = {}): Promise<Confi
     allowInsecureWebhook: false,
     allowInsecureEventsWebhook: false,
     allowPrivateWebhook: false,
+    pillarAllowUnregistered: false,
+    pillar: undefined,
     ...overrides,
   };
 }

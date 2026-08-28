@@ -1,0 +1,16 @@
+{
+  "name": "esig-pillar-agent-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reference Pillar recipient agent for @e-sig/pillar-bridge: polls its own inbox for esig:sign-request envelopes and replies with a signed identity proof (docs/architecture/esig-mcp.md §17).",
+  "scripts": {
+    "start": "node index.mjs",
+    "demo": "node demo.mjs",
+    "test": "node test.mjs"
+  },
+  "dependencies": {
+    "@e-sig/pillar-bridge": "file:../../packages/esig-pillar-bridge",
+    "@e-sig/uaid-exch": "^0.1.0-preview.2"
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "name": "@e-sig/pillar-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional Pillar (UUAID/IAASO-3050 agent communication substrate) bridge for @e-sig/mcp — deliver signing links, lifecycle events, and identity proofs as signed, end-to-end encrypted envelopes over an agent's own inbox instead of (or alongside) email/webhooks. Consumes the real @uuaid/pillar package through a deep file:// import shim so the process never statically loads libp2p or better-sqlite3 (docs/architecture/esig-mcp.md §17).",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "pillar",
+    "uuaid",
+    "iaaso",
+    "agent-to-agent",
+    "e2e-encryption",
+    "esignature",
+    "esign",
+    "delivery-channel",
+    "mcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vmvtech/esig-suite.git",
+    "directory": "packages/esig-pillar-bridge"
+  },
+  "homepage": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-pillar-bridge#readme",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.10"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "dependencies": {
+    "@uuaid/pillar": "^0.2.0-alpha.12"
+  }
+}

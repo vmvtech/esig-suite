@@ -1,7 +1,9 @@
 // identity/verify.ts
 //
 // Signer-identity verification orchestrator (docs/architecture/esig-mcp.md
-// §12): L0 (asserted) / L1 (proven, local) / L2 (registry-bound). Called
+// §12, §17): L0 (asserted) / L1 (proven, local) / L1p (self-authenticating —
+// the proof's own Ed25519 key derives its foundation:agent uuaid, §17 seam
+// 1) / L2 (registry-bound). Ladder: none < L0 < L1 < L1p < L2. Called
 // from `EnvelopeService.sign()` BEFORE core `recordSignature` — a rejected
 // identity throws {@link IdentityError} and the signature is never recorded
 // (T10-T14).
@@ -88,6 +90,45 @@ function messageOf(e: unknown): string {
 
 function sha256Hex(bytes: Uint8Array): string {
   return crypto.createHash("sha256").update(bytes).digest("hex");
+}
+
+// ---------- L1p: self-authenticating identity (§17 seam 1, v0.5) ----------
+//
+// Pillar's own identity derivation (keychain.mjs `_localIdFromKey`,
+// `uuaid-pillar-envelope/2`): `localId = hex(sha256(rawEd25519PubKey)[0..16])`
+// formatted `8-4-4-4-12`. `localIdFromEd25519Key` is NOT a public Pillar
+// export as of alpha.12 (docs/architecture/esig-mcp.md §17 "Did NOT land in
+// alpha.12") so this package reimplements the 5-line derivation locally,
+// giving `@e-sig/mcp` NO dependency on Pillar/`@e-sig/pillar-bridge` to
+// compute it — it is pure crypto (sha256 of the RAW 32-byte key, never the
+// hex string; hashing hex yields a different, plausible-looking id). NOT an
+// RFC 4122 UUID (no version/variant bits) — validate with
+// `FOUNDATION_AGENT_UUAID_RE`, never a strict UUID validator.
+
+/** The `uuaid:foundation:agent:` prefix a self-authenticating (Pillar-identified) uuaid always carries. */
+export const FOUNDATION_AGENT_UUAID_PREFIX = "uuaid:foundation:agent:";
+
+/** `^uuaid:foundation:agent:<8-4-4-4-12 lowercase hex>$` — NOT an RFC 4122 UUID validator (§17: no version/variant bits). */
+export const FOUNDATION_AGENT_UUAID_RE =
+  /^uuaid:foundation:agent:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * `localId = hex(sha256(raw))[0..32]` formatted `8-4-4-4-12` — Pillar's own
+ * derivation (keychain.mjs `_localIdFromKey`), reimplemented here (§17 seam
+ * 1). `raw` MUST be the 32 raw Ed25519 public-key bytes, never a hex/base64
+ * string of them.
+ */
+export function localIdFromEd25519Key(raw: Uint8Array): string {
+  if (raw.length !== 32) {
+    throw new Error(`localIdFromEd25519Key: expected a 32-byte raw Ed25519 public key, got ${raw.length} bytes`);
+  }
+  const hex = sha256Hex(raw).slice(0, 32);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/** `"uuaid:foundation:agent:" + localIdFromEd25519Key(raw)` (§17 seam 1). */
+export function uuaidFromEd25519Key(raw: Uint8Array): string {
+  return `${FOUNDATION_AGENT_UUAID_PREFIX}${localIdFromEd25519Key(raw)}`;
 }
 
 /**
@@ -365,6 +406,81 @@ export async function verifySignerIdentity(
     ...(credentialDigest ? { credentialDigest } : {}),
     verifiedAt: now().toISOString(),
   };
+
+  // ---- L1p: self-authenticating identity (§17 seam 1) ----
+  //
+  // Unconditional whenever `proof.uuaid` is itself in foundation:agent form —
+  // this is a property of the proof JUST verified above, not an extra check
+  // some levels opt into. A foundation:agent uuaid that does NOT derive from
+  // its own proof key must never silently pass as a plain L1 record (that
+  // would misrepresent a self-authenticating identity as merely
+  // self-asserted) — refuse instead (T10 class), never downgrade to L1.
+  if (FOUNDATION_AGENT_UUAID_RE.test(proof.uuaid)) {
+    const claimedLocalId = proof.uuaid.slice(FOUNDATION_AGENT_UUAID_PREFIX.length);
+    if (localIdFromEd25519Key(proofRawKey) === claimedLocalId) {
+      record.level = "L1p";
+    } else {
+      throw new IdentityError(
+        `identityProof.uuaid "${proof.uuaid}" is a foundation:agent uuaid but its local id does not derive ` +
+          "from the proof's own Ed25519 key (localIdFromEd25519Key mismatch) — refusing rather than silently " +
+          "downgrading to L1.",
+        "L1P_KEY_UUAID_MISMATCH",
+        proof.uuaid,
+        input.minLevel,
+      );
+    }
+  }
+  if (input.minLevel === "L1p" && record.level !== "L1p") {
+    throw new IdentityError(
+      "identity level L1p requires identityProof.uuaid to be a foundation:agent uuaid whose local id is " +
+        `derived from the proof's own Ed25519 key (got "${proof.uuaid}").`,
+      "L1P_REQUIRED",
+      proof.uuaid,
+      input.minLevel,
+    );
+  }
+
+  // G5 (RedTeam RT-2026-08-28-01): opportunistic ladder composition — L1p
+  // stays fully local (never REQUIRES the registry), but when a registry IS
+  // configured and it happens to carry a badge for this same uuaid, a
+  // disagreeing presentationKey is refused rather than silently accepted.
+  // Skipped at minLevel "L2": the mandatory L2 checks below already perform
+  // an equivalent (stricter) comparison under `L2_KEY_MISMATCH`, so running
+  // this too would just duplicate it under a different reason code. A
+  // missing/unreachable/malformed badge is NOT a failure here — L1p never
+  // depends on the registry being up.
+  if (record.level === "L1p" && input.minLevel !== "L2" && input.registry && input.registrySigningKey) {
+    let badgeRaw: unknown;
+    try {
+      badgeRaw = await input.registry.badge(proof.uuaid);
+    } catch {
+      badgeRaw = undefined;
+    }
+    if (badgeRaw !== undefined) {
+      try {
+        const badgePayload = verifyRegistryBadge(badgeRaw, { pinnedRegistryKey: input.registrySigningKey, now: now() });
+        const presentationKey =
+          badgePayload.subject.uuaid === proof.uuaid ? badgePayload.subject.presentationKey : null;
+        if (presentationKey && presentationKey.alg === "ed25519") {
+          const badgeKeyBytes = hexToBytes(presentationKey.publicKey, 32, "presentationKey.publicKey");
+          if (!bytesEqual(proofRawKey, badgeKeyBytes)) {
+            throw new IdentityError(
+              `registry badge for uuaid "${proof.uuaid}" attests a different presentation key than this ` +
+                "proof's own self-authenticating (L1p) key — refusing rather than accepting a disagreement " +
+                "between the two trust sources.",
+              "L2_L1P_DISAGREEMENT",
+              proof.uuaid,
+              input.minLevel,
+            );
+          }
+        }
+      } catch (e) {
+        if (e instanceof IdentityError) throw e;
+        // A malformed/unverifiable badge is not a hard failure for L1p
+        // (which never depends on the registry) — swallow and proceed.
+      }
+    }
+  }
 
   // ---- L2: L1 + registry-bound key + (optionally) credential status ----
   if (input.minLevel === "L2") {

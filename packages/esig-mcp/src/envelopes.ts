@@ -59,11 +59,15 @@ import { stripControlChars } from "./email/templates.js";
 import { appendEvent, listEvents } from "./events/log.js";
 import type { EsigEvent, EsigEventInput } from "./events/types.js";
 import type { EventDeliveryStatus, EventQueue } from "./events/queue.js";
+import type { EventDispatcher } from "./events/sinks.js";
+import { verifyRegistryBadge, type BadgePayload } from "./identity/badge.js";
 import { issueChallenge, type IdentityChallengePayload } from "./identity/challenge.js";
-import { RegistryClient } from "./identity/registry.js";
+import type { IdentityProofEvent } from "./identity/proof-source.js";
+import { RegistryClient, RegistryNotFoundError } from "./identity/registry.js";
 import {
   getEnvelopeIdentityPolicy,
   getSignerIdentityState,
+  IDENTITY_LEVEL_ORDER,
   IdentityError,
   maxIdentityLevel,
   setEnvelopeIdentityPolicy,
@@ -72,7 +76,7 @@ import {
   type IdentityProofInput,
   type SignerIdentityRecord,
 } from "./identity/types.js";
-import { verifySignerIdentity } from "./identity/verify.js";
+import { FOUNDATION_AGENT_UUAID_RE, uuaidFromEd25519Key, verifySignerIdentity } from "./identity/verify.js";
 import { sanitizeEnvelopeHtml } from "./sanitize.js";
 import { listEnvelopes } from "./stores.js";
 import { messageOf } from "./tools/helpers.js";
@@ -90,6 +94,14 @@ export interface SignerInput {
   roleLabel?: string;
   /** 1-based signing order; equal values sign in parallel. Default 1 (core default, envelope.ts:134). */
   order?: number;
+  /**
+   * §17 seam 2: reach this signer over Pillar instead of/alongside email.
+   * Validated at `create()` (fail closed): `publicKey` must derive `uuaid`
+   * (`localIdFromEd25519Key`), and — when a registry is configured — its
+   * badge for `uuaid` must attest `publicKey` too (RT G2), unless
+   * `ESIG_MCP_PILLAR_ALLOW_UNREGISTERED=1` opts out of that second check.
+   */
+  pillar?: { uuaid: string; publicKey: string };
 }
 
 /** `esig_create_envelope`'s optional `identity` input (docs/architecture/esig-mcp.md §12 "Policy"). */
@@ -249,6 +261,14 @@ interface McpEnvelopeMetadata {
   events?: EsigEvent[];
   /** §16: ISO-8601, set once `envelope.expired` has been emitted for this envelope (`events/expiry.ts`'s idempotency guard) — read/written only there, never here, but declared for documentation. */
   expiredEmittedAt?: string;
+  /**
+   * §17 seam 2 RT G2: signerIds whose `signers[].pillar.uuaid` had no
+   * registry badge at creation time — present only when
+   * `ESIG_MCP_PILLAR_ALLOW_UNREGISTERED=1` let `create()` proceed anyway.
+   * Surfaced on the approval page as an "unregistered signer" notice for
+   * each listed signer; audited per-signer as `signer.pillar_unregistered`.
+   */
+  pillarUnregisteredSignerIds?: string[];
 }
 
 /** §15 "Link persistence for reminders" + "Reminders". */
@@ -298,6 +318,11 @@ export function derivePhase(envelope: Envelope): EnvelopePhase {
 /** §13: this envelope's pinned PDF document metadata, if it is a PDF envelope (created with `docId`). */
 export function getEnvelopeDocument(envelope: Envelope): EnvelopeDocumentMeta | undefined {
   return mcpMeta(envelope)?.document;
+}
+
+/** §17 seam 2 RT G2: signerIds whose Pillar-asserted uuaid had no registry badge at creation (present only under `ESIG_MCP_PILLAR_ALLOW_UNREGISTERED=1`) — the approval page uses this to show an "unregistered signer" notice. */
+export function getPillarUnregisteredSignerIds(envelope: Envelope): string[] | undefined {
+  return mcpMeta(envelope)?.pillarUnregisteredSignerIds;
 }
 
 /** §15: this signer's reminder send history, if any reminder has been sent yet. */
@@ -377,6 +402,8 @@ export interface EnvelopeServiceDeps {
   now?: () => Date;
   /** §16: present only when `ESIG_MCP_EVENTS_WEBHOOK_URL`/`_SECRET` are configured (bin.ts) — every emitted event is also enqueued here for webhook delivery. Absent means events are still logged (`metadata.mcp.events[]`, `esig_list_events`) but never POSTed anywhere. */
   eventQueue?: EventQueue;
+  /** §17 seam 4: present only when at least one `EventSink` is registered (e.g. the Pillar bridge's, bin.ts) — every emitted event is ALSO fanned out here, after the webhook enqueue above, with per-sink isolation (a sink failure never blocks the webhook queue or another sink). */
+  eventDispatcher?: EventDispatcher;
 }
 
 /**
@@ -490,6 +517,12 @@ export class EnvelopeService {
       });
       if (event && this.deps.eventQueue) {
         await this.deps.eventQueue.enqueue(event);
+      }
+      // §17 seam 4: fanned out AFTER the webhook enqueue above — see
+      // EventDispatcher.dispatch's own header comment for why a sink
+      // failure can never block the webhook queue or another sink.
+      if (event && this.deps.eventDispatcher) {
+        await this.deps.eventDispatcher.dispatch(event);
       }
       return event;
     } catch (e) {
@@ -653,6 +686,82 @@ export class EnvelopeService {
       }
     }
 
+    // §17 seam 2: validate signers[].pillar BEFORE any write (fail closed).
+    // Pillar's own binding covers `split(":")[3]` of the uuaid only, so the
+    // FULL uuaid string is what's checked here (§17 "the FULL uuaid string
+    // is pinned, never the local id alone") — a wrong/substituted key simply
+    // fails to derive the asserted uuaid.
+    for (const s of args.signers) {
+      if (!s.pillar) continue;
+      if (!FOUNDATION_AGENT_UUAID_RE.test(s.pillar.uuaid)) {
+        throw new EnvelopeError(
+          `signers[].pillar.uuaid "${s.pillar.uuaid}" is not a well-formed uuaid:foundation:agent uuaid.`,
+        );
+      }
+      if (!/^[0-9a-fA-F]{64}$/.test(s.pillar.publicKey)) {
+        throw new EnvelopeError(
+          `signers[].pillar.publicKey must be 64 hex characters (raw Ed25519 public key), got ${s.pillar.publicKey.length}.`,
+        );
+      }
+      const derivedUuaid = uuaidFromEd25519Key(Buffer.from(s.pillar.publicKey, "hex"));
+      if (derivedUuaid !== s.pillar.uuaid) {
+        throw new EnvelopeError(
+          `signers[].pillar.publicKey derives uuaid "${derivedUuaid}", not the configured "${s.pillar.uuaid}" — ` +
+            "refusing (a self-authenticating identity must derive by construction).",
+        );
+      }
+    }
+
+    // RT-2026-08-28-01 G2: derivation alone cannot stop a substituted
+    // self-consistent (uuaid, key) pair — only the registry can. When one is
+    // configured, cross-check each pillar signer's asserted key against the
+    // registry's own attestation BEFORE creating the envelope (fail closed).
+    // A badge 404 is an explicit opt-in (`config.pillarAllowUnregistered`),
+    // tracked here by INDEX (real signerIds don't exist until after
+    // `createEnvelope` below) and later persisted + audited per signer.
+    const unregisteredPillarIndices: number[] = [];
+    if (config.uuaidRegistryUrl && config.uuaidRegistrySigningKey) {
+      for (let i = 0; i < args.signers.length; i++) {
+        const s = args.signers[i];
+        if (!s.pillar) continue;
+        let badgeRaw: unknown;
+        try {
+          badgeRaw = await this.registryClient!.badge(s.pillar.uuaid);
+        } catch (e) {
+          if (e instanceof RegistryNotFoundError) {
+            if (!config.pillarAllowUnregistered) {
+              throw new EnvelopeError(
+                `registry has no badge for pillar signer uuaid "${s.pillar.uuaid}" — refusing (set ` +
+                  "ESIG_MCP_PILLAR_ALLOW_UNREGISTERED=1 to allow unregistered Pillar signers).",
+              );
+            }
+            unregisteredPillarIndices.push(i);
+            continue;
+          }
+          throw new EnvelopeError(
+            `registry badge fetch failed for pillar signer uuaid "${s.pillar.uuaid}": ${messageOf(e)}`,
+          );
+        }
+        let badgePayload: BadgePayload;
+        try {
+          badgePayload = verifyRegistryBadge(badgeRaw, { pinnedRegistryKey: config.uuaidRegistrySigningKey, now: this.now() });
+        } catch (e) {
+          throw new EnvelopeError(`registry badge for pillar signer uuaid "${s.pillar.uuaid}" is invalid: ${messageOf(e)}`);
+        }
+        const presentationKey = badgePayload.subject.presentationKey;
+        if (
+          badgePayload.subject.uuaid !== s.pillar.uuaid ||
+          !presentationKey ||
+          presentationKey.publicKey.toLowerCase() !== s.pillar.publicKey.toLowerCase()
+        ) {
+          throw new EnvelopeError(
+            `registry badge for pillar signer uuaid "${s.pillar.uuaid}" does not attest the configured publicKey ` +
+              "(fail closed — a mismatch here means the registry disagrees with the asserted identity).",
+          );
+        }
+      }
+    }
+
     this.rateLimiter.take();
 
     const { html: sanitized, removed } = sanitizeEnvelopeHtml(effectiveHtml);
@@ -713,8 +822,37 @@ export class EnvelopeService {
       await this.deps.envelopeStore.update(envelope);
     }
 
+    // §17 seam 2 RT G2: persist which signers were let through unregistered
+    // (index -> real signerId, now that envelope.signers exists) and audit
+    // each one — one more write, same "right after insert, nothing else can
+    // be racing it yet" window the identity-policy write above uses.
+    const pillarUnregisteredEntries = unregisteredPillarIndices.map((i) => ({
+      signerId: envelope.signers[i].id,
+      uuaid: args.signers[i].pillar!.uuaid,
+    }));
+    if (pillarUnregisteredEntries.length > 0) {
+      const pillarUnregisteredSignerIds = pillarUnregisteredEntries.map((e) => e.signerId);
+      const currentMcp = mcpMeta(envelope) ?? {};
+      envelope.metadata = {
+        ...envelope.metadata,
+        mcp: { ...currentMcp, pillarUnregisteredSignerIds } satisfies McpEnvelopeMetadata,
+      };
+      await this.deps.envelopeStore.update(envelope);
+      for (const { signerId, uuaid } of pillarUnregisteredEntries) {
+        await this.deps.auditStore.insert({
+          tenantId: config.tenant,
+          action: "signer.pillar_unregistered",
+          targetTable: "envelope",
+          targetId: envelope.id,
+          metadata: { signerId, uuaid },
+        });
+      }
+    }
+
     const links: DeliveryLink[] = signingTokens.map((t) => {
-      const signer = envelope.signers.find((s) => s.id === t.signerId)!;
+      const signerIndex = envelope.signers.findIndex((s) => s.id === t.signerId);
+      const signer = envelope.signers[signerIndex];
+      const pillarInput = signerIndex >= 0 ? args.signers[signerIndex]?.pillar : undefined;
       return {
         signerId: t.signerId,
         name: signer.name,
@@ -728,6 +866,10 @@ export class EnvelopeService {
         ...(identityPolicy
           ? { identity: { minLevel: identityPolicy.minLevel, expectedUuaid: identityPolicy.signers[signer.id]?.expectedUuaid } }
           : {}),
+        // §17 seam 2: a channel that understands Pillar (PillarDelivery)
+        // routes this signer over it instead of/alongside `url` above; any
+        // other channel simply ignores this field.
+        ...(pillarInput ? { pillar: { uuaid: pillarInput.uuaid, publicKey: pillarInput.publicKey.toLowerCase() } } : {}),
       };
     });
 
@@ -1020,6 +1162,29 @@ export class EnvelopeService {
       const minLevel = policy?.minLevel ?? "none";
       if (minLevel !== "none") {
         const expectedUuaid = policy?.signers[gate.signer.id]?.expectedUuaid;
+
+        // §17 seam 3: a record already verified out-of-band (Pillar identity
+        // proof, `acceptPreVerifiedIdentity` below — SAME verification path,
+        // already atomically bound to this signer's challenge nonce) that
+        // satisfies THIS request's effective level is accepted without
+        // requiring `identityProof` at all — even when one was also passed,
+        // it is simply not needed (never re-verified: its nonce may already
+        // be consumed by the very record we're accepting here).
+        const existing = getSignerIdentityState(gate.envelope, gate.signer.id)?.verified;
+        const preVerifiedOk =
+          existing !== undefined &&
+          IDENTITY_LEVEL_ORDER[existing.level] >= IDENTITY_LEVEL_ORDER[minLevel] &&
+          (expectedUuaid === undefined || existing.uuaid === expectedUuaid);
+
+        if (preVerifiedOk) {
+          await this.deps.auditStore.insert({
+            tenantId: this.deps.config.tenant,
+            action: "signer.identity_preverified_used",
+            targetTable: "envelope",
+            targetId: gate.envelope.id,
+            metadata: { signerId: gate.signer.id, uuaid: existing!.uuaid, level: existing!.level },
+          });
+        } else {
         let record: SignerIdentityRecord | undefined;
         try {
           record = await this.verifyIdentity({
@@ -1086,6 +1251,7 @@ export class EnvelopeService {
               data: { level: record!.level },
             };
           });
+        }
         }
       }
     }
@@ -1158,6 +1324,97 @@ export class EnvelopeService {
     }
 
     return summarize(envelope);
+  }
+
+  /**
+   * §17 seam 3: accept an out-of-band identity proof relayed by an
+   * `IdentityProofSource` (e.g. the Pillar bridge's inbox poller). Runs the
+   * SAME verification path `POST /sign`'s `identityProof` uses — challenge
+   * nonce binding, L0/L1/L1p/L2, atomic consumption via `finalizeChallenge`
+   * — against whatever identity challenge is CURRENTLY live for this signer
+   * (`verifySignerIdentity` itself refuses with `L1_NO_CHALLENGE` if none
+   * has been issued yet; the sender-side agent must relay/issue one first,
+   * exactly like the human-facing flow). On success `finalizeChallenge`
+   * already persists the record under
+   * `metadata.mcp.identity.signers[signerId].verified` — `sign()`'s own
+   * `preVerifiedOk` check above is what later reads it back, so the human
+   * just signs, no pasting.
+   *
+   * Deliberately never throws for a VERIFICATION failure (a stale, forged,
+   * or mismatched proof is audited as `signer.identity_rejected` and
+   * swallowed) — an out-of-band relay is best-effort, unlike `POST /sign`'s
+   * own live `identityProof`, which must surface a real error to the human
+   * waiting on it. It still throws for a genuinely unexpected failure (e.g.
+   * the envelope store itself erroring).
+   */
+  async acceptPreVerifiedIdentity(evt: IdentityProofEvent): Promise<SignerIdentityRecord | undefined> {
+    const envelope = await this.deps.envelopeStore.findById(this.deps.config.tenant, evt.envelopeId);
+    if (!envelope) {
+      process.stderr.write(
+        `[esig-mcp] WARNING: acceptPreVerifiedIdentity: envelope not found: ${evt.envelopeId} (signer ${evt.signerId})\n`,
+      );
+      return undefined;
+    }
+    const policy = getEnvelopeIdentityPolicy(envelope);
+    const minLevel = policy?.minLevel ?? "none";
+    if (minLevel === "none") return undefined; // nothing this envelope requires verifying
+    const expectedUuaid = policy?.signers[evt.signerId]?.expectedUuaid;
+
+    try {
+      const record = await this.verifyIdentity({
+        store: this.deps.envelopeStore,
+        tenantId: this.deps.config.tenant,
+        envelopeId: evt.envelopeId,
+        signerId: evt.signerId,
+        minLevel,
+        expectedUuaid,
+        proof: { uuaid: evt.uuaid, proof: evt.proof, credential: evt.credential as IdentityProofInput["credential"] },
+        registry: this.registryClient,
+        pinnedRegistryUrl: policy?.registryUrl,
+        configuredRegistryUrl: this.deps.config.uuaidRegistryUrl,
+        registrySigningKey: this.deps.config.uuaidRegistrySigningKey,
+        blobStore: this.deps.pdfStorage,
+        now: this.now,
+      });
+      if (record) {
+        await this.deps.auditStore.insert({
+          tenantId: this.deps.config.tenant,
+          action: "signer.identity_verified",
+          targetTable: "envelope",
+          targetId: evt.envelopeId,
+          metadata: {
+            signerId: evt.signerId,
+            uuaid: record.uuaid,
+            level: record.level,
+            keyFingerprint: record.keyFingerprint,
+            viaPillarEnvelopeId: evt.pillarEnvelopeId,
+          },
+        });
+        await this.emit(evt.envelopeId, (env) => {
+          const s = env.signers.find((x) => x.id === evt.signerId);
+          return {
+            type: "signer.identity_verified",
+            envelopeId: env.id,
+            phase: derivePhase(env),
+            signer: s ? { signerId: s.id, name: s.name, email: s.email, status: s.status } : undefined,
+            data: { level: record.level },
+          };
+        });
+      }
+      return record;
+    } catch (e) {
+      if (e instanceof IdentityError) {
+        await this.deps.auditStore.insert({
+          tenantId: this.deps.config.tenant,
+          action: "signer.identity_rejected",
+          targetTable: "envelope",
+          targetId: evt.envelopeId,
+          metadata: { signerId: evt.signerId, reason: e.reason, uuaid: e.uuaid, level: e.level, viaPillarEnvelopeId: evt.pillarEnvelopeId },
+        });
+        return undefined;
+      }
+      throw e;
+    }
   }
 
   /**
@@ -1344,6 +1601,15 @@ export class EnvelopeService {
     let message: string | undefined;
     let expiresAt: string | undefined;
     let sentTimestamp = "";
+    // LOW carry-over fix: the position THIS attempt appended its entry at,
+    // captured fresh on every `updateWithRetry` attempt (a retry re-derives
+    // `nextScheduledSentAt`/`nextManualSentAt` from a fresh read, so the
+    // index can legitimately differ between attempts) — the rollback below
+    // removes exactly this position, never by matching the timestamp VALUE
+    // (two entries can share an identical timestamp under a frozen/coarse
+    // clock, and removing by value would then delete the wrong one, or both).
+    let appendedScheduledIndex: number | undefined;
+    let appendedManualIndex: number | undefined;
 
     const persisted = await this.updateWithRetry(envelopeIn.id, (envelope) => {
       const signer = envelope.signers.find((s) => s.id === signerId);
@@ -1379,6 +1645,10 @@ export class EnvelopeService {
       sentTimestamp = this.now().toISOString();
       const nextScheduledSentAt = kind === "scheduled" ? [...scheduledSentAt, sentTimestamp] : scheduledSentAt;
       const nextManualSentAt = kind === "manual" ? [...manualSentAt, sentTimestamp] : manualSentAt;
+      // Recorded on EVERY attempt (including retries) — see this method's
+      // header comment above.
+      appendedScheduledIndex = kind === "scheduled" ? nextScheduledSentAt.length - 1 : undefined;
+      appendedManualIndex = kind === "manual" ? nextManualSentAt.length - 1 : undefined;
 
       envelope.metadata = {
         ...envelope.metadata,
@@ -1407,15 +1677,28 @@ export class EnvelopeService {
     const [receipt] = await this.deps.delivery.deliver({ id: envelope.id, title, message, expiresAt }, [link]);
 
     if (!receipt.ok) {
-      // R3: roll back exactly the slot this attempt appended, so the next
-      // tick (or manual call) sees the signer as still due/eligible.
+      // LOW carry-over fix (index-based, not timestamp-equality): roll back
+      // exactly the ENTRY this attempt appended — identified by the POSITION
+      // it landed at (captured above, on the attempt that actually
+      // persisted), never by matching `sentTimestamp`'s VALUE. A frozen (or
+      // just coarse) clock can produce two reminders with an IDENTICAL
+      // timestamp string; `.filter((t) => t !== sentTimestamp)` would then
+      // remove every entry sharing that value (or, if only one happens to
+      // match by luck, still the wrong one) instead of exactly the one this
+      // call appended. Removing by index is correct regardless of whether
+      // any other entry's timestamp collides with this one's.
       await this.updateWithRetry(envelope.id, (e) => {
         const currentMcp = mcpMeta(e) ?? {};
         const currentState = currentMcp.delivery?.reminders?.[signerId];
         if (!currentState) return false; // nothing to roll back (shouldn't happen — defensive)
-        const rolledBackSentAt = kind === "scheduled" ? currentState.sentAt.filter((t) => t !== sentTimestamp) : currentState.sentAt;
+        const rolledBackSentAt =
+          kind === "scheduled" && appendedScheduledIndex !== undefined
+            ? currentState.sentAt.filter((_, i) => i !== appendedScheduledIndex)
+            : currentState.sentAt;
         const rolledBackManualSentAt =
-          kind === "manual" ? (currentState.manualSentAt ?? []).filter((t) => t !== sentTimestamp) : (currentState.manualSentAt ?? []);
+          kind === "manual" && appendedManualIndex !== undefined
+            ? (currentState.manualSentAt ?? []).filter((_, i) => i !== appendedManualIndex)
+            : (currentState.manualSentAt ?? []);
         e.metadata = {
           ...e.metadata,
           mcp: {

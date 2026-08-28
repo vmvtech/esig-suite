@@ -208,6 +208,7 @@ control of a key, self-asserted identity," not as "verified identity."
 | `none` | Nothing (default). | No | — | No |
 | `L0` | The signer's `uuaid` is well-formed, and — if this envelope pinned an expected `uuaid` for this signer at creation — matches it. | No | No (self-asserted) | No |
 | `L1` | The signer presents an `eddsa-jcs-2022` `DataIntegrityProof` over a server-issued, single-use, 15-minute sole-control challenge, verified locally against the key in `proof.verificationMethod`. | Yes (Ed25519) | **No (self-asserted)** — proves the signer controls *a* key, not that the key belongs to the claimed `uuaid` | No |
+| `L1p` | Like `L1`, plus: when the signer's `uuaid` is `uuaid:foundation:agent:<localId>` ([Pillar](https://uuaid.org)'s self-authenticating identity form — see "Pillar (agent-to-agent) delivery" below), `localId` must equal `localIdFromEd25519Key(proof key)` — the uuaid derives from the key **by construction**, no registry needed. A `foundation:agent`-shaped `uuaid` whose local id does NOT derive from the proof key is refused (`L1P_KEY_UUAID_MISMATCH`) — never silently accepted as plain `L1`. When a UUAID registry happens to be configured and carries a badge for the same `uuaid`, a disagreeing `presentationKey` is refused too (`L2_L1P_DISAGREEMENT`) — L1p never *requires* the registry, but never silently ignores it either. | Yes (Ed25519) | **Yes, by construction** — the key derives the uuaid; no third party attests it | No |
 | `L2` | L1, plus: the registry's SIGNED badge (`GET /iaaso/v1/badge/{uuaid}` — `GET /resolve/{uuaid}` carries no key material at all) must verify against the pinned `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY` (the registry's Ed25519 public key, 64 hex chars — hash binding + Ed25519 signature + freshness), its `subject.presentationKey` (64 hex chars) must equal the proof's key, and its `subject.uuaid` must equal the uuaid being proven (`L2_BADGE_SUBJECT_MISMATCH` otherwise — a badge signed for a *different* subject that happens to share the presentation key does not pass); a tombstoned/absent uuaid (badge `404`) refuses (`L2_UUAID_NOT_FOUND`). If a `credential` is presented, its `credentialSubject.key.publicKey` must equal the proof's key, and `GET /verify/{credentialId}` must say `valid && active && notExpired` with `agent_uuaid` equal to the proving uuaid. A down/unreachable/malformed registry response is a hard failure — this never silently drops to L1. The registry URL is pinned per envelope at creation; a server later reconfigured to a different `ESIG_MCP_UUAID_REGISTRY_URL` refuses (`L2_REGISTRY_URL_CHANGED`) rather than verifying against a different registry than the one the envelope committed to. | Yes | **Yes** — via the registry | Yes |
 
 **Requiring it.** Pass `identity` to `esig_create_envelope`:
@@ -389,6 +390,47 @@ function verifyEsigWebhook(req, rawBody, secret) {
 
 **SSRF / private-range policy (T18).** `ESIG_MCP_EVENTS_WEBHOOK_URL` must be `https://` unless `ESIG_MCP_ALLOW_INSECURE_EVENTS_WEBHOOK=1` — its **own** flag, deliberately separate from `ESIG_MCP_ALLOW_INSECURE_WEBHOOK` (the `webhook` *delivery* channel's own flag, above): relaxing one can never silently relax the other. Both `ESIG_MCP_EVENTS_WEBHOOK_URL` and `ESIG_MCP_DELIVERY_WEBHOOK_URL` are refused **at startup** (not only at send time) if they resolve to a private/local address, unless `ESIG_MCP_ALLOW_PRIVATE_WEBHOOK=1`. Before **every** send, the target host is resolved fresh (`dns.promises.lookup`, all addresses) and refused if any address is loopback, link-local (`169.254.0.0/16` — this covers the cloud-metadata address too — and `fe80::/10`), RFC1918 (`10/8`, `172.16/12`, `192.168/16`), unique-local (`fc00::/7`), unspecified (`0.0.0.0`, `::`), or an IPv4-mapped IPv6 literal wrapping any of the above — unless `ESIG_MCP_ALLOW_PRIVATE_WEBHOOK=1` (e.g. for a trusted local receiver in dev). A literal IP in the URL goes through the identical check; there is no separate code path to bypass it. The request then **connects to that exact vetted address**, never letting the HTTP stack re-resolve the hostname itself (a DNS answer that changes between the vetting lookup and the actual connection — DNS rebinding — would otherwise bypass the check entirely); the `Host` header and TLS SNI stay on the original hostname, so certificate validation is unaffected.
 
+## Pillar (agent-to-agent) delivery
+
+Reach a signer that is itself an agent — no inbound HTTP, no email — over [Pillar](https://uuaid.org) (IAASO-3050), UUAID's agent-to-agent communication substrate: signed, end-to-end encrypted envelopes over a store-and-forward carrier. Full design: [`docs/architecture/esig-mcp.md` §17](https://github.com/vmvtech/esig-suite/blob/main/docs/architecture/esig-mcp.md#17-pillar-integration--agent-to-agent-signing-over-uuaids-communication-substrate-design-2026-08-28).
+
+**Requires the optional peer dependency `@e-sig/pillar-bridge`** (`npm install @e-sig/pillar-bridge`) — `@e-sig/mcp` never depends on it, never installs it, and loads it only with a dynamic `import()` the moment it's actually needed (`ESIG_MCP_DELIVERY=pillar` or `ESIG_PILLAR_SUBSCRIBERS` set). A missing install fails startup with one clear error naming the install command — never a silent fallback to a different channel.
+
+**L1p — self-authenticating identity, no bridge needed.** Pillar's own identity is a UUAID in this suite's grammar: `uuaid:foundation:agent:<localId>`, where `localId` derives from the agent's raw Ed25519 public key by construction (`localIdFromEd25519Key`, exported by this package — pure crypto, zero Pillar dependency). Identity level `L1p` (see the ladder table above) checks that derivation during ordinary `L1` verification, whenever a signer's `uuaid` is in that form — so any agent with a Pillar identity gets a *stronger* identity guarantee than plain `L1` for free, whether or not the Pillar bridge is even installed.
+
+**Delivery (`ESIG_MCP_DELIVERY=pillar`).** Pass `signers[].pillar = {uuaid, publicKey}` to `esig_create_envelope` for any signer reachable over Pillar instead of (or alongside) email:
+
+```json
+{
+  "title": "Vendor agreement",
+  "html": "<p>...</p>",
+  "signers": [{ "name": "Acquiring Agent", "email": "agent@example.com", "pillar": { "uuaid": "uuaid:foundation:agent:<localId>", "publicKey": "<64 hex>" } }]
+}
+```
+
+`publicKey` must derive `uuaid` (`localIdFromEd25519Key` — refused otherwise, fail closed); when a UUAID registry is configured (`ESIG_MCP_UUAID_REGISTRY_URL`), its badge for `uuaid` must also attest `publicKey` — a mismatch refuses, and a badge `404` (unregistered) refuses unless `ESIG_MCP_PILLAR_ALLOW_UNREGISTERED=1` opts in (audited `signer.pillar_unregistered`; the approval page shows an "unregistered signer" notice to whoever ends up viewing it). The signing link and sole-control challenge travel as an E2E-encrypted `esig:m` envelope to that signer's own inbox — the sender-side agent still never sees the raw link (I8).
+
+**Identity proof over Pillar (seam 3) — the human just signs.** The recipient agent can reply with a sealed identity proof instead of the human ever pasting JSON: esig-mcp polls its own inbox, runs the SAME verification path `POST /sign`'s `identityProof` uses (challenge nonce binding, `L0`–`L2`, atomic consumption), and stores the result bound to that signer's challenge. When a human later opens the signing link, the approval page shows "Identity verified" instead of a paste panel, and `POST /sign` accepts the signature without `identityProof` at all — audited `signer.identity_preverified_used`. Pasting a proof explicitly still works exactly as before.
+
+**Events over Pillar (seam 4, `ESIG_PILLAR_SUBSCRIBERS`).** Every lifecycle event (§ "Lifecycle events and webhooks" above) is ALSO sealed to configured subscriber agents — independent of which delivery channel is selected:
+
+```json
+[{ "uuaid": "uuaid:foundation:agent:<localId>", "publicKey": "<64 hex>" }]
+```
+
+A subscriber whose `publicKey` doesn't derive its `uuaid` is refused at startup. A failing subscriber send is isolated (audited `events.sink_failed`) and never blocks another subscriber or the existing webhook queue — both fire independently for the same event.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `ESIG_PILLAR_HOME` | `<ESIG_MCP_DATA_DIR>/pillar` | Directory for this server's Pillar keychain. |
+| `ESIG_PILLAR_PASSPHRASE` | *(required with pillar)* | Encrypts the Pillar keychain at rest. Same `>= 24` character floor as `ESIG_MCP_PASSPHRASE` (RT G4). |
+| `ESIG_PILLAR_CARRIERS` | *(required with pillar)* | Comma-separated `https://` store-and-forward carrier URLs. |
+| `ESIG_PILLAR_SUBSCRIBERS` | — | Optional JSON array of `{uuaid, publicKey}` — lifecycle-event subscribers (seam 4). Independent of `ESIG_MCP_DELIVERY`. |
+| `ESIG_PILLAR_PROOF_POLL` | `1` | Seconds between inbox long-polls for out-of-band identity proofs (seam 3). |
+| `ESIG_MCP_PILLAR_ALLOW_UNREGISTERED` | off | Set to exactly `1` to let `esig_create_envelope` proceed when a `signers[].pillar` uuaid has no UUAID registry badge — audited `signer.pillar_unregistered`, surfaced on the approval page. Only meaningful when a registry is configured. |
+
+`ESIG_PILLAR_HOME`/`_PASSPHRASE`/`_CARRIERS` are only actually required when `ESIG_MCP_DELIVERY=pillar` or `ESIG_PILLAR_SUBSCRIBERS` is set — otherwise this whole section, and the `@e-sig/pillar-bridge` dynamic `import()`, is never touched.
+
 ## Data directory layout
 
 Everything this server persists lives under `ESIG_MCP_DATA_DIR` (default `./.esig-mcp`), created at startup along with three subdirectories:
@@ -424,7 +466,7 @@ Link custody, end to end: a raw signing token exists in exactly one place outsid
 | Variable | Default | Notes |
 |---|---|---|
 | `ESIG_MCP_PASSPHRASE` | *(required)* | Encrypts the tenant's signing cert + PQ key bundle at rest. Must be at least 24 characters — matching `@e-sig/core`'s own encryption floor exactly, so a passphrase that passes this check never later throws at first seal. |
-| `ESIG_MCP_DELIVERY` | *(required)* | `file` (writes `<ESIG_MCP_DATA_DIR>/outbox/<envelopeId>.json`, mode `0600` — the quickstart channel), `console` (prints links to stderr — opt-in only, loud startup warning; see "Security model" above), `webhook`, or `email` (see "Email delivery and reminders" above). No default: an operator must pick where signing links go. |
+| `ESIG_MCP_DELIVERY` | *(required)* | `file` (writes `<ESIG_MCP_DATA_DIR>/outbox/<envelopeId>.json`, mode `0600` — the quickstart channel), `console` (prints links to stderr — opt-in only, loud startup warning; see "Security model" above), `webhook`, `email` (see "Email delivery and reminders" above), or `pillar` (see "Pillar (agent-to-agent) delivery" above; requires the optional peer dependency `@e-sig/pillar-bridge`). No default: an operator must pick where signing links go. |
 | `ESIG_MCP_MODES` | `H` | Comma-separated. Only `H` is implemented in v0.1 — anything containing `A` or `C` refuses to start. |
 | `ESIG_MCP_DATA_DIR` | `./.esig-mcp` | Root for the filesystem-backed stores — see "Data directory layout" above. Created at startup. |
 | `ESIG_MCP_DOCS_ROOT` | `<ESIG_MCP_DATA_DIR>/inbox` | Confines the `path` input on `esig_verify_document` / `esig_ingest_document` — a connected agent is untrusted by default, so a caller-supplied filesystem path may only resolve inside this directory (never an absolute path outside it, a `..` segment, or a symlink escaping it). Created at startup. |
@@ -441,7 +483,7 @@ Link custody, end to end: a raw signing token exists in exactly one place outsid
 | `ESIG_MCP_MAX_PDF_BYTES` | `26214400` (25 MiB) | Ingested/sealed PDF size cap. |
 | `ESIG_MCP_ENVELOPES_PER_HOUR` | `60` | Per-process rate limit on envelope creation, `esig_reseal`, and `esig_identity_challenge` (each under its own bucket). |
 | `ESIG_MCP_MAX_SIGNERS` | `25` | Per-envelope cap on `esig_create_envelope`'s `signers[]` — `esig_create_envelope` refuses with a clear error above this, bounding the email/webhook fan-out one call can trigger. |
-| `ESIG_MCP_IDENTITY_MIN_LEVEL` | `none` | Signer-identity floor: `none` \| `L0` \| `L1` \| `L2` — see "Signer identity" above. `esig_create_envelope` may only *raise* this per envelope. |
+| `ESIG_MCP_IDENTITY_MIN_LEVEL` | `none` | Signer-identity floor: `none` \| `L0` \| `L1` \| `L1p` \| `L2` — see "Signer identity" above. `esig_create_envelope` may only *raise* this per envelope. |
 | `ESIG_MCP_UUAID_REGISTRY_URL` | — | `https://` UUAID registry base URL. Required when `ESIG_MCP_IDENTITY_MIN_LEVEL=L2`, or when any envelope itself requests `L2`. |
 | `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY` | — | The registry's pinned Ed25519 public key — 64 lowercase hex chars, `keys[].publicKey` (`uuaid-registry-1`) from the registry's `GET /.well-known/uuaid-registry.json`. Every registry-signed badge (`GET /iaaso/v1/badge/{uuaid}`) is verified against this pin before anything in it is trusted. Required when `ESIG_MCP_IDENTITY_MIN_LEVEL=L2`, or when any envelope itself requests `L2`. |
 | `ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC` | `900` | Sole-control challenge lifetime, in seconds. Max `3600`. |
@@ -470,6 +512,6 @@ Link custody, end to end: a raw signing token exists in exactly one place outsid
 - Supabase-backed audit chain, envelope-completion webhooks, and anchoring the tenant audit chain head to UUAID's Polygon-anchored ledger.
 - **Signer identity L2 exchange submission + receipt** (phase 2): submit the verified exchange to the UUAID Network and store the anchored receipt; staple the signer-identity manifest into the sealed PDF itself as an append-only incremental update, so `esig_verify_document` can surface it offline.
 
-Signer identity (UUAID + IAASO, levels `none`/`L0`/`L1`/`L2`) already shipped — see above; only L2's exchange-submission/receipt leg and PDF-native stapling remain.
+Signer identity (UUAID + IAASO, levels `none`/`L0`/`L1`/`L1p`/`L2`) already shipped — see above; only L2's exchange-submission/receipt leg and PDF-native stapling remain.
 
 See design doc §8 and §12 for the full rollout plan.

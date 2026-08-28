@@ -68,7 +68,17 @@ function makeTestWallet() {
   return { did, verificationMethod, rawPublic, sign };
 }
 
-const TEST_UUAID = "uuaid:foundation:agent:11111111-1111-1111-1111-111111111111";
+// v0.5 (§17 seam 1, L1p): deliberately NOT a `uuaid:foundation:agent:` uuaid —
+// this file's whole L0/L1/L2 suite predates L1p and never claims a
+// self-authenticating identity (the test wallet's key has no relationship to
+// this literal string), so a foundation:agent-shaped placeholder would now
+// trip the new opportunistic L1p derivation check (`L1P_KEY_UUAID_MISMATCH`,
+// identity/verify.ts) on every one of these tests. The federated-profile
+// form (`uuaid:<subjectClass>:<jurisdiction>:<authority>:<localId>`, still
+// well-formed per core's `isWellFormedUuaidAssertion`) sidesteps that
+// entirely, leaving every assertion below (`level: "L1"`, etc.) unchanged.
+// L1p's own dedicated coverage lives in test/l1p.test.ts.
+const TEST_UUAID = "uuaid:person:us:ca:11111111-1111-1111-1111-111111111111";
 
 async function connectedClient(mcpServer: McpServer): Promise<Client> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -647,7 +657,9 @@ describe("(h) L2 — local node:http stub registry (registry-signed badge)", () 
   });
 
   it("registry-signed badge for a DIFFERENT uuaid B, whose presentationKey happens to equal the proof's own key, presented for uuaid A -> 403 L2_BADGE_SUBJECT_MISMATCH, no identity record", async () => {
-    const UUAID_A = "uuaid:foundation:agent:33333333-3333-3333-3333-333333333333";
+    // Not foundation:agent form (see TEST_UUAID's own comment above) — this
+    // test is about L2_BADGE_SUBJECT_MISMATCH specifically, not L1p.
+    const UUAID_A = "uuaid:person:us:ca:33333333-3333-3333-3333-333333333333";
     // Badge's own subject.uuaid stays the fixture default (TEST_UUAID = "B"),
     // and its presentationKey stays the fixture default (the wallet's OWN
     // key — so the key check alone would pass); only the PROVING uuaid (A)

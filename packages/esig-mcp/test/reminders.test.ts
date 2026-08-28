@@ -387,6 +387,105 @@ describe("R3 — a failed send rolls back its slot so the scheduler retries on t
   });
 });
 
+// ---------- LOW carry-over: sendOneReminder rollback is INDEX-based ----------
+//
+// The rollback used to remove the appended entry by TIMESTAMP-EQUALITY
+// (`sentAt.filter((t) => t !== sentTimestamp)`). Under a frozen (or just
+// coarse) clock, two reminders for the SAME signer can land the IDENTICAL
+// timestamp string — a value-based filter then removes every entry that
+// matches, including an earlier ALREADY-SUCCEEDED one that has nothing to do
+// with the attempt being rolled back. The fix removes exactly the position
+// the failing attempt appended (envelopes.ts's `appendedManualIndex`/
+// `appendedScheduledIndex`).
+
+describe("LOW carry-over — sendOneReminder rollback is index-based, not timestamp-equality (frozen clock, identical timestamps)", () => {
+  /** Fails on exactly the Nth call to `send()`, succeeds on every other call. */
+  class FlakyTransport {
+    readonly sent: EmailMessage[] = [];
+    private calls = 0;
+    constructor(private readonly failOnCall: number) {}
+    async send(msg: EmailMessage): Promise<SendResult> {
+      this.calls += 1;
+      if (this.calls === this.failOnCall) {
+        throw new Error("smtp exploded (simulated, frozen-clock rollback test)");
+      }
+      this.sent.push(msg);
+      return { messageId: `capture-${this.sent.length}` };
+    }
+  }
+
+  it(
+    "two manual reminders for the SAME signer at the IDENTICAL frozen timestamp: the failed (second) attempt " +
+      "rolls back exactly its OWN entry, never the first (already-successful) one",
+    async () => {
+      // call 1 = the creation email (must succeed); call 2 = the FIRST
+      // manual reminder (succeeds, timestamp T — the clock never advances);
+      // call 3 = the SECOND manual reminder (fails, ALSO timestamp T).
+      const transport = new FlakyTransport(3);
+      const frozen = new Date("2026-06-01T00:00:00.000Z");
+      const clock = (): Date => frozen; // never advances — every call sees the SAME instant
+
+      const config = await makeConfig({
+        delivery: { kind: "email", transport: "smtp", from: "Ops <ops@example.com>" },
+        reminders: { durationsMs: [24 * HOUR], max: 5 },
+      });
+      const stores = buildStores(config);
+      const delivery = new EmailDelivery({ transport, from: "Ops <ops@example.com>" });
+      const envelopes = new EnvelopeService({ config, ...stores, delivery, now: clock });
+
+      const created = await envelopes.create({
+        title: "NDA",
+        html: "<p>hi</p>",
+        signers: [{ name: "Alice", email: "alice@example.com" }],
+      });
+      expect(transport.sent).toHaveLength(1); // creation email (call 1)
+
+      const first = await envelopes.sendReminder(created.envelopeId);
+      expect(first.sent[0].ok).toBe(true);
+      expect(transport.sent).toHaveLength(2); // call 2 landed
+
+      const second = await envelopes.sendReminder(created.envelopeId);
+      expect(second.sent[0].ok).toBe(false);
+      expect(transport.sent).toHaveLength(2); // call 3 failed — nothing new landed
+
+      // The persisted state must still carry EXACTLY the first (successful)
+      // manual send at timestamp T — a value-based rollback would have
+      // matched BOTH entries (identical timestamp) and wiped this out too.
+      const envelope = await stores.envelopeStore.findById(config.tenant, created.envelopeId);
+      const signerId = created.signers[0].signerId;
+      const state = (envelope!.metadata as { mcp?: { delivery?: { reminders?: Record<string, { sentAt: string[]; manualSentAt: string[] }> } } })
+        .mcp!.delivery!.reminders![signerId];
+      expect(state.manualSentAt).toEqual([frozen.toISOString()]);
+      expect(state.manualSentAt).toHaveLength(1);
+      expect(state.sentAt).toEqual([]); // no SCHEDULED sends at all — both attempts here were manual
+
+      const auditRows = (await readFile(path.join(config.dataDir, "audit-log.ndjson"), "utf8"))
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l));
+      expect(auditRows.filter((r) => r.action === "envelope.reminder_sent")).toHaveLength(1);
+      expect(auditRows.filter((r) => r.action === "envelope.reminder_failed")).toHaveLength(1);
+
+      // A third attempt (clock STILL frozen at the identical T) must succeed
+      // — proving the signer was never wrongly capped or double-removed by
+      // the second attempt's rollback.
+      const third = await envelopes.sendReminder(created.envelopeId);
+      expect(third.sent[0].ok).toBe(true);
+      expect(transport.sent).toHaveLength(3);
+
+      const envelopeAfterThird = await stores.envelopeStore.findById(config.tenant, created.envelopeId);
+      const stateAfterThird = (
+        envelopeAfterThird!.metadata as { mcp?: { delivery?: { reminders?: Record<string, { manualSentAt: string[] }> } } }
+      ).mcp!.delivery!.reminders![signerId];
+      // Two SUCCESSFUL manual sends now, both at the identical frozen T —
+      // the array legitimately holds a duplicate VALUE at this point (that's
+      // fine; index-based rollback only ever needs to remove exactly what a
+      // given attempt appended, not deduplicate by value).
+      expect(stateAfterThird.manualSentAt).toEqual([frozen.toISOString(), frozen.toISOString()]);
+    },
+  );
+});
+
 // ---------- esig_send_reminder (manual, MCP) ----------
 
 async function buildMcpHarness(overrides: Parameters<typeof makeConfig>[0] = {}) {

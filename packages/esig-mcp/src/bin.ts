@@ -27,9 +27,12 @@ import { FsDocumentStore } from "./documents.js";
 import { ConsoleDelivery, FileDelivery, WebhookDelivery, type DeliveryChannel } from "./delivery.js";
 import { SmtpTransport, SesTransport } from "./email/transport.js";
 import { EmailDelivery } from "./email/delivery.js";
+import { EventDispatcher, type EventSink } from "./events/sinks.js";
 import { EventQueue } from "./events/queue.js";
 import { assertSafeWebhookTarget, WebhookSsrfError } from "./events/webhook.js";
 import { EnvelopeService } from "./envelopes.js";
+import type { IdentityProofEvent } from "./identity/proof-source.js";
+import { resolvePillarLoader } from "./pillar-loader.js";
 import { Scheduler } from "./reminders.js";
 import { createMcpServer } from "./server.js";
 import { createApprovalServer } from "./http.js";
@@ -154,6 +157,43 @@ const OPTIONAL_ENV_VARS: ReadonlyArray<[name: string, defaultValue: string, note
     "unset",
     "Chrome/Chromium executable override, checked in this order. Only needed for sealing — envelopes " +
       "can be created and signed without it; see esig_whoami's sealReady.",
+  ],
+  [
+    "ESIG_PILLAR_HOME",
+    "<ESIG_MCP_DATA_DIR>/pillar",
+    "Directory for this server's Pillar keychain (docs/architecture/esig-mcp.md §17). Used when " +
+      "ESIG_MCP_DELIVERY=pillar or ESIG_PILLAR_SUBSCRIBERS is set.",
+  ],
+  [
+    "ESIG_PILLAR_PASSPHRASE",
+    "—",
+    "Required (>= 24 chars, same floor as ESIG_MCP_PASSPHRASE) when ESIG_MCP_DELIVERY=pillar or " +
+      "ESIG_PILLAR_SUBSCRIBERS is set — encrypts the Pillar keychain at rest.",
+  ],
+  [
+    "ESIG_PILLAR_CARRIERS",
+    "—",
+    "Required (comma-separated https:// store-and-forward carrier URLs) when ESIG_MCP_DELIVERY=pillar " +
+      "or ESIG_PILLAR_SUBSCRIBERS is set.",
+  ],
+  [
+    "ESIG_PILLAR_SUBSCRIBERS",
+    "—",
+    'Optional JSON array of {"uuaid","publicKey"} — lifecycle-event subscribers (§17 seam 4, ' +
+      "EventSink=pillar). Each publicKey must derive its own uuaid.",
+  ],
+  [
+    "ESIG_PILLAR_PROOF_POLL",
+    "1",
+    "Seconds between inbox long-polls for out-of-band identity proofs (§17 seam 3). Only active when " +
+      "the Pillar bridge is loaded (ESIG_MCP_DELIVERY=pillar or ESIG_PILLAR_SUBSCRIBERS set).",
+  ],
+  [
+    "ESIG_MCP_PILLAR_ALLOW_UNREGISTERED",
+    "off",
+    'Set to exactly "1" to let esig_create_envelope proceed when a signers[].pillar uuaid has no UUAID ' +
+      "registry badge (404) — audited signer.pillar_unregistered, surfaced on the approval page. Only " +
+      "meaningful when ESIG_MCP_UUAID_REGISTRY_URL is configured.",
   ],
 ];
 
@@ -318,7 +358,13 @@ async function main(): Promise<void> {
 
   const stores = buildStores(config);
   const documents = new FsDocumentStore(config.dataDir, config.maxPdfBytes);
-  const delivery: DeliveryChannel =
+  // §17 seam 2: `config.delivery.kind === "pillar"` is a valid selection but
+  // has no built-in class here (the real channel lives in the optional
+  // @e-sig/pillar-bridge package) — this initial value is a placeholder,
+  // overwritten below once the bridge loads; it is never reachable in
+  // between (every await between here and `envelopes` being used is either
+  // this assignment itself or a fatal `process.exit(1)` on failure).
+  let delivery: DeliveryChannel =
     config.delivery.kind === "webhook"
       ? new WebhookDelivery(config.delivery.url)
       : config.delivery.kind === "file"
@@ -345,6 +391,72 @@ async function main(): Promise<void> {
               subjectPrefix: config.delivery.subjectPrefix,
             })
           : new ConsoleDelivery();
+
+  // §17 seams 2-4 (v0.5): the optional Pillar bridge. `config.pillar` is set
+  // exactly when ESIG_MCP_DELIVERY=pillar or ESIG_PILLAR_SUBSCRIBERS is
+  // configured (config.ts) — otherwise this whole block, and the dynamic
+  // `import("@e-sig/pillar-bridge")` inside `pillar-loader.ts`, never runs.
+  // A missing/broken install fails the WHOLE startup with one clear error,
+  // same discipline as every other ConfigError/WebhookSsrfError check above
+  // (fail closed — never silently falls back to a different channel).
+  const eventDispatcher = new EventDispatcher({ auditStore: stores.auditStore, tenantId: config.tenant });
+  let pillarProofSource: { start(onProof: (event: IdentityProofEvent) => void): void; stop(): void } | undefined;
+  if (config.pillar) {
+    let bridge;
+    try {
+      bridge = await resolvePillarLoader(process.env)();
+    } catch (e) {
+      process.stderr.write(`esig-mcp: configuration error: ${e instanceof Error ? e.message : String(e)}\n`);
+      process.exit(1);
+      return;
+    }
+
+    let identity;
+    try {
+      identity = await bridge.PillarIdentity.load({ home: config.pillar.home, passphrase: config.pillar.passphrase });
+    } catch {
+      // No keychain at ESIG_PILLAR_HOME yet — generate one (0600, never
+      // overwrites an existing file, same discipline as FileDelivery/
+      // cli-init.ts's own passphrase file).
+      identity = await bridge.PillarIdentity.generate({ home: config.pillar.home, passphrase: config.pillar.passphrase });
+      process.stderr.write(`[esig-mcp] generated a new Pillar identity: ${identity.uuaid}\n`);
+    }
+
+    if (config.delivery.kind === "pillar") {
+      delivery = (await bridge.PillarDelivery.open({ identity, carriers: config.pillar.carriers })) as unknown as DeliveryChannel;
+    }
+
+    if (config.pillar.subscribers.length > 0) {
+      const sink = await bridge.PillarEventSink.open({
+        identity,
+        carriers: config.pillar.carriers,
+        subscribers: config.pillar.subscribers,
+        onReceipt: (r) => {
+          if (!r.ok) {
+            process.stderr.write(
+              `[esig-mcp] WARNING: Pillar event delivery to ${r.uuaid} failed: ${r.detail ?? "unknown error"}\n`,
+            );
+          }
+        },
+      });
+      eventDispatcher.register(sink as unknown as EventSink);
+    }
+
+    // §17 seam 3: started below, once `envelopes` exists — `onProof` calls
+    // straight into `EnvelopeService.acceptPreVerifiedIdentity`. Cast for the
+    // same reason as `delivery`/`sink` above: the bridge's own
+    // `PillarBridgeIdentityProofEvent.proof` is typed `unknown` (it never
+    // verifies the proof itself, see proof-source.ts's header comment),
+    // while this package's `IdentityProofEvent.proof` is the concrete
+    // `DataIntegrityProof` — structurally identical shapes, deliberately
+    // untied types (§17 "Packaging decision").
+    pillarProofSource = (await bridge.PillarProofSource.open({
+      identity,
+      carriers: config.pillar.carriers,
+      home: config.pillar.home,
+      waitS: config.pillar.proofPollSec,
+    })) as unknown as typeof pillarProofSource;
+  }
 
   // G3(c): 'console' is opt-in (config.ts refuses to default to it) precisely
   // because it hands signing links to whatever is capturing this process's
@@ -382,7 +494,15 @@ async function main(): Promise<void> {
     : undefined;
   eventQueue?.start();
 
-  const envelopes = new EnvelopeService({ config, ...stores, documents, delivery, eventQueue });
+  const envelopes = new EnvelopeService({ config, ...stores, documents, delivery, eventQueue, eventDispatcher });
+
+  // §17 seam 3: `onProof` never throws out of the poll loop regardless of
+  // what `acceptPreVerifiedIdentity` does with a given proof (it already
+  // never throws for a verification failure — see its own header comment;
+  // this `void` is defense in depth against a genuinely unexpected error).
+  pillarProofSource?.start((evt) => {
+    void envelopes.acceptPreVerifiedIdentity(evt);
+  });
 
   // §15 "Reminders" + §16 "expiry tick" share this one 60s loop
   // (reminders.ts's own header comment): reminder-sending is a no-op with
@@ -419,6 +539,7 @@ async function main(): Promise<void> {
     process.stderr.write(`[esig-mcp] received ${signal}, shutting down...\n`);
     scheduler.stop();
     eventQueue?.stop();
+    pillarProofSource?.stop();
     void Promise.allSettled([
       mcpServer.close(),
       new Promise<void>((resolve) => httpServer.close(() => resolve())),

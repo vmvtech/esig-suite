@@ -3,6 +3,71 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
+## @e-sig/mcp 0.5.0 — 2026-08-28
+
+### `@e-sig/mcp` 0.5.0: L1p self-authenticating identity + Pillar seams (docs/architecture/esig-mcp.md §17 Stage B)
+
+**L1p — self-authenticating identity, no dependency.** A new identity level
+sits between `L1` and `L2` on the ladder (`none < L0 < L1 < L1p < L2`): during
+ordinary `L1` verification, whenever a signer's `uuaid` is
+`uuaid:foundation:agent:<localId>` (Pillar's own identity form,
+IAASO-3050), its local id must equal `localIdFromEd25519Key(proof key)` — the
+uuaid derives from the Ed25519 key **by construction**, no registry needed.
+Two new pure helpers, `localIdFromEd25519Key`/`uuaidFromEd25519Key`
+(`identity/verify.ts`, cross-checked against `@e-sig/pillar-bridge`'s own
+implementation on 20 random keys), give this for free to any Pillar-identified
+agent — a foundation:agent-shaped uuaid whose key does NOT derive it is
+refused (`L1P_KEY_UUAID_MISMATCH`), never silently downgraded to plain `L1`.
+`ESIG_MCP_IDENTITY_MIN_LEVEL`/`esig_create_envelope`'s `identity.minLevel`
+both accept `L1p`. G5 (RedTeam RT-2026-08-28-01): when a UUAID registry
+happens to be configured and carries a badge for the same uuaid, a
+disagreeing `presentationKey` is refused too (`L2_L1P_DISAGREEMENT`) — L1p
+never *requires* the registry, but never silently ignores it either.
+
+**Pillar delivery, events, and identity-proof fan-in (§17 seams 2-4).** Three
+new contract seams, each an OPTIONAL integration point — `@e-sig/mcp` itself
+depends on none of them:
+
+- `DeliveryLink` (`delivery.ts`) gains an optional `pillar: {uuaid,
+  publicKey}` — `esig_create_envelope`'s `signers[].pillar` lets a signer be
+  reached over Pillar (E2E-encrypted, no inbound HTTP) instead of/alongside
+  email. Validated at creation: the key must derive the uuaid, and — when a
+  UUAID registry is configured — its badge for that uuaid must attest the
+  same key (RT G2, fail-closed); a badge 404 refuses unless
+  `ESIG_MCP_PILLAR_ALLOW_UNREGISTERED=1` (audited
+  `signer.pillar_unregistered`, surfaced on the approval page).
+- `EventSink` + `EventDispatcher` (new `events/sinks.ts`) fan every lifecycle
+  event out to registered sinks, AFTER the existing webhook enqueue (§16) —
+  per-sink isolation, a failing sink is audited `events.sink_failed` and
+  never blocks the webhook queue or another sink.
+- `IdentityProofSource` (new `identity/proof-source.ts`) feeds
+  `EnvelopeService.acceptPreVerifiedIdentity` — an out-of-band identity proof
+  (e.g. relayed over Pillar by the signer's own agent) runs the SAME
+  verification path `POST /sign`'s `identityProof` uses and is stored bound
+  to the signer's challenge nonce; the human just signs — no pasting — and
+  `POST /sign` accepts without `identityProof` at all (audited
+  `signer.identity_preverified_used`); an explicit `identityProof` still
+  works — a satisfying pre-verified record simply takes priority and is
+  never re-verified once it already meets the envelope's identity level.
+
+All three are structurally identical to `@e-sig/pillar-bridge`'s own
+contract, defined LOCALLY (never imported from the bridge package) — the
+optional `@e-sig/pillar-bridge` package (peer dependency,
+`peerDependenciesMeta.optional`, never in `dependencies`) is loaded only
+through a new injectable dynamic-import seam, `pillar-loader.ts`; a missing
+install fails startup with one clear error naming the install command.
+`ESIG_MCP_DELIVERY=pillar`, `ESIG_PILLAR_HOME`, `ESIG_PILLAR_PASSPHRASE`
+(RT G4: same `>=24` floor as `ESIG_MCP_PASSPHRASE`), `ESIG_PILLAR_CARRIERS`,
+`ESIG_PILLAR_SUBSCRIBERS`, `ESIG_PILLAR_PROOF_POLL` configure the bridge; see
+the package README's new "Pillar (agent-to-agent) delivery" section.
+
+**LOW carry-over fix.** `sendOneReminder`'s failure rollback now removes
+exactly the entry a given attempt appended, by INDEX (captured at append
+time), rather than by matching the appended timestamp's VALUE — a frozen (or
+just coarse) clock can give two reminders for the same signer an identical
+timestamp string, and the old value-based filter would then remove every
+entry sharing that value, including an unrelated already-succeeded one.
+
 ## @e-sig/mcp 0.4.0 — 2026-08-28
 
 ### `@e-sig/mcp` 0.4.0: email delivery + reminders (docs/architecture/esig-mcp.md §15)
