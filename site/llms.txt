@@ -1,0 +1,45 @@
+# e-sig
+
+> e-sig is a self-hosted, MIT-licensed PDF e-signature SDK for Node.js/TypeScript. Render HTML to PDF, sign with PKCS#7/PAdES (CAdES), add RFC-3161 timestamps, verify, and keep a hash-chained audit log — entirely inside your own infrastructure, with no per-document fees and no required SaaS. Optional post-quantum hybrid seals (Ed25519 + ML-DSA-65, FIPS 204) protect signed documents against harvest-now-decrypt-later attacks.
+
+## Start here
+
+- [Homepage](https://e-sig.org/): product overview, architecture, and quickstart.
+- [Docs](https://docs.e-sig.org): guides and API reference.
+- [GitHub](https://github.com/vmvtech/esig-suite): full MIT-licensed source, examples, and tests.
+- [npm: @e-sig/core](https://www.npmjs.com/package/@e-sig/core): the signing engine package.
+- [Quickstart](https://e-sig.org/#start): sign, verify, and tamper-test a document in about 60 seconds — no signup, no API keys, no external services.
+- [examples/templates](https://github.com/vmvtech/esig-suite/tree/main/examples/templates): six ready-to-sign HTML documents (NDA, offer letter, and more) to start from.
+
+## Verify
+
+- [Public verifier](https://e-sig.org/verify): verify an e-sig-signed PDF client-side in the browser. No upload, no account.
+- CLI: `npx -y -p @e-sig/core esig verify <file.pdf> --json`.
+- [Verify in CI](https://github.com/vmvtech/esig-suite/blob/main/docs/verify-in-ci.md): GitHub Action to verify signed PDFs on every push.
+
+## Why e-sig
+
+- [Why e-sig](https://e-sig.org/why-esig): the trust stack, design rationale, and honest limitations.
+- [Pricing](https://e-sig.org/pricing): the MIT SDK is free forever. Hosted e-sig Cloud is a waitlist-only private preview.
+
+## Comparisons
+
+- [e-sig vs DocuSign](https://e-sig.org/vs/docusign): metered SaaS vs self-hosted MIT SDK.
+- [e-sig vs Documenso](https://e-sig.org/vs/documenso): AGPL app you deploy beside your stack vs an SDK you embed.
+- [e-sig vs DocuSeal](https://e-sig.org/vs/docuseal): self-hosted app with per-document fees vs no meter at all.
+
+## For agents and integrators
+
+- [Agents](https://e-sig.org/agents): machine-oriented integration guide — capabilities, exact API names, quickstart commands, and trust semantics.
+- [agent.json](https://e-sig.org/agent.json): machine-readable manifest (packages, endpoints, contacts).
+- [Full site digest](https://e-sig.org/llms-full.txt): all public pages as plain text.
+- [@e-sig/uuaid](https://www.npmjs.com/package/@e-sig/uuaid): stamp the acting AI agent's identity into the signature's audit log.
+- [@e-sig/mcp](https://github.com/vmvtech/esig-suite/tree/main/packages/esig-mcp): MCP server for agent-driven signing. Install from the repo until the next npm release.
+
+## Press
+
+- [Media kit](https://e-sig.org/press): boilerplate, facts, assets, story angles, and contacts.
+
+## Legal
+
+- [Legal notices](https://e-sig.org/legal) · [Terms of Use](https://e-sig.org/terms) · [Privacy Policy](https://e-sig.org/privacy)

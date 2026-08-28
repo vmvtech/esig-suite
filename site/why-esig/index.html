@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Why VMV — e-sig</title>
+<title>Why e-sig — the vendor-independent signing stack</title>
 <meta name="description" content="Every other e-signature vendor asks you to trust them. We ship an MIT-licensed signing SDK, a continuous assurance layer (DSalvus), and standards housed at the independent UUAID Foundation. If our company disappears tomorrow, your evidence still verifies.">
-<meta property="og:title" content="Why VMV — the vendor-independent signing stack">
+<meta property="og:title" content="Why e-sig — the vendor-independent signing stack">
 <meta property="og:description" content="MIT signing SDK, continuous assurance, public trust foundation. Nobody else has all four.">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://e-sig.org/why-vmv">
+<meta property="og:url" content="https://e-sig.org/why-esig">
 <meta property="og:image" content="https://e-sig.org/assets/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -48,7 +48,7 @@
   <span class="spacer"></span>
   <a href="/#how">How it works</a>
   <a href="/pricing">Pricing</a>
-  <a href="/why-vmv" class="active">Why VMV</a>
+  <a href="/why-esig" class="active">Why e-sig</a>
   <a href="https://docs.e-sig.org">Docs</a>
   <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
 </nav></div></header>
@@ -70,7 +70,7 @@
 </div></section>
 
 <section id="stack"><div class="wrap">
-  <h2 class="rv">The four layers of the VMV trust stack</h2>
+  <h2 class="rv">The four layers of the e-sig trust stack</h2>
   <p class="lead rv">Two neutral public-interest institutions on top; two commercial products
     below. Trust and continuity do not depend on any single company remaining in business.</p>
   <div class="stack4" data-stagger="80">
@@ -93,7 +93,7 @@
       <h3>DSalvus</h3>
       <div class="body">Agent Trust Infrastructure. Fail-CLOSED policy kernel, runtime
         posture, continuous evidence, monthly signed Assurance Packages.</div>
-      <div class="role">Commercial · VMVTech</div>
+      <div class="role">Commercial · e-sig</div>
     </div>
     <div class="card rv">
       <div class="kicker">Signing</div>
@@ -101,7 +101,7 @@
       <div class="body">MIT-licensed PDF signing SDK. PKCS#7 + RFC-3161 timestamps + tamper-
         evident hash chain, plus an optional <b>post-quantum</b> hybrid seal (ML-DSA-65,
         FIPS 204). UUAID-aware audit; optional eIDAS QES via QTSP partners.</div>
-      <div class="role">Commercial · VMVTech</div>
+      <div class="role">Commercial · e-sig</div>
     </div>
   </div>
 </div></section>
@@ -115,7 +115,7 @@
       <tr>
         <th>What buyers want to know</th>
         <th>Incumbents (DocuSign, Adobe, PandaDoc)</th>
-        <th>VMV stack</th>
+        <th>e-sig stack</th>
       </tr>
     </thead>
     <tbody>
@@ -145,7 +145,7 @@
 
 <section id="how"><div class="wrap">
   <h2 class="rv">How enterprises actually buy this</h2>
-  <p class="lead rv">Most Business and Enterprise esig-suite deals include the DSalvus
+  <p class="lead rv">Business and Dedicated Cloud engagements can include the DSalvus
     Assurance Package as a bundled add-on ($1,500–$4,000/mo per tenant). It ships as a
     signed monthly PDF into your compliance drive with everything a SOC 2 or HIPAA
     auditor needs: control results, runtime posture, agent-action attestations tied to
@@ -156,7 +156,7 @@
     -grade documents.</p>
   <div class="cta rv">
     <a class="btn primary" href="/pricing">See esig-suite pricing</a>
-    <a class="btn ghost" href="mailto:sales@e-sig.org?subject=VMV%20trust%20stack%20briefing">Book an enterprise briefing</a>
+    <a class="btn ghost" href="mailto:sales@e-sig.org?subject=e-sig%20trust%20stack%20briefing">Book an enterprise briefing</a>
   </div>
 </div></section>
 
@@ -166,8 +166,7 @@
   <div class="faq rv">
     <h3>Is the SDK really MIT and staying that way?</h3>
     <p>Yes. No AGPL relicense, no rug-pulls. The commercial products (DSalvus, Cloud,
-      Business, Enterprise) are how VMVTech makes money — the SDK is not something we
-      can take away.</p>
+      Business, Dedicated) fund e-sig — the SDK is not something we can take away.</p>
   </div>
   <div class="faq rv">
     <h3>Does the UUAID Foundation actually exist?</h3>
@@ -177,16 +176,17 @@
       API at <a href="https://api.uuaid.org">api.uuaid.org</a>, SDK on npm.</p>
   </div>
   <div class="faq rv">
-    <h3>What if VMVTech is acquired?</h3>
-    <p>The UUAID Foundation is not a VMVTech asset. Identifier scheme, Trust Registry,
-      and IAASO standards continue independently. Existing esig-suite MIT code continues
-      to work forever. DSalvus commercial obligations transfer to the acquirer.</p>
+    <h3>What if e-sig is acquired?</h3>
+    <p>The UUAID Foundation is legally independent from e-sig's commercial operator.
+      Its identifier scheme, Trust Registry, and IAASO standards continue independently.
+      Existing esig-suite MIT code continues to work forever, while commercial obligations
+      transfer to the acquirer.</p>
   </div>
   <div class="faq rv">
     <h3>Can I run this air-gapped?</h3>
-    <p>Yes — Enterprise. On-prem Helm chart + installer. UUAID identity verification
-      degrades to periodic Trusted-List snapshots when no outbound connectivity is
-      available; DSalvus policy kernel is fully local; esig-suite runs standalone.</p>
+    <p>Yes. UUAID identity verification degrades to periodic Trusted-List snapshots
+      with no outbound connectivity; the DSalvus policy kernel is fully local;
+      esig-suite runs standalone on the built-in filesystem adapters.</p>
   </div>
   </div>
 </div></section>
@@ -198,7 +198,7 @@
     <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
     <span class="spacer"></span>
     <a href="/pricing">Pricing</a>
-    <a href="/why-vmv">Why VMV</a>
+    <a href="/why-esig">Why e-sig</a>
     <a href="https://docs.e-sig.org">Docs</a>
     <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
     <a href="https://www.npmjs.com/package/@e-sig/core">npm</a>

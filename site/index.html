@@ -4,15 +4,41 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>e-sig — self-hosted PDF e-signature SDK</title>
-<meta name="description" content="An MIT-licensed, self-hosted PDF e-signature SDK. Render → sign (PKCS#7 / PAdES) → RFC-3161 timestamp → verify → audit. Own your certs, your PDFs, your audit trail. No SaaS, no metering, no per-document fees.">
+<meta name="description" content="An MIT-licensed, self-hosted PDF e-signature SDK. Render → sign (PKCS#7 / PAdES) → RFC-3161 timestamp → verify → audit. Own your certs, your PDFs, your audit trail. No required SaaS, metering, or per-document fees.">
 <meta property="og:title" content="e-sig — own your signatures">
-<meta property="og:description" content="Self-hosted PDF e-signature SDK. No per-document fees, no SaaS, no copyleft. Your certs, your database, your storage.">
+<meta property="og:description" content="Self-hosted PDF e-signature SDK. No per-document fees, no required SaaS, no copyleft. Your certs, your database, your storage.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://e-sig.org">
 <meta property="og:image" content="https://e-sig.org/assets/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="e-sig — own your signatures">
+<meta name="twitter:description" content="Self-hosted PDF e-signature SDK. No per-document fees, no required SaaS, no copyleft. Your certs, your database, your storage.">
+<meta name="twitter:image" content="https://e-sig.org/assets/og-image.png">
+<meta name="robots" content="index, follow">
+<meta name="author" content="VMVTech, Ltd.">
+<meta name="theme-color" content="#FF9933">
+<meta name="application-name" content="e-sig">
+<link rel="canonical" href="https://e-sig.org">
+<link rel="alternate" type="text/markdown" href="/llms.txt">
+<link rel="alternate" type="text/markdown" href="/llms-full.txt" title="e-sig full site digest">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "e-sig",
+  "alternateName": "esig-suite",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Node.js >= 20",
+  "description": "MIT-licensed, self-hosted PDF e-signature SDK: render, sign (PKCS#7 / PAdES), RFC-3161 timestamp, verify, and audit — inside your own infrastructure, with no per-document fees. Optional post-quantum hybrid seals (Ed25519 + ML-DSA-65, FIPS 204).",
+  "url": "https://e-sig.org",
+  "downloadUrl": "https://www.npmjs.com/package/@e-sig/core",
+  "license": "https://opensource.org/licenses/MIT",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "publisher": { "@type": "Organization", "name": "VMVTech, Ltd. (US)", "url": "https://e-sig.org/legal" }
+}
+</script>
 <link rel="icon" type="image/svg+xml" href="/assets/e-sig.svg">
 <link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
@@ -22,8 +48,6 @@
 <style>
   .hero{padding:96px 0 60px;position:relative;overflow:hidden}
   .hero::before{content:"";position:absolute;inset:-40% 0 auto;height:520px;background:radial-gradient(60% 60% at 50% 0%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 70%);pointer-events:none}
-  .soon{opacity:.55;pointer-events:none}
-  .soontag{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:1px 6px;margin-left:2px}
 
   section{padding:56px 0;border-top:1px solid var(--line)}
 
@@ -59,7 +83,7 @@
   <a href="#how">How it works</a>
   <a href="#pq">Post-quantum</a>
   <a href="/pricing">Pricing</a>
-  <a href="/why-vmv">Why VMV</a>
+  <a href="/why-esig">Why e-sig</a>
   <a href="/verify">Verify</a>
   <a href="https://docs.e-sig.org">Docs</a>
   <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
@@ -69,7 +93,7 @@
 <section class="hero" style="border-top:0"><div class="wrap" data-stagger="90">
   <span class="pill rv">MIT-licensed · <b>no per-document fees</b> · self-hosted</span>
   <h1 class="rv">Own your <span class="accent-serif sigword">signatures.<svg class="sig-stroke" viewBox="0 0 220 24" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="sigGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" style="stop-color:var(--accent)"/><stop offset="1" style="stop-color:var(--accent2)"/></linearGradient></defs><path pathLength="230" stroke="url(#sigGrad)" d="M6 16 C 48 21, 92 7, 132 12 S 198 17, 214 9"/></svg></span></h1>
-  <p class="sub rv">A batteries-included PDF e-signature SDK you embed in your own product. Render, cryptographically sign, timestamp, verify, and audit — entirely inside your infrastructure. Your certs, your database, your storage. No SaaS in the loop.</p>
+  <p class="sub rv">A batteries-included PDF e-signature SDK you embed in your own product. Render, cryptographically sign, timestamp, verify, and audit — entirely inside your infrastructure. Your certs, your database, your storage. No SaaS required in the signing path.</p>
   <div class="cta rv">
     <a class="btn primary" href="/pricing">See pricing</a>
     <a class="btn ghost" href="#start">Quickstart</a>
@@ -96,6 +120,8 @@
     <div class="card rv"><h3><span class="ic">🖊️</span>Drop-in signing UI</h3><p>React components — a draw-to-sign canvas, a consent-gated sign flow, a signed receipt, and a verification panel — with no framework coupling.</p></div>
     <div class="card rv"><h3><span class="ic">🏥</span>Zero PHI egress</h3><p>Everything runs inside your boundary. Nothing but a hash leaves your servers, so no signing-vendor BAA is needed and the whole thing sits inside your own SOC 2 scope.</p></div>
     <div class="card rv"><h3><span class="ic">📜</span>ESIGN / UETA-oriented</h3><p>Intent (recorded consent), attribution (append-only, <em>hash-chained</em> audit log — actor, IP, UA, cert fingerprint), and integrity (cryptographic signature + optional timestamp). Tampering with any audit row breaks the chain.</p></div>
+    <div class="card rv"><h3><span class="ic">✅</span>Verify in CI</h3><p>A CLI (<span class="mono">npx -y -p @e-sig/core esig verify &lt;file.pdf&gt; --json</span>) and a GitHub Action check a signed PDF on every push. See <a href="/agents">/agents</a>.</p></div>
+    <div class="card rv"><h3><span class="ic">🤖</span>Agent-driven signing</h3><p>The <a href="https://github.com/vmvtech/esig-suite/tree/main/packages/esig-mcp"><span class="mono">@e-sig/mcp</span></a> MCP server lets an agent create envelopes, send reminders, and react to lifecycle webhooks, while a human keeps cryptographic control of signing. See <a href="/agents">/agents</a>.</p></div>
   </div>
 </div></section>
 
@@ -176,8 +202,10 @@
     <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
     <span class="spacer"></span>
     <a href="/pricing">Pricing</a>
-    <a href="/why-vmv">Why VMV</a>
+    <a href="/why-esig">Why e-sig</a>
     <a href="/verify">Verify</a>
+    <a href="/agents">For agents</a>
+    <a href="/press">Press</a>
     <a href="https://docs.e-sig.org">Docs</a>
     <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
     <a href="https://www.npmjs.com/package/@e-sig/core">npm</a>

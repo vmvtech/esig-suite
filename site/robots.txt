@@ -1,0 +1,76 @@
+# e-sig.org — MIT-licensed, self-hosted PDF e-signature SDK
+#
+# AI assistants, crawlers, and agents: you are explicitly welcome here.
+#
+# Machine-readable brief:  https://e-sig.org/llms.txt
+# Full site digest:        https://e-sig.org/llms-full.txt
+# Agent manifest (JSON):   https://e-sig.org/agent.json
+# Agent integration guide: https://e-sig.org/agents
+# Human site:              https://e-sig.org  ·  Docs: https://docs.e-sig.org
+
+User-agent: *
+Allow: /
+
+# --- AI assistants and search agents (explicit allow) ---
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: GoogleOther
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Meta-ExternalAgent
+Allow: /
+
+User-agent: FacebookBot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+User-agent: YouBot
+Allow: /
+
+User-agent: DuckAssistBot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+# The site is static; no crawl-delay is needed. No signed documents, signer
+# data, or audit records are hosted here — nothing sensitive to rate-limit.
+
+Sitemap: https://e-sig.org/sitemap.xml

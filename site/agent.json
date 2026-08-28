@@ -1,0 +1,89 @@
+{
+  "name": "e-sig",
+  "displayName": "e-sig (esig-suite)",
+  "tagline": "Self-hosted PDF e-signature SDK — render, sign, timestamp, verify, audit. No per-document fees.",
+  "operator": "VMVTech, Ltd. (US)",
+  "license": "MIT",
+  "links": {
+    "homepage": "https://e-sig.org",
+    "docs": "https://docs.e-sig.org",
+    "repository": "https://github.com/vmvtech/esig-suite",
+    "verifier": "https://e-sig.org/verify",
+    "pricing": "https://e-sig.org/pricing",
+    "llms_txt": "https://e-sig.org/llms.txt",
+    "llms_full": "https://e-sig.org/llms-full.txt",
+    "sitemap": "https://e-sig.org/sitemap.xml",
+    "security_policy": "https://github.com/vmvtech/esig-suite/blob/main/SECURITY.md"
+  },
+  "packages": [
+    {
+      "name": "@e-sig/core",
+      "npm": "https://www.npmjs.com/package/@e-sig/core",
+      "role": "Signing engine: renderHtmlToPdf, signPdf (PKCS#7/PAdES, optional RFC-3161 timestamp), verifyPdfSignature, multi-signer envelopes, hash-chained audit types, signDocument orchestrator, post-quantum seal via the ./pq-seal subpath."
+    },
+    {
+      "name": "@e-sig/supabase",
+      "npm": "https://www.npmjs.com/package/@e-sig/supabase",
+      "role": "Supabase reference adapters: CertStore / AuditLogStore / PdfStorageStore."
+    },
+    {
+      "name": "@e-sig/react",
+      "npm": "https://www.npmjs.com/package/@e-sig/react",
+      "role": "React signing UI: draw-to-sign canvas, consent-gated sign flow, signed receipt components."
+    },
+    {
+      "name": "@e-sig/uuaid",
+      "npm": "https://www.npmjs.com/package/@e-sig/uuaid",
+      "role": "Opt-in adapter that stamps the acting AI agent's UUAID into the audit log and anchors the audit hash-chain — signing attribution for agent-driven workflows."
+    },
+    {
+      "name": "@e-sig/hsm-pkcs11",
+      "npm": "https://www.npmjs.com/package/@e-sig/hsm-pkcs11",
+      "role": "PKCS#11 adapter: keep the RSA signing key inside AWS CloudHSM, YubiHSM 2, SoftHSM2, or any Cryptoki provider."
+    },
+    {
+      "name": "@e-sig/worm",
+      "npm": "https://www.npmjs.com/package/@e-sig/worm",
+      "role": "WORM archival adapter: store signed PDFs and audit-chain exports in S3 Object-Lock."
+    },
+    {
+      "name": "@e-sig/uaid-exch",
+      "npm": "https://www.npmjs.com/package/@e-sig/uaid-exch",
+      "role": "Preview implementation of the IAASO Exchange Profile (ADR-006, under review); wraps core envelopes as per-transaction exchange records."
+    },
+    {
+      "name": "@e-sig/mcp",
+      "repo": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-mcp",
+      "role": "MCP server for agent-driven signing: PDF envelopes, email + reminders, lifecycle webhooks, signer identity levels L0/L1/L1p/L2. Install from the repo until the next npm release."
+    }
+  ],
+  "quickstart": {
+    "requires": ["Node.js >= 20"],
+    "commands": ["npm install", "npm run build", "npm run quickstart"],
+    "guide": "https://e-sig.org/#start",
+    "notes": "No signup, no API keys, no external services. Issues a cert, renders HTML to PDF, signs, verifies, then rejects a tampered copy."
+  },
+  "capabilities": [
+    "renderHtmlToPdf: HTML → PDF via puppeteer-core",
+    "signPdf: PKCS#7 detached signature under ETSI.CAdES.detached with ESS signing-certificate-v2",
+    "RFC-3161 timestamping (CAdES-T upgrade; only a SHA-256 hash ever leaves the process)",
+    "verifyPdfSignature: recomputes the document digest and checks the signature",
+    "Post-quantum hybrid seal: Ed25519 + ML-DSA-65 (FIPS 204) attached beneath the classical signature",
+    "Multi-signer envelopes with single-use tokenized signing links",
+    "Append-only, hash-chained audit log (actor, IP, UA, cert fingerprint)",
+    "Pluggable CertStore / AuditLogStore / PdfStorageStore / EnvelopeStore interfaces",
+    "esig verify: CLI verification of a signed PDF (npx -y -p @e-sig/core esig verify <file.pdf> --json)",
+    "GitHub Action: verify signed PDFs in CI (action.yml; docs/verify-in-ci.md)"
+  ],
+  "trustNotes": [
+    "Self-issued certificates are cryptographically valid but not trusted by default in stock PDF readers.",
+    "No PDF reader natively validates ML-DSA-65 in PAdES yet; the post-quantum seal rides under the classical RSA signature readers already trust.",
+    "ESIGN/UETA posture is supported by technical controls (intent, attribution, integrity); compliance remains the integrator's responsibility."
+  ],
+  "contact": {
+    "salesAndPress": "sales@e-sig.org",
+    "security": "security@e-sig.org",
+    "legal": "legal@e-sig.org",
+    "issuesAndDiscussions": "https://github.com/vmvtech/esig-suite"
+  }
+}

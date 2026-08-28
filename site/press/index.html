@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Press kit — e-sig</title>
+<meta name="description" content="Press and media kit for e-sig: boilerplate, verifiable facts, downloadable assets, story angles with source links, and contacts. The MIT-licensed, self-hosted PDF e-signature SDK with post-quantum seals.">
+<meta property="og:title" content="e-sig press kit">
+<meta property="og:description" content="Boilerplate, facts, assets, and contacts for journalists covering e-sig — the self-hosted PDF e-signature SDK with post-quantum seals.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://e-sig.org/press">
+<meta property="og:image" content="https://e-sig.org/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/e-sig.svg">
+<link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css">
+<script defer src="/assets/site.js"></script>
+<style>
+  .hero{padding:64px 0 40px}
+  h1{font-size:clamp(30px,4.6vw,50px)}
+  .lead{font-size:17.5px;max-width:760px;margin:0 0 24px}
+  section{padding:52px 0;border-top:1px solid var(--line)}
+
+  .boiler{max-width:760px;padding:24px 26px;border:1px solid var(--line);border-radius:14px;background:var(--bg2);color:var(--fg);font-size:15px;line-height:1.75}
+
+  .facts{width:100%;border-collapse:collapse;max-width:760px;font-size:14.5px}
+  .facts td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  .facts td:first-child{color:var(--mut);white-space:nowrap;font-weight:600}
+  .facts td a{color:var(--accent)}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .card h3{margin:0 0 6px;font-size:16px;letter-spacing:-.01em;font-weight:700}
+  .card p{margin:0;color:var(--mut);font-size:14px}
+  .card img{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;margin-bottom:10px}
+
+  ul.angles{list-style:none;padding:0;margin:0;display:grid;gap:12px;max-width:860px}
+  ul.angles li{padding:16px 18px;border:1px solid var(--line);border-radius:12px;background:var(--bg2)}
+  ul.angles li b{display:block;font-size:15px;margin-bottom:4px}
+  ul.angles li p{margin:0;color:var(--mut);font-size:14px;line-height:1.6}
+
+  .note{color:var(--dim);font-size:13px;margin-top:22px;max-width:760px;line-height:1.6}
+  .note b{color:var(--mut)}
+</style>
+</head>
+<body>
+
+<header><div class="wrap"><nav>
+  <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+  <span class="spacer"></span>
+  <a href="/#how">How it works</a>
+  <a href="/pricing">Pricing</a>
+  <a href="/verify">Verify</a>
+  <a href="https://docs.e-sig.org">Docs</a>
+  <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+</nav></div></header>
+
+<main>
+
+<section class="hero" style="border-top:0"><div class="wrap" data-stagger="90">
+  <span class="pill rv">press kit · facts over hype</span>
+  <h1 class="rv">Press <span class="accent-serif">&amp; media</span></h1>
+  <p class="lead rv">Everything here is verifiable: every claim links to source code, a test, or a fixture. If you find a statement on this site that doesn't match the implementation, we want to know — corrections go to <a href="mailto:legal@e-sig.org">legal@e-sig.org</a>.</p>
+</div></section>
+
+<section id="boilerplate"><div class="wrap" data-stagger="80">
+  <h2 class="rv">Boilerplate</h2>
+  <div class="boiler rv">e-sig (esig-suite) is an MIT-licensed, self-hosted PDF e-signature SDK for Node.js and TypeScript. It renders documents, signs them with PKCS#7/PAdES cryptography, optionally applies RFC-3161 trusted timestamps, verifies signatures, and keeps an append-only, hash-chained audit log — entirely inside the integrator's own infrastructure, with no per-document fees and no required SaaS. An optional hybrid seal pairs Ed25519 with ML-DSA-65 (NIST FIPS 204) to protect signed documents against future quantum-computer attacks. e-sig is developed by VMVTech, Ltd. (US).</div>
+</div></section>
+
+<section id="facts"><div class="wrap">
+  <h2 class="rv">Key facts</h2>
+  <table class="facts rv" style="margin-top:18px">
+    <tr><td>Product</td><td>e-sig (esig-suite) — PDF e-signature SDK</td></tr>
+    <tr><td>License</td><td>MIT (full engine, adapters, and UI)</td></tr>
+    <tr><td>Source</td><td><a href="https://github.com/vmvtech/esig-suite">github.com/vmvtech/esig-suite</a></td></tr>
+    <tr><td>Packages</td><td><a href="https://www.npmjs.com/package/@e-sig/core">@e-sig/core</a> on npm, plus supabase / react / uuaid / hsm-pkcs11 / worm adapters</td></tr>
+    <tr><td>Agent SDK</td><td><a href="https://github.com/vmvtech/esig-suite/tree/main/packages/esig-mcp">@e-sig/mcp</a> — MCP server for agent-driven signing (repo carries 0.5.0; npm currently serves 0.3.0)</td></tr>
+    <tr><td>Runtime</td><td>Node.js ≥ 20, TypeScript, in-process (no signing-path network calls required)</td></tr>
+    <tr><td>Standards</td><td>PKCS#7 / CAdES (ETSI.CAdES.detached), RFC-3161 timestamps, FIPS 204 (ML-DSA-65) hybrid seal</td></tr>
+    <tr><td>Business model</td><td>SDK free forever; hosted e-sig Cloud is in waitlist-only private preview — <a href="/pricing">pricing</a></td></tr>
+    <tr><td>Operator</td><td>VMVTech, Ltd. (US), a subsidiary of VMVCorporation (US)</td></tr>
+    <tr><td>Website</td><td><a href="https://e-sig.org">e-sig.org</a> · <a href="https://docs.e-sig.org">docs.e-sig.org</a></td></tr>
+  </table>
+</div></section>
+
+<section id="assets"><div class="wrap">
+  <h2 class="rv">Assets</h2>
+  <div class="grid rv" style="margin-top:18px" data-stagger="70">
+    <div class="card"><img src="/assets/e-sig.svg" alt="e-sig logomark" loading="lazy"><h3><a href="/assets/e-sig.svg">Logomark (SVG)</a></h3><p>The e-sig mark. Please don't stretch or recolor it.</p></div>
+    <div class="card"><img src="/assets/og-image.png" alt="e-sig social/press image" loading="lazy"><h3><a href="/assets/og-image.png">Social image (PNG, 1200×630)</a></h3><p>The share card used across the site — safe to reuse in coverage.</p></div>
+    <div class="card"><img src="/assets/quickstart-demo.gif" alt="e-sig quickstart demo" loading="lazy"><h3><a href="/assets/quickstart-demo.gif">Quickstart demo (GIF)</a></h3><p>Cert → render → sign → verify → tamper rejection, ~60 seconds, no services.</p></div>
+  </div>
+</div></section>
+
+<section id="angles"><div class="wrap">
+  <h2 class="rv">Story angles (each with a source link)</h2>
+  <ul class="angles rv" style="margin-top:18px">
+    <li><b>Post-quantum signatures ship before readers are ready</b><p>e-sig attaches a hybrid Ed25519 + ML-DSA-65 (FIPS 204) seal <em>beneath</em> the classical PAdES signature, so PDFs validate in Acrobat today and resist harvest-now-decrypt-later tomorrow. The honest limit: no PDF reader natively validates ML-DSA in PAdES yet. Source: <a href="https://github.com/vmvtech/esig-suite/blob/main/packages/esig-core/src/pq-seal.ts">pq-seal.ts</a> and its tests.</p></li>
+    <li><b>The per-signature meter, deleted</b><p>Incumbent e-signature APIs meter every envelope; e-sig runs in the integrator's own process with no per-document fee. Cost-model comparison with sourcing: <a href="/vs/docusign">vs DocuSign</a>, <a href="/vs/documenso">vs Documenso</a>, <a href="/vs/docuseal">vs DocuSeal</a>.</p></li>
+    <li><b>A 1-in-256 cryptographic bug, found by experiment</b><p>Our verifier failed CI ~6% of the time — not a platform bug, but DER zero-padding meeting signatures whose last byte was 0x00. Full postmortem: <a href="https://github.com/vmvtech/esig-suite/blob/main/docs/blog/der-length-bug.md">der-length-bug.md</a>.</p></li>
+    <li><b>Verify without trusting us</b><p>The public verifier checks an e-sig-signed PDF entirely client-side — no upload, no account, no vendor trust required: <a href="/verify">e-sig.org/verify</a>.</p></li>
+    <li><b>When AI agents sign documents</b><p>The opt-in <a href="https://www.npmjs.com/package/@e-sig/uuaid">@e-sig/uuaid</a> adapter stamps the acting agent's identity into the audit log, addressing attribution for agent-signed paperwork.</p></li>
+    <li><b>An agent that can prepare a signature but not fake one</b><p>The <a href="https://github.com/vmvtech/esig-suite/tree/main/packages/esig-mcp">@e-sig/mcp</a> MCP server lets an agent create envelopes, send reminders, and react to lifecycle webhooks — while cryptographic control of signing stays with a human by default, and signer identity is checked at one of four levels (L0/L1/L1p/L2).</p></li>
+  </ul>
+</div></section>
+
+<section id="contact"><div class="wrap" data-stagger="80">
+  <h2 class="rv">Contact</h2>
+  <table class="facts rv" style="margin-top:18px">
+    <tr><td>Press &amp; business</td><td><a href="mailto:sales@e-sig.org">sales@e-sig.org</a></td></tr>
+    <tr><td>Legal &amp; corrections</td><td><a href="mailto:legal@e-sig.org">legal@e-sig.org</a></td></tr>
+    <tr><td>Security reports</td><td><a href="mailto:security@e-sig.org">security@e-sig.org</a> (see <a href="https://github.com/vmvtech/esig-suite/blob/main/SECURITY.md">SECURITY.md</a>)</td></tr>
+    <tr><td>Technical questions</td><td><a href="https://github.com/vmvtech/esig-suite">GitHub issues &amp; discussions</a> — we convert repeated questions into docs within a week</td></tr>
+  </table>
+  <p class="note rv"><b>Stated limitations we'd rather you hear from us:</b> self-issued certificates are cryptographically valid but not trusted by default in stock PDF readers; no PDF reader natively validates ML-DSA-65 in PAdES yet; e-sig supplies technical controls that support ESIGN/UETA, and compliance posture remains the integrator's responsibility. The site carries no analytics, cookies, or trackers.</p>
+</div></section>
+
+</main>
+
+<footer><div class="wrap">
+  <div class="row">
+    <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
+    <span class="spacer"></span>
+    <a href="/pricing">Pricing</a>
+    <a href="/why-esig">Why e-sig</a>
+    <a href="/verify">Verify</a>
+    <a href="/agents">For agents</a>
+    <a href="/press">Press</a>
+    <a href="https://docs.e-sig.org">Docs</a>
+    <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
+    <a href="https://www.npmjs.com/package/@e-sig/core">npm</a>
+  </div>
+  <div class="row legalrow">
+    <a href="/terms">Terms of Use</a>
+    <a href="/privacy">Privacy Policy</a>
+    <a href="/legal">Legal</a>
+    <span class="spacer"></span>
+    <span class="mono" style="color:var(--dim)">MIT-licensed SDK</span>
+  </div>
+  <p class="disc">e-sig is signing-infrastructure software, not legal advice. It provides technical controls that support ESIGN/UETA (intent, attribution, integrity); your compliance posture, certificate trust, and record-retention remain your responsibility. Self-issued certificates are cryptographically valid but not trusted by default in stock PDF readers.</p>
+  <p class="disc" style="color:var(--dim)">© 2026 VMVTech, Ltd. (US), a subsidiary of VMVCorporation (US). esig-suite is a product of VMVTech, Ltd. (US). UUAID Foundation and IAASO are independent public-interest institutions.</p>
+</div></footer>
+</body>
+</html>
