@@ -106,6 +106,16 @@ export type PillarLoader = () => Promise<PillarBridgeModule>;
 
 const INSTALL_HINT = "npm install @e-sig/pillar-bridge --workspace @e-sig/mcp";
 
+// The specifier is held in a variable, NOT written as a literal inside
+// `import(...)`: TypeScript resolves a literal dynamic-import specifier at
+// COMPILE time, which turns this optional peer dependency into a hard build
+// requirement — `tsc` fails with TS2307 wherever the bridge isn't built yet
+// (CI from a clean clone, or any consumer building without it). A non-literal
+// specifier keeps the import purely runtime, which is the whole point of an
+// optional peer. Verified by a clean-tree build (all dist/ removed) on
+// 2026-08-28 after CI run 33138017064 caught exactly this.
+const BRIDGE_SPECIFIER = "@e-sig/pillar-bridge";
+
 /**
  * The real loader: `import("@e-sig/pillar-bridge")`. A missing module
  * (`ERR_MODULE_NOT_FOUND` / `MODULE_NOT_FOUND` — the package is an optional
@@ -119,7 +129,7 @@ export const defaultPillarLoader: PillarLoader = async () => {
   let mod: PillarBridgeModule;
   try {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- optional peer dep, never in dependencies
-    mod = (await import("@e-sig/pillar-bridge")) as unknown as PillarBridgeModule;
+    mod = (await import(BRIDGE_SPECIFIER)) as unknown as PillarBridgeModule;
   } catch {
     throw new Error(
       'ESIG_MCP_DELIVERY="pillar" (or ESIG_PILLAR_SUBSCRIBERS) requires the optional peer dependency ' +
