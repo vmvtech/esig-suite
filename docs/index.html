@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>e-sig docs — self-hosted PDF e-signature SDK</title>
+<script>(function(){try{var t=localStorage.getItem("esig-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})()</script>
 <meta name="description" content="Documentation for e-sig: an MIT-licensed, self-hosted PDF e-signature SDK. Render → sign (PKCS#7 / PAdES) → RFC-3161 timestamp → verify → audit, entirely in your own infrastructure.">
 <meta property="og:title" content="e-sig documentation">
 <meta property="og:description" content="Install, quickstart, signing, RFC-3161 timestamps, verification, adapters, React UI, and compliance for the self-hosted e-sig PDF signing SDK.">
@@ -20,8 +21,9 @@
     --sb:280px;
   }
   @media (prefers-color-scheme:light){
-    :root{--bg:#fbfcfe;--bg2:#f2f5f9;--card:#ffffff;--line:#e4e9f0;--fg:#141a21;--mut:#54636f;--dim:#8494a0;--accent:#1f6feb;--accent2:#0e9f6e;--ink:#141a21;}
+    :root:not([data-theme=dark]){--bg:#fbfcfe;--bg2:#f2f5f9;--card:#ffffff;--line:#e4e9f0;--fg:#141a21;--mut:#54636f;--dim:#8494a0;--accent:#1f6feb;--accent2:#0e9f6e;--ink:#141a21;}
   }
+  :root[data-theme=light]{--bg:#fbfcfe;--bg2:#f2f5f9;--card:#ffffff;--line:#e4e9f0;--fg:#141a21;--mut:#54636f;--dim:#8494a0;--accent:#1f6feb;--accent2:#0e9f6e;--ink:#141a21;}
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.65;-webkit-font-smoothing:antialiased;font-size:16px}
@@ -39,6 +41,8 @@
   nav.top a.link{color:var(--mut);font-size:14.5px;font-weight:500}
   nav.top a.link:hover{color:var(--fg);text-decoration:none}
   .ghbtn{border:1px solid var(--line);padding:6px 13px;color:var(--fg)!important}
+  .themetoggle{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--line);background:transparent;color:var(--mut);font-size:15px;cursor:pointer;padding:0}
+  .themetoggle:hover{color:var(--fg)}
 
   .shell{max-width:1240px;margin:0 auto;padding:0 22px;display:grid;grid-template-columns:var(--sb) 1fr;gap:40px;align-items:start}
   aside{position:sticky;top:58px;height:calc(100vh - 58px);overflow-y:auto;padding:26px 0 60px}
@@ -62,7 +66,8 @@
   li::marker{color:var(--accent)}
 
   pre{background:#0a0c0f;border:1px solid var(--line);padding:18px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.65;margin:0 0 16px;color:#e6edf3}
-  @media (prefers-color-scheme:light){pre{background:#0d1117;color:#e6edf3}}
+  @media (prefers-color-scheme:light){:root:not([data-theme=dark]) pre{background:#0d1117;color:#e6edf3}}
+  :root[data-theme=light] pre{background:#0d1117;color:#e6edf3}
 
   .note{border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--card);padding:14px 16px;margin:0 0 16px;font-size:14.5px}
   .note.warn{border-left-color:#e0a94a}
@@ -103,6 +108,7 @@
   <a class="link" href="https://e-sig.org">Home</a>
   <a class="link" href="#compliance">Compliance</a>
   <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+  <button class="themetoggle" type="button" aria-label="Toggle light or dark theme" title="Light/dark theme">&#9681;</button>
 </nav></header>
 
 <div class="shell">
@@ -463,6 +469,21 @@ import {
 </div>
 
 <script>
+// Manual light/dark toggle (system-following until the visitor chooses).
+(function () {
+  var KEY = 'esig-theme';
+  var root = document.documentElement;
+  var btn = document.querySelector('.themetoggle');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var explicit = root.getAttribute('data-theme');
+    var effective = explicit || ((window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark');
+    var next = effective === 'light' ? 'dark' : 'light';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+  });
+})();
+
 // Scrollspy: highlight the active section in the sidebar.
 (function () {
   var links = Array.prototype.slice.call(document.querySelectorAll('aside a[href^="#"]'));
