@@ -3,7 +3,9 @@ set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/esig-provisioning-supabase.XXXXXX")
-SUPABASE_DB_IMAGE=${SUPABASE_DB_IMAGE:-public.ecr.aws/supabase/postgres:17.6.1.156}
+# Pinned by digest (resolved via `docker manifest inspect ... -v`, 2026-08-27) so
+# a re-tagged/mutated upstream image can't silently change what CI runs against.
+SUPABASE_DB_IMAGE=${SUPABASE_DB_IMAGE:-public.ecr.aws/supabase/postgres:17.6.1.156@sha256:665efa7e234a3c324718fd2b7fbbaaaf7263f2565bc2e8fce8555c4def4c4985}
 DB_CONTAINER="esig-provisioning-db-$(basename "$TMP_ROOT" | tr -cd '[:alnum:]_-')"
 
 cleanup() {

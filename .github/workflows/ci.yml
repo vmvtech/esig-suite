@@ -22,3 +22,27 @@ jobs:
       - run: npm test
       - run: npm run smoke
       - run: npm run quickstart
+
+  provisioning-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # Single source of truth for the cfn-lint version: read it out of
+      # validate-templates.sh instead of duplicating the pin here.
+      - name: Read cfn-lint version
+        id: cfnlint
+        run: |
+          version=$(grep -oE 'CFN_LINT_VERSION=[0-9.]+' infra/provisioning/scripts/validate-templates.sh | cut -d= -f2)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - run: python -m pip install --disable-pip-version-check "cfn-lint==${{ steps.cfnlint.outputs.version }}"
+      - run: npm run test:provisioning:supabase
+      - run: npm run test:provisioning:templates
