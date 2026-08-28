@@ -1,7 +1,6 @@
 {
   "name": "@e-sig/pillar-bridge",
   "version": "0.1.0",
-  "private": true,
   "description": "Optional Pillar (UUAID/IAASO-3050 agent communication substrate) bridge for @e-sig/mcp — deliver signing links, lifecycle events, and identity proofs as signed, end-to-end encrypted envelopes over an agent's own inbox instead of (or alongside) email/webhooks. Consumes the real @uuaid/pillar package through a deep file:// import shim so the process never statically loads libp2p or better-sqlite3 (docs/architecture/esig-mcp.md §17).",
   "license": "MIT",
   "type": "module",
