@@ -28,13 +28,13 @@ docker run --detach \
 database_ready=0
 consecutive=0
 for _ in $(seq 1 60); do
-  # `select 1` is not enough: the image's own migrations can still be running
-  # (locally under amd64 emulation this window is seconds long), and DDL issued
-  # then dies inside the image's graphql event trigger with "could not open
-  # relation" on graphql.seq_schema_version. Reading that very sequence proves
-  # the migration that creates it has completed.
+  # A real query, NOT a probe of any supabase-internal object: on this image
+  # under --network none the graphql schema's sequence never materializes, so
+  # probing it makes readiness unsatisfiable (CI run 33188751136 — 60/60
+  # probes failed on "relation does not exist" while the server was fine).
+  # The restart-gap race is covered by requiring consecutive successes below.
   if docker exec "$DB_CONTAINER" \
-    psql -X -U supabase_admin -d postgres -Atc 'select last_value from graphql.seq_schema_version' >/dev/null 2>&1; then
+    psql -X -U supabase_admin -d postgres -Atc 'select 1' >/dev/null 2>&1; then
     consecutive=$((consecutive + 1))
     if [[ "$consecutive" -ge 3 ]]; then
       database_ready=1
