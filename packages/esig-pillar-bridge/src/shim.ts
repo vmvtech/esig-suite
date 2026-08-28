@@ -53,9 +53,9 @@
 //   2. A startup hash assert over the FULL walked closure (not just the
 //      entry files) — sha256 of every file the walk actually visited must
 //      match a pinned table for the npm-published versions this bridge has
-//      been measured against (0.2.0-alpha.11, 0.2.0-alpha.12) plus the
-//      pre-staged 0.2.0-alpha.13 (pre-measurement — see the provenance
-//      note). A
+//      been measured against (0.2.0-alpha.11, 0.2.0-alpha.12, and
+//      0.2.0-alpha.13 — the last tarball-verified 2026-08-28, see the
+//      provenance note). A
 //      version drift, a tampered file, OR a new transitive import that
 //      isn't in the pinned table at all (its `expected` hash comes back
 //      `undefined`, which never equals a real `actual` hash) throws unless
@@ -81,8 +81,8 @@
 // rest are byte-identical, matching the design doc's "keychain/jcs/e2e/
 // envelope byte-identical" note.
 //
-// alpha.13 is PRE-STAGED, NOT tarball-measured. Its block is the closure
-// sha256 computed from the publish-source tree
+// alpha.13's block was PRE-STAGED (not tarball-measured at the time): the
+// closure sha256 computed from the publish-source tree
 // /Users/z/zz-station/pillar/uuaid-pillar-node @ a5c165889418… (HEAD, clean)
 // on 2026-08-28T02:57Z (Esig-Lead, independently reproducing Uuaid-Lead's
 // pre-measurement of 02:51Z). Preconditions measured, not assumed: no
@@ -95,9 +95,14 @@
 // bump lives in package.json, which is not a closure member.
 // VALID IFF alpha.13 publishes from a5c1658 or a descendant whose only delta
 // is the package.json version bump — ANY other source change VOIDS the
-// block. The publish-time tarball gate (pack the real artifact, walk, verify
-// against THIS table) is still mandatory; pre-staging converts post-publish
-// work from derive to verify, it does not replace the gate.
+// block. Tarball gate RUN 2026-08-28T03:20Z (Esig-Lead): downloaded
+// https://registry.npmjs.org/@uuaid/pillar/-/pillar-0.2.0-alpha.13.tgz from
+// the live registry — sha1 8bea09b6861d7be47873cd0bcf567fd4efc58c3f ==
+// npm dist.shasum, 38 files, package.json version 0.2.0-alpha.13 (dist-tag
+// latest) — and hashed 6/6 against the block below: exactly one mover vs
+// alpha.12 (identity/keychain.mjs — the localIdFromKey ask-back commit
+// 1d68303), the other five byte-identical to the alpha.12 pins. The
+// publish condition held; the block is no longer provisional.
 // Diagnostic note (saves a future misread): the startup throw is keyed on
 // VERSION, not file — an unpinned version reports all six closure files as
 // mismatched (`expected === undefined`), five of which are unchanged. Do not
@@ -153,10 +158,10 @@ const REQUIRED_EXPORT_SUBPATHS = ["./envelope", "./keychain", "./jcs", "./tier",
  * Computed from the real published tarballs (see the provenance note
  * above `npm pack @uuaid/pillar@0.2.0-alpha.11` /
  * `npm pack @uuaid/pillar@0.2.0-alpha.12`, hashed via `walkImportGraph`
- * over each extracted tree — not guessed, not hand-derived). The one
- * exception is 0.2.0-alpha.13: PRE-MEASURED from the publish-source tree
- * at a5c1658 (see the provenance note), pending the mandatory tarball
- * verify at publish.
+ * over each extracted tree — not guessed, not hand-derived). 0.2.0-alpha.13
+ * was pre-measured from the publish-source tree at a5c1658 and has since
+ * been tarball-verified against the live registry artifact (2026-08-28,
+ * see the provenance note).
  */
 export const pinnedPillarHashes: Record<string, Record<string, string>> = JSON.parse(`{
   "0.2.0-alpha.11": {
