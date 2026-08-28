@@ -84,3 +84,104 @@ describe("dist/bin.js startup (D2, D6)", () => {
     15_000,
   );
 });
+
+describe("dist/bin.js startup — F4 (verifier finding): a private-range webhook URL is refused at startup, not only at send time", () => {
+  it("ESIG_MCP_EVENTS_WEBHOOK_URL=https://127.0.0.1/hook with no ESIG_MCP_ALLOW_PRIVATE_WEBHOOK → non-zero exit, a clear message, never reaches 'ready'", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "esig-mcp-bin-f4-events-"));
+    const res = spawnSync("node", [BIN], {
+      env: {
+        ...process.env,
+        ESIG_MCP_PASSPHRASE: PASSPHRASE,
+        ESIG_MCP_DELIVERY: "file",
+        ESIG_MCP_DATA_DIR: dataDir,
+        ESIG_MCP_HTTP_PORT: "18934",
+        ESIG_MCP_EVENTS_WEBHOOK_URL: "https://127.0.0.1/hook",
+        ESIG_MCP_EVENTS_WEBHOOK_SECRET: "s".repeat(32),
+      },
+      encoding: "utf8",
+      input: "",
+      timeout: 10_000,
+    });
+
+    expect(res.status).not.toBe(0);
+    expect(res.stdout).toBe("");
+    expect(res.stderr).toMatch(/configuration error/);
+    expect(res.stderr).toMatch(/private|local/i);
+    expect(res.stderr).not.toMatch(/ready/); // refused before the server ever came up
+  }, 15_000);
+
+  it("ESIG_MCP_DELIVERY_WEBHOOK_URL=https://127.0.0.1/hook with no ESIG_MCP_ALLOW_PRIVATE_WEBHOOK → non-zero exit (same startup discipline for the link-delivery channel)", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "esig-mcp-bin-f4-delivery-"));
+    const res = spawnSync("node", [BIN], {
+      env: {
+        ...process.env,
+        ESIG_MCP_PASSPHRASE: PASSPHRASE,
+        ESIG_MCP_DELIVERY: "webhook",
+        ESIG_MCP_DELIVERY_WEBHOOK_URL: "https://127.0.0.1/hook",
+        ESIG_MCP_DATA_DIR: dataDir,
+        ESIG_MCP_HTTP_PORT: "18936",
+      },
+      encoding: "utf8",
+      input: "",
+      timeout: 10_000,
+    });
+
+    expect(res.status).not.toBe(0);
+    expect(res.stderr).toMatch(/configuration error/);
+    expect(res.stderr).toMatch(/private|local/i);
+    expect(res.stderr).not.toMatch(/ready/);
+  }, 15_000);
+});
+
+describe("dist/bin.js startup — G2 (verifier finding): ESIG_MCP_SMTP_ALLOW_UNVERIFIED_TLS is a loud opt-out", () => {
+  it("prints a startup WARNING naming the flag when set, and still starts normally", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "esig-mcp-bin-g2-"));
+    const res = spawnSync("node", [BIN], {
+      env: {
+        ...process.env,
+        ESIG_CHROME_PATH: "/nonexistent/chrome-binary",
+        ESIG_MCP_PASSPHRASE: PASSPHRASE,
+        ESIG_MCP_DELIVERY: "email",
+        ESIG_MCP_EMAIL_TRANSPORT: "smtp",
+        ESIG_MCP_EMAIL_FROM: "Ops <ops@example.com>",
+        ESIG_MCP_SMTP_HOST: "127.0.0.1",
+        ESIG_MCP_SMTP_PORT: "2525",
+        ESIG_MCP_SMTP_ALLOW_UNVERIFIED_TLS: "1",
+        ESIG_MCP_DATA_DIR: dataDir,
+        ESIG_MCP_HTTP_PORT: "18937",
+      },
+      encoding: "utf8",
+      input: "",
+      timeout: 10_000,
+    });
+
+    expect(res.status).toBe(0); // the SMTP transport is lazy — nothing connects at startup
+    expect(res.stderr).toMatch(/WARNING: ESIG_MCP_SMTP_ALLOW_UNVERIFIED_TLS=1/);
+    expect(res.stderr).toMatch(/ready/);
+  }, 15_000);
+
+  it("prints NO such warning when the flag is unset", async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), "esig-mcp-bin-g2-off-"));
+    const res = spawnSync("node", [BIN], {
+      env: {
+        ...process.env,
+        ESIG_CHROME_PATH: "/nonexistent/chrome-binary",
+        ESIG_MCP_PASSPHRASE: PASSPHRASE,
+        ESIG_MCP_DELIVERY: "email",
+        ESIG_MCP_EMAIL_TRANSPORT: "smtp",
+        ESIG_MCP_EMAIL_FROM: "Ops <ops@example.com>",
+        ESIG_MCP_SMTP_HOST: "127.0.0.1",
+        ESIG_MCP_SMTP_PORT: "2525",
+        ESIG_MCP_DATA_DIR: dataDir,
+        ESIG_MCP_HTTP_PORT: "18938",
+      },
+      encoding: "utf8",
+      input: "",
+      timeout: 10_000,
+    });
+
+    expect(res.status).toBe(0);
+    expect(res.stderr).not.toMatch(/ALLOW_UNVERIFIED_TLS/);
+    expect(res.stderr).toMatch(/ready/);
+  }, 15_000);
+});

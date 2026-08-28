@@ -25,7 +25,12 @@ import { loadConfig, ConfigError } from "./config.js";
 import { buildStores } from "./stores.js";
 import { FsDocumentStore } from "./documents.js";
 import { ConsoleDelivery, FileDelivery, WebhookDelivery, type DeliveryChannel } from "./delivery.js";
+import { SmtpTransport, SesTransport } from "./email/transport.js";
+import { EmailDelivery } from "./email/delivery.js";
+import { EventQueue } from "./events/queue.js";
+import { assertSafeWebhookTarget, WebhookSsrfError } from "./events/webhook.js";
 import { EnvelopeService } from "./envelopes.js";
+import { Scheduler } from "./reminders.js";
 import { createMcpServer } from "./server.js";
 import { createApprovalServer } from "./http.js";
 import { checkSealReadiness } from "./chrome-preflight.js";
@@ -45,8 +50,8 @@ const REQUIRED_ENV_VARS: ReadonlyArray<[name: string, note: string]> = [
   [
     "ESIG_MCP_DELIVERY",
     '"file" (writes <ESIG_MCP_DATA_DIR>/outbox/<envelopeId>.json — the quickstart channel), ' +
-      '"console" (prints links to stderr, opt-in only), or "webhook". No default: an operator must ' +
-      "pick where signing links go.",
+      '"console" (prints links to stderr, opt-in only), "webhook", or "email". No default: an operator ' +
+      "must pick where signing links go.",
   ],
 ];
 
@@ -64,12 +69,13 @@ const OPTIONAL_ENV_VARS: ReadonlyArray<[name: string, defaultValue: string, note
   ["ESIG_MCP_HTTP_PORT", "7433", "Approval-page bind port."],
   ["ESIG_MCP_BASE_URL", "derived from host:port", "Base URL signing links are built from."],
   ["ESIG_MCP_RETURN_LINKS", "off", 'Set to exactly "1" to include raw signing links in esig_create_envelope. Local demos only.'],
-  ["ESIG_MCP_DELIVERY_WEBHOOK_URL", "—", "Required when ESIG_MCP_DELIVERY=webhook. Must be https:// unless ESIG_MCP_ALLOW_INSECURE_WEBHOOK=1."],
+  ["ESIG_MCP_DELIVERY_WEBHOOK_URL", "—", "Required when ESIG_MCP_DELIVERY=webhook. Must be https:// unless ESIG_MCP_ALLOW_INSECURE_WEBHOOK=1. Refused at startup if it resolves to a private/local address, unless ESIG_MCP_ALLOW_PRIVATE_WEBHOOK=1."],
   ["ESIG_MCP_ALLOW_INSECURE_WEBHOOK", "off", 'Set to exactly "1" to allow a plain http:// webhook URL.'],
   ["ESIG_MCP_PQ", "on", 'Set to "0" to disable the hybrid Ed25519 + ML-DSA-65 post-quantum seal.'],
   ["ESIG_MCP_MAX_HTML_BYTES", "524288", "Envelope HTML size cap (512 KiB)."],
   ["ESIG_MCP_MAX_PDF_BYTES", "26214400", "Ingested/sealed PDF size cap (25 MiB)."],
   ["ESIG_MCP_ENVELOPES_PER_HOUR", "60", "Per-process rate limit on envelope creation (and esig_reseal)."],
+  ["ESIG_MCP_MAX_SIGNERS", "25", "Per-envelope cap on esig_create_envelope's signers[] — bounds the email/webhook fan-out one call can trigger."],
   [
     "ESIG_MCP_IDENTITY_MIN_LEVEL",
     "none",
@@ -90,6 +96,58 @@ const OPTIONAL_ENV_VARS: ReadonlyArray<[name: string, defaultValue: string, note
     "ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC",
     "900",
     "Sole-control challenge lifetime in seconds. Max 3600.",
+  ],
+  [
+    "ESIG_MCP_EMAIL_TRANSPORT",
+    "—",
+    'Required when ESIG_MCP_DELIVERY=email: "smtp" or "ses".',
+  ],
+  [
+    "ESIG_MCP_EMAIL_FROM",
+    "—",
+    'Required when ESIG_MCP_DELIVERY=email: "Name <addr>" or a bare address — also the envelope sender.',
+  ],
+  ["ESIG_MCP_EMAIL_REPLY_TO", "—", "Optional Reply-To address for signing-notification emails."],
+  ["ESIG_MCP_EMAIL_SUBJECT_PREFIX", "—", 'Optional subject prefix: "[prefix] Please sign: <title>".'],
+  ["ESIG_MCP_SMTP_HOST", "—", 'Required when ESIG_MCP_EMAIL_TRANSPORT=smtp.'],
+  ["ESIG_MCP_SMTP_PORT", "587", "SMTP port. 465 implies implicit TLS even without ESIG_MCP_SMTP_SECURE=1."],
+  ["ESIG_MCP_SMTP_USER", "—", "SMTP AUTH username. Must be set together with ESIG_MCP_SMTP_PASS, or not at all."],
+  ["ESIG_MCP_SMTP_PASS", "—", "SMTP AUTH password. Never logged, never in a tool result or audit row."],
+  ["ESIG_MCP_SMTP_SECURE", "off", 'Set to exactly "1" for implicit TLS from connect (also implied by port 465).'],
+  [
+    "ESIG_MCP_SMTP_ALLOW_PLAINTEXT",
+    "off",
+    'Set to exactly "1" to skip STARTTLS entirely. Leave unset — STARTTLS is required by default.',
+  ],
+  [
+    "ESIG_MCP_SMTP_ALLOW_UNVERIFIED_TLS",
+    "off",
+    'Set to exactly "1" to skip SMTP server certificate verification against the system CA. Leave unset — ' +
+      "verification is ON by default. Loud startup WARNING whenever set.",
+  ],
+  ["ESIG_MCP_SES_REGION", "—", "Required when ESIG_MCP_EMAIL_TRANSPORT=ses. Needs the optional peer dependency @aws-sdk/client-sesv2 installed."],
+  [
+    "ESIG_MCP_REMINDERS",
+    "off (none)",
+    'Comma-separated durations after send, e.g. "24h,72h,30m". Requires ESIG_MCP_DELIVERY=email — reminders resend the original signing link.',
+  ],
+  ["ESIG_MCP_REMINDER_MAX", "3", "Hard cap on reminders sent per signer, independent of how many durations are configured."],
+  [
+    "ESIG_MCP_EVENTS_WEBHOOK_URL",
+    "—",
+    "Operator config only (an agent can never set/change it). Both this and ESIG_MCP_EVENTS_WEBHOOK_SECRET, or neither. " +
+      "Must be https:// unless ESIG_MCP_ALLOW_INSECURE_EVENTS_WEBHOOK=1. Refused at startup (not only at send time) if it resolves to a private/local address, unless ESIG_MCP_ALLOW_PRIVATE_WEBHOOK=1.",
+  ],
+  ["ESIG_MCP_EVENTS_WEBHOOK_SECRET", "—", "Required with ESIG_MCP_EVENTS_WEBHOOK_URL. At least 32 characters. Signs every event's X-Esig-Signature header."],
+  [
+    "ESIG_MCP_ALLOW_INSECURE_EVENTS_WEBHOOK",
+    "off",
+    'Set to exactly "1" to allow a plain http:// ESIG_MCP_EVENTS_WEBHOOK_URL. Separate from ESIG_MCP_ALLOW_INSECURE_WEBHOOK, which is the ESIG_MCP_DELIVERY=webhook channel only.',
+  ],
+  [
+    "ESIG_MCP_ALLOW_PRIVATE_WEBHOOK",
+    "off",
+    'Set to exactly "1" to allow ESIG_MCP_EVENTS_WEBHOOK_URL (and, at startup, ESIG_MCP_DELIVERY_WEBHOOK_URL) to resolve to a loopback/link-local/RFC1918/unique-local address (e.g. a trusted local receiver). Checked on every send.',
   ],
   [
     "ESIG_CHROME_PATH / PUPPETEER_EXECUTABLE_PATH / CHROME_PATH",
@@ -191,6 +249,47 @@ async function main(): Promise<void> {
     throw e;
   }
 
+  // F4 (verifier finding): config.ts's own https-scheme checks are
+  // synchronous (config-load time), but the private-range SSRF check
+  // (T18, events/webhook.ts) needs a DNS lookup and so could only ever run
+  // at SEND time — meaning a private-range ESIG_MCP_EVENTS_WEBHOOK_URL (or
+  // ESIG_MCP_DELIVERY_WEBHOOK_URL) previously started the server fine and
+  // only failed on the first actual delivery. Refuse to start at all instead
+  // — same discipline as the ConfigError handling right above.
+  try {
+    if (config.delivery.kind === "webhook") {
+      await assertSafeWebhookTarget(new URL(config.delivery.url), {
+        allowInsecureWebhook: config.allowInsecureWebhook,
+        allowPrivateWebhook: config.allowPrivateWebhook,
+      });
+    }
+    if (config.events.webhook) {
+      await assertSafeWebhookTarget(new URL(config.events.webhook.url), {
+        allowInsecureWebhook: config.allowInsecureEventsWebhook,
+        allowPrivateWebhook: config.allowPrivateWebhook,
+      });
+    }
+  } catch (e) {
+    if (e instanceof WebhookSsrfError) {
+      process.stderr.write(`esig-mcp: configuration error: ${e.message}\n`);
+      process.exit(1);
+      return;
+    }
+    throw e;
+  }
+
+  // G2 (verifier finding): server certificate verification is ON by
+  // default for the SMTP transport — this opt-out is loud on purpose,
+  // matching every other escape-hatch flag's own precedent in this file
+  // (ESIG_MCP_RETURN_LINKS, ESIG_MCP_DELIVERY=console above).
+  if (config.delivery.kind === "email" && config.delivery.transport === "smtp" && config.delivery.smtp?.allowUnverifiedTls) {
+    process.stderr.write(
+      "[esig-mcp] WARNING: ESIG_MCP_SMTP_ALLOW_UNVERIFIED_TLS=1 — SMTP server certificate verification " +
+        "is OFF. Only use this against a trusted receiver you control (e.g. a local test server); on a " +
+        "real network this defeats TLS's protection against a credential-stealing man-in-the-middle.\n",
+    );
+  }
+
   // D6: create the data dir and its inbox/outbox/blobs subdirectories up
   // front, rather than letting each of them get created lazily by whichever
   // store/channel/tool happens to touch them first (FsDocumentStore's own
@@ -224,7 +323,28 @@ async function main(): Promise<void> {
       ? new WebhookDelivery(config.delivery.url)
       : config.delivery.kind === "file"
         ? new FileDelivery(config.dataDir)
-        : new ConsoleDelivery();
+        : config.delivery.kind === "email"
+          ? new EmailDelivery({
+              transport:
+                config.delivery.transport === "smtp"
+                  ? new SmtpTransport({
+                      host: config.delivery.smtp!.host,
+                      port: config.delivery.smtp!.port,
+                      user: config.delivery.smtp!.user,
+                      pass: config.delivery.smtp!.pass,
+                      secure: config.delivery.smtp!.secure,
+                      allowPlaintext: config.delivery.smtp!.allowPlaintext,
+                      // G2: the loud opt-out warning is printed once, above,
+                      // right after loadConfig — this is the ONLY production
+                      // site that ever sets rejectUnauthorized:false.
+                      ...(config.delivery.smtp!.allowUnverifiedTls ? { tlsOptions: { rejectUnauthorized: false } } : {}),
+                    })
+                  : new SesTransport(config.delivery.ses!),
+              from: config.delivery.from,
+              replyTo: config.delivery.replyTo,
+              subjectPrefix: config.delivery.subjectPrefix,
+            })
+          : new ConsoleDelivery();
 
   // G3(c): 'console' is opt-in (config.ts refuses to default to it) precisely
   // because it hands signing links to whatever is capturing this process's
@@ -240,7 +360,39 @@ async function main(): Promise<void> {
     );
   }
 
-  const envelopes = new EnvelopeService({ config, ...stores, documents, delivery });
+  // §16: present only when ESIG_MCP_EVENTS_WEBHOOK_URL/_SECRET are both
+  // configured — every lifecycle event emitted anywhere in this process is
+  // enqueued here for delivery (EnvelopeService.emit / events/expiry.ts's
+  // own eventQueue?.enqueue call).
+  const eventQueue = config.events.webhook
+    ? new EventQueue({
+        dataDir: config.dataDir,
+        webhook: {
+          url: config.events.webhook.url,
+          secret: config.events.webhook.secret,
+          // G5: the events webhook's OWN insecure-http flag, not the
+          // link-delivery webhook's — see Config.allowInsecureEventsWebhook.
+          allowInsecureWebhook: config.allowInsecureEventsWebhook,
+          allowPrivateWebhook: config.allowPrivateWebhook,
+        },
+        auditStore: stores.auditStore,
+        tenantId: config.tenant,
+        packageVersion: PACKAGE_VERSION,
+      })
+    : undefined;
+  eventQueue?.start();
+
+  const envelopes = new EnvelopeService({ config, ...stores, documents, delivery, eventQueue });
+
+  // §15 "Reminders" + §16 "expiry tick" share this one 60s loop
+  // (reminders.ts's own header comment): reminder-sending is a no-op with
+  // ESIG_MCP_REMINDERS unset, but the expiry half always runs.
+  const scheduler = new Scheduler({
+    envelopes,
+    config,
+    expiry: { store: stores.envelopeStore, auditStore: stores.auditStore, dataDir: config.dataDir, tenantId: config.tenant, eventQueue },
+  });
+  scheduler.start();
 
   const httpServer = createApprovalServer({ config, envelopes });
   await new Promise<void>((resolve, reject) => {
@@ -265,6 +417,8 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     process.stderr.write(`[esig-mcp] received ${signal}, shutting down...\n`);
+    scheduler.stop();
+    eventQueue?.stop();
     void Promise.allSettled([
       mcpServer.close(),
       new Promise<void>((resolve) => httpServer.close(() => resolve())),

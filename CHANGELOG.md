@@ -3,6 +3,197 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
+## @e-sig/mcp 0.4.0 — 2026-08-28
+
+### `@e-sig/mcp` 0.4.0: email delivery + reminders (docs/architecture/esig-mcp.md §15)
+
+New `ESIG_MCP_DELIVERY=email` channel: each signer's tokenized link is sent as
+an email through a new `EmailTransport` seam with two built-ins — `smtp`
+(dependency-free `node:net`/`node:tls`: EHLO, STARTTLS required unless
+`ESIG_MCP_SMTP_ALLOW_PLAINTEXT=1`, implicit TLS on port 465 /
+`ESIG_MCP_SMTP_SECURE=1`, AUTH PLAIN with AUTH LOGIN fallback, CRLF
+normalization + RFC 5321 dot-stuffing on `DATA`) and `ses` (SESv2
+`SendEmail` via `@aws-sdk/client-sesv2`, loaded with a dynamic `import()` as
+an **optional peer dependency this package never installs** — a missing
+module fails with a clear `npm install @aws-sdk/client-sesv2` error, not a
+silent no-op). Config: `ESIG_MCP_EMAIL_TRANSPORT`, `ESIG_MCP_EMAIL_FROM`
+(required), `ESIG_MCP_EMAIL_REPLY_TO`/`ESIG_MCP_EMAIL_SUBJECT_PREFIX`
+(optional), `ESIG_MCP_SMTP_HOST/PORT/USER/PASS/SECURE`,
+`ESIG_MCP_SES_REGION`. Credentials are env-only, never logged, never in a
+tool result or audit row (redacted out of every SMTP error message too).
+
+The email itself (`email/templates.ts`) contains only the envelope title, the
+configured from-address, an optional sender note
+(`esig_create_envelope`'s new `message`, ≤ 500 chars — stored on the
+envelope and surfaced in `esig_envelope_status`), the signing link, and the
+expiry — never the document body or other signers' details. Title/note are
+stripped of control characters (SMTP header injection) and HTML-escaped.
+
+**Reminders.** `ESIG_MCP_REMINDERS="24h,72h"` (durations after the envelope
+was created; default off) + `ESIG_MCP_REMINDER_MAX` (default 3) — requires
+`ESIG_MCP_DELIVERY=email`, refused at startup otherwise. A new in-process
+`Scheduler` (`reminders.ts`, pure `computeDue()` + a 60s tick) sends a
+reminder to each still-pending signer whose next one is due, skipping
+voided/expired/completed envelopes, and persists send history per signer so
+a restart resumes rather than re-sends. New tool `esig_send_reminder
+(envelopeId, signerId?)` sends one on demand — audited
+(`envelope.reminder_sent`) and rate-limited under its own bucket, separate
+from the scheduler's own throttle (schedule + max), so the manual and
+automatic paths can never starve each other.
+
+**Link persistence — the one custody change.** Core mints a signing token
+once and never re-mints it, so a reminder needs the original link. When
+reminders are configured, every signer's link is stored **encrypted at
+rest** (AES-256-GCM — core's `encryptKeyPem`/`decryptKeyPem`, the same
+helpers `ensureActiveCert`/`wrapPqKeyBundle` already use) under
+`envelopes.json`, decrypted only inside the reminder-sending path, and never
+returned by any tool (I8 unchanged — extended test asserts `envelopes.json`
+never contains a plaintext `/sign/` link). Off entirely (no ciphertext
+written) unless `ESIG_MCP_REMINDERS` is set.
+
+`package.json` -> 0.4.0; `@aws-sdk/client-sesv2` added as an optional peer
+dependency (`peerDependenciesMeta.optional`), not installed.
+
+### `@e-sig/mcp` 0.4.0: lifecycle events + webhooks (docs/architecture/esig-mcp.md §16)
+
+Every state change on an envelope now appends an event
+(`envelope.created | .viewed | .signed | .declined | .completed | .sealed |
+.seal_failed | .voided | .expired | .reminder_sent |
+signer.identity_verified | signer.identity_rejected`) to a per-envelope log
+(`metadata.mcp.events[]`, capped at 200 — oldest trimmed off into an
+`events.trimmed` audit row). New tool `esig_list_events(envelopeId, since?)`
+returns the full log; `esig_envelope_status` now also returns the last 10.
+`envelope.viewed` fires once per signer, the first time `GET /sign/<token>`
+resolves `"ok"` for them; `envelope.expired` fires once, from a new 60s
+expiry tick (`events/expiry.ts`) sharing the existing reminder scheduler's
+loop — core itself only expires an envelope lazily on token resolution and
+never touches the event log, so the tick catches every envelope nobody
+happened to poll. Every event's `data` — like the webhook payload below —
+never contains a signing link, token, proof, or document byte.
+
+**Decline.** The approval page gains a "Decline to sign" control (optional
+reason, ≤ 500 chars, control characters stripped) — `POST
+/sign/<token>/decline {reason?}` calls core's `declineEnvelope` (marks the
+signer declined, voids the envelope), audits `envelope.declined`, and the
+page then shows a declined-by-name state instead of the generic
+sender-voided sentence. Deliberately not an MCP tool, same as signing.
+
+**Webhook delivery.** `ESIG_MCP_EVENTS_WEBHOOK_URL` + `_SECRET` (both
+required together, secret ≥ 32 chars, operator config only) POST every
+event as JSON, headers `X-Esig-Event-Id`/`X-Esig-Timestamp`/`X-Esig-
+Signature: sha256=HMAC(secret, timestamp + "." + body)`. At-least-once with
+backoff: every event is persisted to
+`<DATA_DIR>/events/queue/<eventId>.json` **before** any delivery attempt
+(enqueuing never blocks the signer-facing HTTP handlers — a slow/hung
+receiver cannot slow down `POST /sign`), a worker loop delivers in order
+per envelope, retries non-2xx/timeout/any-3xx (redirects are never
+followed) with exponential backoff (1m→2m→4m→8m→16m→32m, up to 6
+attempts), then dead-letters (audited `webhook.dead_lettered`). Restart-safe
+— the queue directory is re-scanned from scratch every pass.
+
+**T18 (SSRF).** `ESIG_MCP_EVENTS_WEBHOOK_URL` must be `https://` unless
+`ESIG_MCP_ALLOW_INSECURE_WEBHOOK=1` (shared with the pre-existing `webhook`
+delivery channel). Before every send, the target is DNS-resolved
+(`dns.promises.lookup`, all addresses) and refused if any address is
+loopback, link-local (`169.254/16`, incl. cloud metadata, and `fe80::/10`),
+RFC1918, unique-local (`fc00::/7`), or unspecified — unless
+`ESIG_MCP_ALLOW_PRIVATE_WEBHOOK=1`. A literal IP goes through the identical
+check.
+
+New exports: `EsigEvent`/`EsigEventType`, `appendEvent`/`listEvents`
+(`events/log.ts`), `expiryTick` (`events/expiry.ts`), `signPayload`/
+`sendWebhook`/`assertSafeWebhookTarget`/`WebhookSsrfError`
+(`events/webhook.ts`), `EventQueue` (`events/queue.ts`).
+
+### `@e-sig/mcp` 0.4.0: RedTeam RT-2026-08-27-05 fixes (§15/§16 pre-publish + verifier findings) — 2026-08-27
+
+**F1 (HIGH) reminders — CAS conflict across signers could duplicate a send.**
+`sendOneReminder` used to mutate an in-hand `Envelope` object shared across
+every due signer in one tick (or one `esig_send_reminder` call with no
+`signerId`) — a concurrent `emit()` elsewhere in the same call independently
+bumped the store's revision, so the SECOND+ signer's own `store.update()`
+CAS-failed *after* that signer's email had already gone out, reporting a
+bogus failure and never persisting the schedule state (so the next tick
+re-sent it). Fixed: a new `EnvelopeService.updateWithRetry` helper (fresh
+read + CAS-write + retry, mirroring `events/log.ts`'s `appendEvent`) now
+persists the "this reminder was sent" state *before* the email is actually
+sent, retried against a fresh read on conflict — a CAS conflict can now only
+delay a send, never duplicate one.
+
+**F3 (MED) SMTP — a server echoing the AUTH command could leak
+base64(password).** `email/transport.ts`'s AUTH PLAIN/LOGIN failure paths no
+longer embed the server's raw reply text at all (only the numeric reply
+code) — a malicious or broken server that reflects the AUTH line back in a
+535 can no longer put base64(password) into a thrown error, audit row, or
+tool result. Defense in depth: every error message this transport throws is
+also redacted for the raw password, `base64(password)`,
+`base64("\0user\0pass")`, and `base64(user)`.
+
+**F4 (MED) webhook SSRF — a private-range URL was only refused at send
+time.** `bin.ts` now calls `assertSafeWebhookTarget` right after
+`loadConfig` for both `ESIG_MCP_EVENTS_WEBHOOK_URL` and (previously
+unchecked at startup) `ESIG_MCP_DELIVERY_WEBHOOK_URL`, refusing to start
+(clear error, non-zero exit) rather than only failing on the first delivery
+attempt.
+
+**G1 (pre-publish) webhook SSRF, hardened further.** IPv6 forms — `::1`,
+`fe80::/10`, `fc00::/7`, and IPv4-mapped literals in both dotted
+(`::ffff:a.b.c.d`) and all-hex (`::ffff:0a00:0001`) form — are refused, and
+refusal fires if *any* resolved A/AAAA record is private. The bigger fix:
+`sendWebhook` now **connects to the vetted address**, never the hostname —
+`node:http`/`node:https` directly (Host header + TLS SNI kept on the
+original hostname) — closing a DNS-rebinding TOCTOU where the HTTP client's
+own internal DNS lookup could return a different (private) address than the
+one just vetted. Every send re-resolves and re-vets fresh, including every
+retry. Redirects: `redirect: "error"` (was `"manual"`) on the unpinned path,
+matched by an explicit non-2xx check on the pinned path — any 3xx is a
+failure either way, never followed.
+
+**G2 (pre-publish) SMTP TLS policy, made explicit.** Server certificate
+verification against the system CA is confirmed ON by default; a new,
+loud opt-out `ESIG_MCP_SMTP_ALLOW_UNVERIFIED_TLS=1` (startup WARNING
+whenever set) sets `rejectUnauthorized:false`. STARTTLS-missing/refused
+still hard-fails unless `ESIG_MCP_SMTP_ALLOW_PLAINTEXT=1`; AUTH is
+confirmed to run only after the TLS upgrade completes (a new test asserts
+the server's own received-command order). Implicit TLS (port 465 /
+`ESIG_MCP_SMTP_SECURE=1`) gets its own test too.
+
+**G3 stored signing links erased at terminal states.** A link persisted for
+reminders (§15) is now deleted from `metadata.mcp.delivery.links` the
+moment it can never be used again: per-signer on that signer's own `signed`
+event, and for the whole envelope on `declined`/`voided`/`expired`/
+`completed`. A new `EnvelopeService.purgeStaleReminderLinks()`, called once
+by the scheduler's first tick, also sweeps any links a *prior* run left
+encrypted at rest if this run's `ESIG_MCP_REMINDERS` is unset.
+
+**G4 events-queue file permissions** — `0700`/`0600` were already correct;
+added an explicit assertion test (`test/webhooks.test.ts`).
+
+**G5 separate insecure-http flag per webhook channel.** New
+`ESIG_MCP_ALLOW_INSECURE_EVENTS_WEBHOOK`, for the events webhook only —
+`ESIG_MCP_ALLOW_INSECURE_WEBHOOK` now governs the `ESIG_MCP_DELIVERY=webhook`
+link-delivery channel exclusively; the two can no longer be relaxed
+together by accident.
+
+**G6 per-envelope signer cap.** New `ESIG_MCP_MAX_SIGNERS` (default 25) —
+`esig_create_envelope` refuses with a clear error above the cap, bounding
+the email/webhook fan-out one call can trigger. The webhook receiver
+snippet (README) now also notes deduplicating by `X-Esig-Event-Id` inside
+the replay window.
+
+**R1 (MED) reminders — a manual send no longer consumes a scheduled slot.** `esig_send_reminder`/`sendReminder` now record into a separate `manualSentAt[]` instead of the scheduler's own `sentAt[]`, so a manual nudge can never make a later scheduled reminder skip; both arrays still count toward `ESIG_MCP_REMINDER_MAX` combined.
+
+**R3 (LOW) reminders — a failed send is rolled back and retried, not silently dropped.** A transport failure now un-persists the slot `sendOneReminder` recorded before sending (so the next tick/manual call retries) and audits `envelope.reminder_failed` instead of a misleading `envelope.reminder_sent`.
+
+New `Config` fields: `maxSigners`, `allowInsecureEventsWebhook`. New
+`SmtpDeliveryConfig` field: `allowUnverifiedTls`. `events/webhook.ts` new
+exports: `LookupFn`, `PinnedRequestFn`, `SendWebhookOptions` — `sendWebhook`'s
+4th parameter is now an options bag (`{fetchImpl?, lookupFn?, requestImpl?}`)
+rather than a bare `fetchImpl`; `EventQueueDeps` grew matching
+`lookupFn`/`requestImpl` fields. `assertSafeWebhookTarget` gained an
+optional 3rd `lookupFn` parameter (tests only; defaults to
+`dns.promises.lookup`) — its existing 2-argument call sites are unaffected.
+
 ## @e-sig/core 0.8.0, verify-in-CI, and document templates — 2026-08-27
 
 ### `@e-sig/core` 0.8.0: `esig verify` CLI

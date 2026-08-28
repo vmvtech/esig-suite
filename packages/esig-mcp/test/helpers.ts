@@ -34,9 +34,15 @@ export async function makeConfig(overrides: Partial<Config> = {}): Promise<Confi
     maxHtmlBytes: 1_000_000,
     maxPdfBytes: 25_000_000,
     envelopesPerHour: 1000,
+    maxSigners: 25,
     identityMinLevel: "none",
     uuaidRegistryUrl: undefined,
     identityChallengeTtlSec: 900,
+    reminders: { durationsMs: [], max: 3 },
+    events: { webhook: undefined },
+    allowInsecureWebhook: false,
+    allowInsecureEventsWebhook: false,
+    allowPrivateWebhook: false,
     ...overrides,
   };
 }

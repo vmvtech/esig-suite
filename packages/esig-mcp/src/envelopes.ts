@@ -25,6 +25,9 @@ import crypto from "node:crypto";
 import {
   composeEnvelopeHtml,
   createEnvelope,
+  declineEnvelope,
+  decryptKeyPem,
+  encryptKeyPem,
   ensureActiveCert,
   ensureActivePqKeys,
   isWellFormedUuaidAssertion,
@@ -52,6 +55,10 @@ import {
   type DeliveryLink,
   type Receipt,
 } from "./delivery.js";
+import { stripControlChars } from "./email/templates.js";
+import { appendEvent, listEvents } from "./events/log.js";
+import type { EsigEvent, EsigEventInput } from "./events/types.js";
+import type { EventDeliveryStatus, EventQueue } from "./events/queue.js";
 import { issueChallenge, type IdentityChallengePayload } from "./identity/challenge.js";
 import { RegistryClient } from "./identity/registry.js";
 import {
@@ -117,6 +124,8 @@ export interface CreateEnvelopeArgs {
   signers: SignerInput[];
   expiresAt?: Date;
   identity?: CreateEnvelopeIdentityArgs;
+  /** §15: optional sender note, shown in the signing-notification email (email delivery only). <= 500 chars enforced by the tool schema; control chars stripped here regardless of delivery channel. */
+  message?: string;
 }
 
 export interface CreatedSigner {
@@ -138,6 +147,8 @@ export interface CreateEnvelopeResultSummary {
   identityPolicy?: EnvelopeIdentityPolicy;
   /** Present only for a PDF envelope (§13, created with `docId`). */
   document?: EnvelopeDocumentMeta;
+  /** §15: the sender note, if one was set — control chars stripped, escaped wherever rendered (templates.ts). */
+  message?: string;
 }
 
 /**
@@ -188,6 +199,8 @@ export interface EnvelopeStatusSummary {
   identityPolicy?: EnvelopeIdentityPolicy;
   /** Present only for a PDF envelope (§13, created with `docId`). */
   document?: EnvelopeDocumentMeta;
+  /** §15: the sender note, if one was set. */
+  message?: string;
   signers: Array<{
     signerId: string;
     name: string;
@@ -195,6 +208,8 @@ export interface EnvelopeStatusSummary {
     status: string;
     order: number;
     signedAt?: string;
+    /** §16: ISO-8601, set the first time `GET /sign/<token>` resolves `"ok"` for this signer. */
+    viewedAt?: string;
     /** Present once this signer's identity has been verified (§12 "What gets recorded"). */
     identity?: SignerIdentityRecord;
   }>;
@@ -205,6 +220,8 @@ export interface EnvelopeStatusSummary {
   sealedPdfUrl?: string;
   /** D1(c): present once a seal attempt (success or failure) has run at least once. */
   seal?: EnvelopeSealState;
+  /** §16: the last 10 lifecycle events, oldest first. `esig_list_events` returns the full log. */
+  events: EsigEvent[];
 }
 
 interface McpEnvelopeMetadata {
@@ -222,6 +239,47 @@ interface McpEnvelopeMetadata {
   identity?: import("./identity/types.js").EnvelopeIdentityMetadata;
   /** §13: set at creation for a PDF envelope (created with `docId`), never for an HTML envelope. */
   document?: EnvelopeDocumentMeta;
+  /** §15: the sender note (esig_create_envelope's `message`), control chars stripped, set at creation only. */
+  message?: string;
+  /** §15: encrypted-at-rest signing links + per-signer reminder history — present only when reminders are configured (email delivery + ESIG_MCP_REMINDERS non-empty). */
+  delivery?: McpDeliveryMetadata;
+  /** §16: keyed by signerId, ISO-8601 — set once, the first time `GET /sign/<token>` resolves `"ok"` for that signer (`EnvelopeService.recordViewed`). */
+  viewed?: Record<string, string>;
+  /** §16: the full lifecycle event log, oldest first, capped at `MAX_EVENTS` (events/log.ts) — read/written only via `appendEvent`/`listEvents` there, never spread/assigned directly. */
+  events?: EsigEvent[];
+  /** §16: ISO-8601, set once `envelope.expired` has been emitted for this envelope (`events/expiry.ts`'s idempotency guard) — read/written only there, never here, but declared for documentation. */
+  expiredEmittedAt?: string;
+}
+
+/** §15 "Link persistence for reminders" + "Reminders". */
+interface McpDeliveryMetadata {
+  /** signerId -> base64(encryptKeyPem(url, config.passphrase)) — the ONLY place a signer's raw signing link is persisted outside the delivery channel itself; decrypted ONLY inside `EnvelopeService`'s reminder-sending path. */
+  links?: Record<string, string>;
+  /** signerId -> this signer's reminder send history. */
+  reminders?: Record<string, SignerReminderState>;
+}
+
+export interface SignerReminderState {
+  /**
+   * ISO-8601, one entry per SCHEDULED (automatic) reminder actually sent, in
+   * order — drives `nextAt`/the schedule index (`reminders.ts`'s
+   * `computeDue`). Never includes manual sends (R1 fix, verifier finding):
+   * before this fix, `esig_send_reminder`/`sendReminder` appended to this
+   * SAME array, so a manual nudge silently consumed a scheduled slot (e.g. a
+   * manual reminder sent between the 24h and 72h scheduled reminders could
+   * make the 72h one never fire).
+   */
+  sentAt: string[];
+  /**
+   * ISO-8601, one entry per MANUAL reminder actually sent
+   * (`esig_send_reminder` / `EnvelopeService.sendReminder`), in order — kept
+   * separate from `sentAt` so a manual send never advances or cancels the
+   * automatic schedule. Both arrays count toward `ESIG_MCP_REMINDER_MAX`
+   * (the overall per-signer spam bound) combined — see `sendOneReminder`.
+   */
+  manualSentAt: string[];
+  /** ISO-8601 of the next scheduled reminder, or `null` once the schedule/max cap is exhausted. */
+  nextAt: string | null;
 }
 
 function mcpMeta(envelope: Envelope): McpEnvelopeMetadata | undefined {
@@ -240,6 +298,47 @@ export function derivePhase(envelope: Envelope): EnvelopePhase {
 /** §13: this envelope's pinned PDF document metadata, if it is a PDF envelope (created with `docId`). */
 export function getEnvelopeDocument(envelope: Envelope): EnvelopeDocumentMeta | undefined {
   return mcpMeta(envelope)?.document;
+}
+
+/** §15: this signer's reminder send history, if any reminder has been sent yet. */
+export function getSignerReminderState(envelope: Envelope, signerId: string): SignerReminderState | undefined {
+  return mcpMeta(envelope)?.delivery?.reminders?.[signerId];
+}
+
+/**
+ * RedTeam RT-2026-08-27-05 G3: a stored signing link (§15 "Link persistence")
+ * has no purpose once the state it exists to resend has passed — a signed
+ * (per that signer), declined, voided, expired, or completed envelope will
+ * never send another reminder for the link(s) this erases, so the ciphertext
+ * must not outlive its purpose. In place; no-op if there is nothing to
+ * erase. `signerId` erases just that signer's link (the "signed" terminal
+ * state, which is per-signer on a multi-signer envelope); omitted erases
+ * every stored link (decline/void/expire/complete, which are terminal for
+ * the WHOLE envelope).
+ *
+ * Callers apply this INSIDE an existing `emit()`/`appendEvent` `build`
+ * callback, on the freshly-read envelope that callback already receives, so
+ * the erasure rides the SAME fresh-read-CAS-write-with-retry cycle as the
+ * event it's paired with (events/log.ts's `appendEvent`) — never a separate,
+ * independently-racing write (see F1's fix, `EnvelopeService.sendOneReminder`,
+ * for why an independent write here would be exactly the wrong shape).
+ */
+function eraseStoredLinks(envelope: Envelope, signerId?: string): void {
+  const currentMcp = mcpMeta(envelope);
+  const links = currentMcp?.delivery?.links;
+  if (!links || Object.keys(links).length === 0) return;
+  if (signerId !== undefined && !(signerId in links)) return;
+
+  const nextLinks = { ...links };
+  if (signerId !== undefined) {
+    delete nextLinks[signerId];
+  } else {
+    for (const key of Object.keys(nextLinks)) delete nextLinks[key];
+  }
+  envelope.metadata = {
+    ...envelope.metadata,
+    mcp: { ...currentMcp, delivery: { ...currentMcp!.delivery, links: nextLinks } } satisfies McpEnvelopeMetadata,
+  };
 }
 
 export interface EnvelopeServiceDeps {
@@ -276,6 +375,8 @@ export interface EnvelopeServiceDeps {
   verifySignerIdentity?: typeof verifySignerIdentity;
   /** Injectable clock, for deterministic tests. */
   now?: () => Date;
+  /** §16: present only when `ESIG_MCP_EVENTS_WEBHOOK_URL`/`_SECRET` are configured (bin.ts) — every emitted event is also enqueued here for webhook delivery. Absent means events are still logged (`metadata.mcp.events[]`, `esig_list_events`) but never POSTed anywhere. */
+  eventQueue?: EventQueue;
 }
 
 /**
@@ -352,6 +453,87 @@ export class EnvelopeService {
     this.rateLimiter = new HourlyRateLimiter(deps.config.envelopesPerHour, this.now);
     this.registryClient = deps.config.uuaidRegistryUrl ? new RegistryClient(deps.config.uuaidRegistryUrl) : undefined;
     this.verifyIdentity = deps.verifySignerIdentity ?? verifySignerIdentity;
+    // §15: defense in depth alongside config.ts's own loadConfig-time refusal
+    // — a test harness (or a future caller) that hand-builds a `Config`
+    // bypassing loadConfig must not silently end up with a reminder schedule
+    // it can never act on (no stored link to decrypt outside email delivery).
+    if (deps.config.reminders.durationsMs.length > 0 && deps.config.delivery.kind !== "email") {
+      throw new EnvelopeError('ESIG_MCP_REMINDERS requires ESIG_MCP_DELIVERY="email" (fail closed).');
+    }
+  }
+
+  /**
+   * §16: the single entry point every state-change site in this class calls
+   * to append a lifecycle event and (when a webhook is configured) enqueue
+   * it for delivery. `build` gets the freshly-read envelope on every attempt
+   * (see `events/log.ts`'s `appendEvent` header comment) and returns the
+   * event to append, or `false` to skip (the idempotency guards
+   * `recordViewed`/`events/expiry.ts` use).
+   *
+   * Deliberately best-effort — NEVER throws, mirroring `seal()`'s own
+   * "recorded either way" posture: the event log and its webhook are
+   * auxiliary bookkeeping, and a failure here (a disk hiccup, a queue
+   * directory permission issue) must never turn an otherwise-successful
+   * `create`/`sign`/`void`/`decline`/`seal`/reminder call into a failure the
+   * caller sees. A failure is reported once to stderr; the audit trail each
+   * call site writes separately remains the authoritative record either way.
+   */
+  private async emit(envelopeId: string, build: (envelope: Envelope) => EsigEventInput | false): Promise<EsigEvent | undefined> {
+    try {
+      const { event } = await appendEvent({
+        store: this.deps.envelopeStore,
+        auditStore: this.deps.auditStore,
+        tenantId: this.deps.config.tenant,
+        envelopeId,
+        now: this.now,
+        build,
+      });
+      if (event && this.deps.eventQueue) {
+        await this.deps.eventQueue.enqueue(event);
+      }
+      return event;
+    } catch (e) {
+      process.stderr.write(
+        `[esig-mcp] WARNING: could not append lifecycle event for envelope ${envelopeId}: ${messageOf(e)}\n`,
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * F1 fix (verifier finding): fresh-read-CAS-write-with-retry, the exact
+   * same shape as `appendEvent` (events/log.ts) — reads `envelopeId` fresh
+   * from the store on every attempt (never trusts a caller's in-hand
+   * `Envelope` object across an I/O gap this class doesn't fully control:
+   * a concurrent `emit()`'s own independent CAS cycle, elsewhere in this
+   * same call, can bump the store's revision out from under a stale
+   * reference), lets `mutate` change it in place and return `true` to
+   * persist or `false` to skip (no write), and retries from a fresh read on
+   * `EnvelopeConflictError` up to `MAX_ATTEMPTS` times. Returns the
+   * freshly-persisted envelope, or `undefined` when `mutate` chose to skip.
+   */
+  private async updateWithRetry(
+    envelopeId: string,
+    mutate: (envelope: Envelope) => boolean,
+  ): Promise<Envelope | undefined> {
+    const MAX_ATTEMPTS = 5;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const envelope = await this.deps.envelopeStore.findById(this.deps.config.tenant, envelopeId);
+      if (!envelope) throw new EnvelopeError(`envelope not found: ${envelopeId}`);
+      const shouldWrite = mutate(envelope);
+      if (!shouldWrite) return undefined;
+      try {
+        return await this.deps.envelopeStore.update(envelope);
+      } catch (e) {
+        lastError = e;
+        // A concurrent writer won the CAS — retry from a fresh read, same as
+        // events/log.ts's appendEvent.
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(`could not update envelope ${envelopeId} (concurrent update contention)`);
   }
 
   /** `esig_create_envelope`. Sanitizes, caps, rate-limits, mints tokens, delivers links, audits, and returns NO raw tokens by default (I8). */
@@ -360,6 +542,14 @@ export class EnvelopeService {
 
     if (!args.signers?.length) {
       throw new EnvelopeError("at least one signer is required");
+    }
+    // G6 (RedTeam RT-2026-08-27-05): bounds the email/webhook fan-out one
+    // esig_create_envelope call can trigger.
+    if (args.signers.length > config.maxSigners) {
+      throw new EnvelopeError(
+        `too many signers (${args.signers.length}) — this server's cap is ${config.maxSigners} ` +
+          "(ESIG_MCP_MAX_SIGNERS).",
+      );
     }
 
     // §13: esig_create_envelope accepts exactly one of `html` or `docId` — a
@@ -419,6 +609,12 @@ export class EnvelopeService {
     if (htmlBytes > config.maxHtmlBytes) {
       throw new EnvelopeError(`html is ${htmlBytes} bytes, exceeds the ${config.maxHtmlBytes}-byte cap`);
     }
+
+    // §15: the length cap (<= 500) is enforced by the tool schema
+    // (tools/create-envelope.ts) — this is defense in depth for any other
+    // caller of this library method, plus the SMTP-header-injection strip
+    // every rendering of it (templates.ts) applies again anyway.
+    const message = args.message !== undefined ? stripControlChars(args.message) || undefined : undefined;
 
     // §12 "Policy": the effective level may only RAISE the server's
     // configured floor, never lower it. Validated BEFORE any write (fail
@@ -486,6 +682,7 @@ export class EnvelopeService {
           removedTags: removed,
           returnLinks: config.returnLinks,
           ...(documentMeta ? { document: documentMeta } : {}),
+          ...(message ? { message } : {}),
         },
       },
     });
@@ -534,7 +731,37 @@ export class EnvelopeService {
       };
     });
 
-    const receipts = await this.deps.delivery.deliver({ id: envelope.id, title: envelope.title }, links);
+    // §15 "Link persistence for reminders" — the ONE custody change: when
+    // reminders are configured (which config.ts only ever allows alongside
+    // email delivery — the constructor above re-checks it for hand-built
+    // Configs too), core will never re-mint these tokens, so a reminder needs
+    // the original link. Encrypted at rest under the operator passphrase
+    // (core's AES-256-GCM encryptKeyPem/decryptKeyPem — the same helpers
+    // ensureActiveCert/wrapPqKeyBundle already use for the cert/PQ key
+    // bundles), decrypted ONLY inside the reminder-sending path
+    // (`sendOneReminder` below), and never exposed by any tool (I8 unchanged
+    // — nothing here touches what `esig_create_envelope`'s result carries).
+    // Off (no write at all) when reminders are not configured.
+    if (config.delivery.kind === "email" && config.reminders.durationsMs.length > 0) {
+      const encryptedLinks: Record<string, string> = {};
+      for (const link of links) {
+        encryptedLinks[link.signerId] = Buffer.from(encryptKeyPem(link.url, config.passphrase)).toString("base64");
+      }
+      const currentMcp = mcpMeta(envelope) ?? {};
+      envelope.metadata = {
+        ...envelope.metadata,
+        mcp: {
+          ...currentMcp,
+          delivery: { ...currentMcp.delivery, links: encryptedLinks },
+        } satisfies McpEnvelopeMetadata,
+      };
+      await this.deps.envelopeStore.update(envelope);
+    }
+
+    const receipts = await this.deps.delivery.deliver(
+      { id: envelope.id, title: envelope.title, message, expiresAt: envelope.expiresAt?.toISOString() },
+      links,
+    );
 
     if (config.returnLinks) {
       // I8's escape hatch — loud on purpose (design doc §4: "loudly").
@@ -569,8 +796,19 @@ export class EnvelopeService {
         deliveryFailures,
         identityMinLevel: identityPolicy?.minLevel,
         document: documentMeta,
+        hasMessage: message !== undefined,
       },
     });
+
+    // §16: emitted last, after the audit row above — see `emit()`'s own
+    // header comment for why a failure here never turns a successful
+    // `create()` into a failure the caller sees.
+    await this.emit(envelope.id, (e) => ({
+      type: "envelope.created",
+      envelopeId: e.id,
+      phase: derivePhase(e),
+      data: { signerCount: e.signers.length, delivery: config.delivery.kind },
+    }));
 
     return {
       envelopeId: envelope.id,
@@ -581,6 +819,7 @@ export class EnvelopeService {
       ...(config.returnLinks ? { links } : {}),
       ...(identityPolicy ? { identityPolicy } : {}),
       ...(documentMeta ? { document: documentMeta } : {}),
+      ...(message ? { message } : {}),
     };
   }
 
@@ -589,6 +828,24 @@ export class EnvelopeService {
     const envelope = await this.deps.envelopeStore.findById(this.deps.config.tenant, envelopeId);
     if (!envelope) throw new EnvelopeError(`envelope not found: ${envelopeId}`);
     return summarize(envelope);
+  }
+
+  /**
+   * `esig_list_events(envelopeId, since?)` (§16). Read-only. `since` filters
+   * to events strictly after the given ISO-8601 timestamp (pass the
+   * `createdAt` of the last event you've already seen). When a webhook is
+   * configured, each event also carries its current delivery status
+   * (`pending`/`delivered`/`dead` + attempt count) — omitted when no webhook
+   * is configured, or once a delivered receipt has aged past its 24h
+   * retention.
+   */
+  async listEvents(envelopeId: string, since?: string): Promise<Array<EsigEvent & { delivery?: EventDeliveryStatus }>> {
+    const envelope = await this.deps.envelopeStore.findById(this.deps.config.tenant, envelopeId);
+    if (!envelope) throw new EnvelopeError(`envelope not found: ${envelopeId}`);
+    const events = listEvents(envelope, since);
+    const eventQueue = this.deps.eventQueue;
+    if (!eventQueue) return events;
+    return Promise.all(events.map(async (e) => ({ ...e, delivery: await eventQueue.statusOf(e.id) })));
   }
 
   /** `esig_list_envelopes`. See stores.ts's `listEnvelopes` header note for the Fs-backed-only limitation. */
@@ -610,12 +867,101 @@ export class EnvelopeService {
       targetTable: "envelope",
       targetId: envelope.id,
     });
+    await this.emit(envelope.id, (e) => {
+      // G3: void is terminal for the whole envelope — erase every stored link.
+      eraseStoredLinks(e);
+      return { type: "envelope.voided", envelopeId: e.id, phase: derivePhase(e), data: {} };
+    });
     return summarize(envelope);
   }
 
   /** Approval-page-facing: resolve a raw token to its gate state. Never exposed as an MCP tool itself (design doc §4). */
   async resolve(token: string): Promise<TokenResolution> {
     return resolveSigningToken({ store: this.deps.envelopeStore, token });
+  }
+
+  /**
+   * Approval-page-facing (§15/§16 "Decline"): `POST /sign/<token>/decline`
+   * (http.ts) only — deliberately not an MCP tool, same reasoning as
+   * signing itself (design doc §4: declining is human-side only). Core's
+   * `declineEnvelope` marks the signer `declined` and voids the whole
+   * envelope in one step; `reason` is control-character-stripped and capped
+   * by the caller (http.ts) before it ever reaches here.
+   */
+  async decline(token: string, reason?: string): Promise<EnvelopeStatusSummary> {
+    const envelope = await declineEnvelope({ store: this.deps.envelopeStore, token, reason });
+    // declineEnvelope refuses (throws core's EnvelopeError) once the
+    // envelope is already voided/expired/completed/already-signed, and it
+    // flips the WHOLE envelope to voided on success — so at most one signer
+    // can ever be "declined" on a given envelope.
+    const signer = envelope.signers.find((s) => s.status === "declined");
+    await this.deps.auditStore.insert({
+      tenantId: this.deps.config.tenant,
+      action: "envelope.declined",
+      targetTable: "envelope",
+      targetId: envelope.id,
+      metadata: { signerId: signer?.id, hasReason: reason !== undefined },
+    });
+    await this.emit(envelope.id, (e) => {
+      const declinedSigner = e.signers.find((s) => s.id === signer?.id) ?? signer;
+      // G3: declineEnvelope voids the WHOLE envelope — erase every stored link.
+      eraseStoredLinks(e);
+      return {
+        type: "envelope.declined",
+        envelopeId: e.id,
+        phase: derivePhase(e),
+        signer: declinedSigner
+          ? { signerId: declinedSigner.id, name: declinedSigner.name, email: declinedSigner.email, status: declinedSigner.status }
+          : undefined,
+        data: { hasReason: reason !== undefined },
+      };
+    });
+    return summarize(envelope);
+  }
+
+  /**
+   * Approval-page-facing (§16): `GET /sign/<token>` resolving `"ok"`
+   * (http.ts) calls this once per request — it is idempotent PER SIGNER, so
+   * repeat page loads/reloads are cheap no-ops after the first. Persists
+   * `viewedAt` on the signer's mcp metadata and emits `envelope.viewed`
+   * exactly once. Never throws (mirrors `seal()`'s "recorded either way"
+   * posture): a viewed-tracking failure must not block the approval page
+   * from rendering — `emit()` itself already swallows append/enqueue
+   * failures, so the only thing this wraps is the audit insert below.
+   */
+  async recordViewed(envelopeId: string, signerId: string): Promise<void> {
+    const event = await this.emit(envelopeId, (envelope) => {
+      const signer = envelope.signers.find((s) => s.id === signerId);
+      if (!signer) return false;
+      const meta = mcpMeta(envelope) ?? {};
+      if (meta.viewed?.[signerId] !== undefined) return false; // already recorded — no-op
+      const at = this.now().toISOString();
+      envelope.metadata = {
+        ...envelope.metadata,
+        mcp: { ...meta, viewed: { ...meta.viewed, [signerId]: at } } satisfies McpEnvelopeMetadata,
+      };
+      return {
+        type: "envelope.viewed",
+        envelopeId: envelope.id,
+        phase: derivePhase(envelope),
+        signer: { signerId: signer.id, name: signer.name, email: signer.email, status: signer.status },
+        data: {},
+      };
+    });
+    if (!event) return; // no-op (already viewed) or `emit()` swallowed a failure — either way, nothing new to audit
+    try {
+      await this.deps.auditStore.insert({
+        tenantId: this.deps.config.tenant,
+        action: "envelope.viewed",
+        targetTable: "envelope",
+        targetId: envelopeId,
+        metadata: { signerId },
+      });
+    } catch (e) {
+      process.stderr.write(
+        `[esig-mcp] WARNING: could not write the envelope.viewed audit row for envelope ${envelopeId} signer ${signerId}: ${messageOf(e)}\n`,
+      );
+    }
   }
 
   /**
@@ -706,6 +1052,19 @@ export class EnvelopeService {
               targetId: gate.envelope.id,
               metadata: { signerId: gate.signer.id, reason: e.reason, uuaid: e.uuaid, level: e.level },
             });
+            // §16: emit-only (this ticket's own wording) — never touches the
+            // verification result or ordering above; `sign()` still throws
+            // `e` unconditionally right below regardless of what `emit()` does.
+            await this.emit(gate.envelope.id, (env) => {
+              const s = env.signers.find((x) => x.id === gate.signer.id) ?? gate.signer;
+              return {
+                type: "signer.identity_rejected",
+                envelopeId: env.id,
+                phase: derivePhase(env),
+                signer: { signerId: s.id, name: s.name, email: s.email, status: s.status },
+                data: { reason: e.reason, level: e.level },
+              };
+            });
           }
           throw e;
         }
@@ -717,9 +1076,25 @@ export class EnvelopeService {
             targetId: gate.envelope.id,
             metadata: { signerId: gate.signer.id, uuaid: record.uuaid, level: record.level, keyFingerprint: record.keyFingerprint },
           });
+          await this.emit(gate.envelope.id, (env) => {
+            const s = env.signers.find((x) => x.id === gate.signer.id) ?? gate.signer;
+            return {
+              type: "signer.identity_verified",
+              envelopeId: env.id,
+              phase: derivePhase(env),
+              signer: { signerId: s.id, name: s.name, email: s.email, status: s.status },
+              data: { level: record!.level },
+            };
+          });
         }
       }
     }
+
+    // Captured before `recordSignature` (below) advances signer state — safe
+    // even when `gate.status !== "ok"` (every non-"invalid" TokenResolution
+    // variant still carries `signer`; an "invalid" token throws out of
+    // `recordSignature` before this value is ever used).
+    const signingSignerId = gate.status !== "invalid" ? gate.signer.id : undefined;
 
     let envelope = await recordSignature({
       store: this.deps.envelopeStore,
@@ -735,6 +1110,43 @@ export class EnvelopeService {
       targetId: envelope.id,
       metadata: { status: envelope.status },
     });
+    await this.emit(envelope.id, (e) => {
+      const signer = e.signers.find((s) => s.id === signingSignerId);
+      // G3: "signed" is terminal PER SIGNER (a multi-signer envelope keeps
+      // going) — erase only this signer's stored link.
+      if (signingSignerId !== undefined) eraseStoredLinks(e, signingSignerId);
+      return {
+        type: "envelope.signed",
+        envelopeId: e.id,
+        phase: derivePhase(e),
+        signer: signer ? { signerId: signer.id, name: signer.name, email: signer.email, status: signer.status } : undefined,
+        data: {},
+      };
+    });
+    if (envelope.status === "completed") {
+      await this.emit(envelope.id, (e) => {
+        // G3: belt-and-suspenders — every signer's own "signed" emit above
+        // already erased its own link, but completion is independently a
+        // terminal state for the whole envelope (the ticket's own wording
+        // lists it separately from "signed").
+        eraseStoredLinks(e);
+        return { type: "envelope.completed", envelopeId: e.id, phase: derivePhase(e), data: {} };
+      });
+    }
+
+    // Each `emit()` call above performs its OWN fresh read-CAS-write cycle
+    // (events/log.ts's `appendEvent`, I3 class) against a SEPARATE envelope
+    // object — unlike `EnvelopeStore.update()` (stores.ts's
+    // `ConcurrencySafeEnvelopeStore`), which mutates and returns the SAME
+    // object it was given, so sequential writes on one in-hand reference
+    // normally chain safely. `envelope` here is that original
+    // `recordSignature` result, now stale (its `__mcpRev` no longer matches
+    // what's on disk once either emit above ran) — `seal()`'s own
+    // `envelopeStore.update()` next would throw `EnvelopeConflictError` on
+    // it. Re-reading once, fresh, fixes both `seal()` below and
+    // `summarize()`'s own "last 10 events" freshness.
+    const refreshed = await this.deps.envelopeStore.findById(this.deps.config.tenant, envelope.id);
+    if (refreshed) envelope = refreshed;
 
     // D1(a): core already persisted `status: "completed"` inside
     // `recordSignature` above — the signature is validly recorded regardless
@@ -789,6 +1201,306 @@ export class EnvelopeService {
 
     const updated = await this.seal(envelope);
     return summarize(updated);
+  }
+
+  /**
+   * `esig_send_reminder(envelopeId, signerId?)` (§15 "Reminders", manual
+   * path). Rate-limited under the SAME hourly limiter `create()`/`reseal()`
+   * draw from (label `"reminder"`, its own bucket). Omit `signerId` to remind
+   * every currently-pending signer; a specific `signerId` that is not
+   * pending is reported (not thrown) as a per-signer failure so a batch call
+   * doesn't die on one already-signed signer.
+   *
+   * Requires reminders to be configured (`ESIG_MCP_REMINDERS` non-empty) —
+   * that is the only thing that causes a signing link to have been
+   * persisted at creation (see `create()`'s "Link persistence" block above);
+   * with no stored link there is nothing to resend.
+   */
+  async sendReminder(
+    envelopeId: string,
+    signerId?: string,
+  ): Promise<{ sent: Array<{ signerId: string; ok: boolean; messageId?: string; error?: string }> }> {
+    const { config } = this.deps;
+    if (config.reminders.durationsMs.length === 0) {
+      throw new EnvelopeError(
+        "reminders are not configured (ESIG_MCP_REMINDERS is unset) — no signing links were stored to resend.",
+      );
+    }
+    if (config.delivery.kind !== "email") {
+      throw new EnvelopeError('reminders require ESIG_MCP_DELIVERY="email".');
+    }
+
+    const envelope = await this.deps.envelopeStore.findById(config.tenant, envelopeId);
+    if (!envelope) throw new EnvelopeError(`envelope not found: ${envelopeId}`);
+
+    const targets = signerId ? envelope.signers.filter((s) => s.id === signerId) : envelope.signers;
+    if (signerId && targets.length === 0) {
+      throw new EnvelopeError(`signer not found on envelope ${envelopeId}: ${signerId}`);
+    }
+
+    this.rateLimiter.take("reminder");
+
+    const sent: Array<{ signerId: string; ok: boolean; messageId?: string; error?: string }> = [];
+    for (const signer of targets) {
+      if (signer.status !== "pending") {
+        sent.push({ signerId: signer.id, ok: false, error: `signer status is "${signer.status}", not pending` });
+        continue;
+      }
+      try {
+        const receipt = await this.sendOneReminder(envelope, signer.id, "manual");
+        sent.push({
+          signerId: signer.id,
+          ok: receipt.ok,
+          messageId: receipt.messageId,
+          error: receipt.ok ? undefined : receipt.detail,
+        });
+      } catch (e) {
+        sent.push({ signerId: signer.id, ok: false, error: messageOf(e) });
+      }
+    }
+    return { sent };
+  }
+
+  /**
+   * reminders.ts's `Scheduler` — send one automatically-due reminder for a
+   * specific signer, given the envelope object already in hand (from
+   * `stores.ts`'s `listEnvelopes`, which is how the scheduler finds due
+   * envelopes in the first place). Deliberately NOT rate-limited: the
+   * schedule + `ESIG_MCP_REMINDER_MAX` cap (`reminders.ts` `computeDue`) are
+   * the throttle for the automatic path — `sendReminder`'s hourly "reminder"
+   * bucket above is for the agent-facing MANUAL tool only, so an agent
+   * retrying `esig_send_reminder` in a loop can never starve the scheduled
+   * reminders a human is actually waiting on (and vice versa).
+   */
+  async sendScheduledReminder(envelope: Envelope, signerId: string): Promise<Receipt> {
+    return this.sendOneReminder(envelope, signerId, "scheduled");
+  }
+
+  /**
+   * `nextAt` for a signer given how many SCHEDULED reminders they have had
+   * (manual sends never affect this — R1 fix). Shared by the forward path
+   * and the R3 rollback path below so both compute it identically.
+   */
+  private reminderNextAt(createdAt: Date, scheduledCount: number): string | null {
+    const scheduleMs = this.deps.config.reminders.durationsMs;
+    const cap = Math.min(this.deps.config.reminders.max, scheduleMs.length);
+    return scheduledCount < cap ? new Date(createdAt.getTime() + scheduleMs[scheduledCount]).toISOString() : null;
+  }
+
+  /**
+   * Shared by `sendReminder()` (manual) and `sendScheduledReminder()`
+   * (automatic): decrypt the stored link, send it through the configured
+   * (email) delivery channel, persist this signer's reminder history, and
+   * audit the outcome. Never THROWS for a delivery failure — mirrors
+   * `seal()`'s own "this is recorded either way" shape: the receipt's
+   * `ok:false` is the signal, not an exception, so a batch `sendReminder()`
+   * call can report per-signer results instead of aborting on the first
+   * failed send.
+   *
+   * `kind` distinguishes a scheduler-driven send from an agent-driven
+   * `esig_send_reminder` call (R1 fix, verifier finding): before this fix
+   * both appended to the SAME `sentAt[]` that `reminders.ts`'s `computeDue`
+   * reads to decide the next scheduled index, so a manual nudge silently
+   * consumed a scheduled slot (schedule 24h/72h: a manual reminder sent
+   * between them could make the 72h one never fire). Now only a `"scheduled"`
+   * send appends to `sentAt[]`/advances `nextAt`; a `"manual"` send appends
+   * only to `manualSentAt[]`. Both arrays still count toward
+   * `ESIG_MCP_REMINDER_MAX` combined (the spam bound) — see the limit check
+   * below.
+   *
+   * F1 fix (verifier finding): both `sendReminder()`'s own per-signer loop
+   * and `reminders.ts`'s `Scheduler.tick()` can call this method several
+   * times in a row for the SAME envelope, handing it the exact same in-hand
+   * `Envelope` object each time (`envelopeIn` below) — but `emit()` below
+   * (via `appendEvent`) does its OWN independent fresh-read-CAS-write cycle
+   * against a SEPARATE envelope object on every call, silently bumping the
+   * store's revision out from under any other in-hand reference. Reusing
+   * `envelopeIn` across signers therefore made the SECOND signer's own
+   * `envelopeStore.update()` call fail with `EnvelopeConflictError` — AFTER
+   * this method had already sent that signer's email — reporting a bogus
+   * failure and leaving the schedule/audit state unwritten, so the next tick
+   * re-sent the same reminder. The fix: `envelopeIn` is used for nothing but
+   * its `.id` — every attempt re-reads fresh from the store
+   * (`updateWithRetry`) and persists the "this reminder was sent" state
+   * BEFORE actually sending, with retry, so a CAS conflict can only ever
+   * delay a send (retried against a fresh read) and never cause a duplicate
+   * one.
+   *
+   * R3 fix (verifier finding): persisting BEFORE sending means a transport
+   * failure would otherwise leave the slot permanently consumed (recorded
+   * `ok:false`, `nextAt` already advanced/nulled) with no code path left to
+   * retry it. On a failed `receipt`, the exact entry this attempt appended is
+   * rolled back (removed from `sentAt`/`manualSentAt`, `nextAt` recomputed as
+   * if this attempt never happened) so `computeDue` sees the signer as still
+   * due and the next tick (or the next manual call) retries. The audit row
+   * for a failure is `envelope.reminder_failed`, not `envelope.reminder_sent`
+   * — nothing was actually, durably sent.
+   */
+  private async sendOneReminder(envelopeIn: Envelope, signerId: string, kind: "scheduled" | "manual"): Promise<Receipt> {
+    const { config } = this.deps;
+
+    let link!: DeliveryLink;
+    let title = "";
+    let message: string | undefined;
+    let expiresAt: string | undefined;
+    let sentTimestamp = "";
+
+    const persisted = await this.updateWithRetry(envelopeIn.id, (envelope) => {
+      const signer = envelope.signers.find((s) => s.id === signerId);
+      if (!signer) throw new EnvelopeError(`signer not found on envelope ${envelope.id}: ${signerId}`);
+
+      const encryptedLink = mcpMeta(envelope)?.delivery?.links?.[signerId];
+      if (!encryptedLink) {
+        throw new EnvelopeError(
+          `no stored signing link for signer ${signerId} on envelope ${envelope.id} — reminders must be ` +
+            "configured (ESIG_MCP_REMINDERS) at the time this envelope was created.",
+        );
+      }
+      const url = decryptKeyPem(Buffer.from(encryptedLink, "base64"), config.passphrase);
+      link = { signerId, name: signer.name, email: signer.email, url };
+      title = envelope.title;
+      message = mcpMeta(envelope)?.message;
+      expiresAt = envelope.expiresAt?.toISOString();
+
+      const currentMcp = mcpMeta(envelope) ?? {};
+      const currentState = currentMcp.delivery?.reminders?.[signerId];
+      const scheduledSentAt = currentState?.sentAt ?? [];
+      const manualSentAt = currentState?.manualSentAt ?? [];
+
+      // R1: both kinds count toward the overall per-signer spam bound.
+      if (scheduledSentAt.length + manualSentAt.length >= config.reminders.max) {
+        throw new EnvelopeError(
+          `reminder limit reached for signer ${signerId} on envelope ${envelope.id} ` +
+            `(${config.reminders.max} sent, scheduled + manual combined) — no further reminders (scheduled or ` +
+            "manual) will be sent.",
+        );
+      }
+
+      sentTimestamp = this.now().toISOString();
+      const nextScheduledSentAt = kind === "scheduled" ? [...scheduledSentAt, sentTimestamp] : scheduledSentAt;
+      const nextManualSentAt = kind === "manual" ? [...manualSentAt, sentTimestamp] : manualSentAt;
+
+      envelope.metadata = {
+        ...envelope.metadata,
+        mcp: {
+          ...currentMcp,
+          delivery: {
+            ...currentMcp.delivery,
+            reminders: {
+              ...currentMcp.delivery?.reminders,
+              [signerId]: {
+                sentAt: nextScheduledSentAt,
+                manualSentAt: nextManualSentAt,
+                nextAt: this.reminderNextAt(envelope.createdAt, nextScheduledSentAt.length),
+              },
+            },
+          },
+        } satisfies McpEnvelopeMetadata,
+      };
+      return true;
+    });
+    // `mutate` above always returns `true` or throws — `updateWithRetry`
+    // only returns `undefined` when `mutate` chose to skip, which never
+    // happens here.
+    const envelope = persisted!;
+
+    const [receipt] = await this.deps.delivery.deliver({ id: envelope.id, title, message, expiresAt }, [link]);
+
+    if (!receipt.ok) {
+      // R3: roll back exactly the slot this attempt appended, so the next
+      // tick (or manual call) sees the signer as still due/eligible.
+      await this.updateWithRetry(envelope.id, (e) => {
+        const currentMcp = mcpMeta(e) ?? {};
+        const currentState = currentMcp.delivery?.reminders?.[signerId];
+        if (!currentState) return false; // nothing to roll back (shouldn't happen — defensive)
+        const rolledBackSentAt = kind === "scheduled" ? currentState.sentAt.filter((t) => t !== sentTimestamp) : currentState.sentAt;
+        const rolledBackManualSentAt =
+          kind === "manual" ? (currentState.manualSentAt ?? []).filter((t) => t !== sentTimestamp) : (currentState.manualSentAt ?? []);
+        e.metadata = {
+          ...e.metadata,
+          mcp: {
+            ...currentMcp,
+            delivery: {
+              ...currentMcp.delivery,
+              reminders: {
+                ...currentMcp.delivery?.reminders,
+                [signerId]: {
+                  sentAt: rolledBackSentAt,
+                  manualSentAt: rolledBackManualSentAt,
+                  nextAt: this.reminderNextAt(e.createdAt, rolledBackSentAt.length),
+                },
+              },
+            },
+          } satisfies McpEnvelopeMetadata,
+        };
+        return true;
+      });
+
+      await this.deps.auditStore.insert({
+        tenantId: config.tenant,
+        action: "envelope.reminder_failed",
+        targetTable: "envelope",
+        targetId: envelope.id,
+        metadata: { signerId, detail: receipt.detail },
+      });
+
+      return receipt;
+    }
+
+    await this.deps.auditStore.insert({
+      tenantId: config.tenant,
+      action: "envelope.reminder_sent",
+      targetTable: "envelope",
+      targetId: envelope.id,
+      metadata: { signerId, ok: receipt.ok, messageId: receipt.messageId, detail: receipt.ok ? undefined : receipt.detail },
+    });
+    // data deliberately omits `messageId` — while not a signing link, it is
+    // an email-provider-internal identifier with no reason to leave this
+    // process; `ok` is the only outcome a webhook receiver needs.
+    await this.emit(envelope.id, (e) => {
+      const s = e.signers.find((x) => x.id === signerId);
+      return {
+        type: "envelope.reminder_sent",
+        envelopeId: e.id,
+        phase: derivePhase(e),
+        signer: s ? { signerId: s.id, name: s.name, email: s.email, status: s.status } : undefined,
+        data: { ok: receipt.ok },
+      };
+    });
+
+    return receipt;
+  }
+
+  /**
+   * RedTeam RT-2026-08-27-05 G3: "also when reminders are not configured at
+   * startup, purge any stored links on first tick." A prior run may have
+   * persisted encrypted signing links (§15 "Link persistence") while
+   * `ESIG_MCP_REMINDERS` WAS set; if this run's config has since dropped the
+   * schedule, `create()` no longer writes new ones and `sendReminder()`/
+   * `sendScheduledReminder()` both refuse outright — so that ciphertext has
+   * no code path left to ever be read again. Called once, by
+   * `reminders.ts`'s `Scheduler`, on its first tick, only when
+   * `config.reminders.durationsMs` is empty. A single envelope's purge
+   * failure is logged to stderr and never aborts the rest of the sweep.
+   */
+  async purgeStaleReminderLinks(): Promise<void> {
+    const envelopes = await listEnvelopes(this.deps.config.dataDir, this.deps.config.tenant);
+    for (const envelope of envelopes) {
+      const links = mcpMeta(envelope)?.delivery?.links;
+      if (!links || Object.keys(links).length === 0) continue;
+      try {
+        await this.updateWithRetry(envelope.id, (e) => {
+          const currentLinks = mcpMeta(e)?.delivery?.links;
+          if (!currentLinks || Object.keys(currentLinks).length === 0) return false;
+          eraseStoredLinks(e);
+          return true;
+        });
+      } catch (err) {
+        process.stderr.write(
+          `[esig-mcp] WARNING: could not purge stale reminder links for envelope ${envelope.id}: ${messageOf(err)}\n`,
+        );
+      }
+    }
   }
 
   /**
@@ -948,6 +1660,12 @@ export class EnvelopeService {
         targetId: envelope.id,
         metadata: { error: errorMessage, attempts },
       });
+      // §16: distinct event TYPE from the pre-existing audit ACTION name
+      // above (also "envelope.seal_failed", coincidentally identical here) —
+      // never confuse this with "envelope.completed" (sign()'s own event,
+      // emitted separately when core's status first flips to "completed",
+      // well before any seal attempt runs).
+      await this.emit(envelope.id, (e) => ({ type: "envelope.seal_failed", envelopeId: e.id, phase: derivePhase(e), data: { attempts } }));
 
       await this.writeCompletionReceiptBestEffort(updated, "seal_failed", { error: errorMessage, attempts });
 
@@ -995,6 +1713,24 @@ export class EnvelopeService {
         attempts,
       },
     });
+    // §16: this ticket's "envelope.sealed" event type — NOT the same thing
+    // as the "envelope.completed" AUDIT action name reused above (a
+    // pre-existing naming quirk, D1(b)'s own comment); "envelope.completed"
+    // the EVENT already fired inside `sign()` when core's status first
+    // flipped to "completed", independent of whether sealing then succeeds.
+    // data deliberately omits the sealed PDF's storage URL/path — §16
+    // "Payloads never contain links, tokens, proofs, or document bytes";
+    // some `PdfStorageStore` implementations return a pre-signed/readable
+    // URL there, which is exactly the class of capability this rule exists
+    // to keep out of a third-party webhook payload. `esig_envelope_status`/
+    // `esig_list_events`'s own `delivery`/`sealedPdfUrl` fields (MCP-only,
+    // never webhook-delivered) are the place to read it from.
+    await this.emit(envelope.id, (e) => ({
+      type: "envelope.sealed",
+      envelopeId: e.id,
+      phase: derivePhase(e),
+      data: { pqSealed: artifact.pqSealed },
+    }));
 
     await this.writeCompletionReceiptBestEffort(updated, "sealed", { sealedPdfUrl: artifact.uploadedUrl, attempts });
 
@@ -1066,6 +1802,7 @@ function summarize(envelope: Envelope): EnvelopeStatusSummary {
       status: s.status,
       order: s.order,
       signedAt: s.signedAt?.toISOString(),
+      viewedAt: meta?.viewed?.[s.id],
       identity: getSignerIdentityState(envelope, s.id)?.verified,
     })),
     createdAt: envelope.createdAt.toISOString(),
@@ -1074,6 +1811,9 @@ function summarize(envelope: Envelope): EnvelopeStatusSummary {
     sealedPdfUrl: meta?.sealedPdfUrl,
     seal: meta?.seal,
     document: meta?.document,
+    message: meta?.message,
+    // §16: last 10, oldest first — `esig_list_events` returns the full log.
+    events: listEvents(envelope).slice(-10),
   };
 }
 

@@ -5,7 +5,18 @@
 // (docs/architecture/esig-mcp.md §5, §7). `bin.ts` is the real stdio +
 // HTTP entrypoint (package.json's `esig-mcp` bin).
 
-export { loadConfig, ConfigError, type Config, type EsigMcpMode, type DeliveryConfig } from "./config.js";
+export {
+  loadConfig,
+  ConfigError,
+  type Config,
+  type EsigMcpMode,
+  type DeliveryConfig,
+  type SmtpDeliveryConfig,
+  type SesDeliveryConfig,
+  type RemindersConfig,
+  type EventsConfig,
+  type EventsWebhookConfig,
+} from "./config.js";
 
 export { sanitizeEnvelopeHtml, type SanitizeResult } from "./sanitize.js";
 
@@ -35,12 +46,51 @@ export {
   type Receipt,
 } from "./delivery.js";
 
+// §15: email delivery + reminders (v0.4).
+export {
+  SmtpTransport,
+  SesTransport,
+  CapturingTransport,
+  type EmailTransport,
+  type EmailMessage,
+  type SendResult,
+  type SmtpTransportOptions,
+  type SesTransportOptions,
+} from "./email/transport.js";
+export { renderSigningEmail, stripControlChars, type EmailTemplateInput, type RenderedEmail } from "./email/templates.js";
+export { EmailDelivery, type EmailDeliveryOptions } from "./email/delivery.js";
+export { computeDue, Scheduler, type ReminderDueEntry, type SchedulerDeps } from "./reminders.js";
+
+// §16: lifecycle events + webhooks (v0.4).
+export { MAX_EVENTS, appendEvent, listEvents, type AppendEventInput } from "./events/log.js";
+export type { EsigEvent, EsigEventInput, EsigEventSigner, EsigEventType } from "./events/types.js";
+export { tick as expiryTick, type ExpiryTickDeps } from "./events/expiry.js";
+export {
+  assertSafeWebhookTarget,
+  sendWebhook,
+  signPayload,
+  WebhookSsrfError,
+  WebhookDeliveryError,
+  type WebhookConfig,
+  type WebhookTargetPolicy,
+  type LookupFn,
+  type PinnedRequestFn,
+  type SendWebhookOptions,
+} from "./events/webhook.js";
+export {
+  EventQueue,
+  DEFAULT_BACKOFF_SEC,
+  type EventQueueDeps,
+  type EventDeliveryStatus,
+} from "./events/queue.js";
+
 export {
   EnvelopeService,
   EnvelopeError,
   SEAL_RENDER_LAUNCH_ARGS,
   derivePhase,
   getEnvelopeDocument,
+  getSignerReminderState,
   type EnvelopeServiceDeps,
   type SignerInput,
   type CreateEnvelopeArgs,
@@ -50,6 +100,7 @@ export {
   type EnvelopePhase,
   type EnvelopeSealState,
   type EnvelopeDocumentMeta,
+  type SignerReminderState,
 } from "./envelopes.js";
 
 export { verifyDocumentBytes, type VerifyOptions, type VerifyDocumentBytesResult } from "./verify.js";

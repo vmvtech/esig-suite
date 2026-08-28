@@ -195,4 +195,12 @@ describe("loadConfig — fail-closed (I2)", () => {
     expect(() => loadConfig({ ...BASE, ESIG_MCP_MAX_HTML_BYTES: "not-a-number" })).toThrow(ConfigError);
     expect(() => loadConfig({ ...BASE, ESIG_MCP_ENVELOPES_PER_HOUR: "0" })).toThrow(ConfigError);
   });
+
+  // G6 (RedTeam RT-2026-08-27-05): ESIG_MCP_MAX_SIGNERS.
+  it("ESIG_MCP_MAX_SIGNERS defaults to 25, and honors an explicit override", () => {
+    expect(loadConfig(BASE).maxSigners).toBe(25);
+    expect(loadConfig({ ...BASE, ESIG_MCP_MAX_SIGNERS: "5" }).maxSigners).toBe(5);
+    expect(() => loadConfig({ ...BASE, ESIG_MCP_MAX_SIGNERS: "0" })).toThrow(ConfigError);
+    expect(() => loadConfig({ ...BASE, ESIG_MCP_MAX_SIGNERS: "not-a-number" })).toThrow(ConfigError);
+  });
 });

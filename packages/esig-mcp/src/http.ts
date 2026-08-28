@@ -19,6 +19,7 @@ import { EnvelopeError as CoreEnvelopeError, type TokenResolution } from "@e-sig
 
 import type { Config } from "./config.js";
 import { derivePhase, getEnvelopeDocument, type EnvelopeService } from "./envelopes.js";
+import { stripControlChars } from "./email/templates.js";
 import type { IdentityChallengePayload } from "./identity/challenge.js";
 import { getEnvelopeIdentityPolicy, IdentityError, type IdentityLevel, type IdentityProofInput } from "./identity/types.js";
 import { EnvelopeConflictError } from "./stores.js";
@@ -218,6 +219,16 @@ function signFormHtml(nonce: string, identityRequired: boolean): string {
   <button type="button" id="submit">Sign</button>
 </div>
 <div id="msg" role="status"></div>
+<details class="decline">
+  <summary>Decline to sign</summary>
+  <div class="row">
+    <label for="declineReason">Reason (optional)</label>
+    <textarea id="declineReason" rows="2" maxlength="500" placeholder="Why are you declining?"></textarea>
+  </div>
+  <div class="row">
+    <button type="button" id="decline">Decline</button>
+  </div>
+</details>
 <script nonce="${nonce}">
 (function () {
   var canvas = document.getElementById('pad');
@@ -282,6 +293,27 @@ function signFormHtml(nonce: string, identityRequired: boolean): string {
       })
       .catch(function () { msg.textContent = 'Network error — please try again.'; });
   });
+
+  document.getElementById('decline').addEventListener('click', function () {
+    var msg = document.getElementById('msg');
+    var reasonField = document.getElementById('declineReason');
+    var reason = reasonField ? reasonField.value : '';
+    msg.textContent = 'Declining…';
+    fetch(window.location.pathname + '/decline', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(reason ? { reason: reason } : {}),
+    })
+      .then(function (r) { return r.json().then(function (body) { return { ok: r.ok, body: body }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          msg.textContent = 'Declined.';
+        } else {
+          msg.textContent = (res.body && res.body.error) || 'Decline failed.';
+        }
+      })
+      .catch(function () { msg.textContent = 'Network error — please try again.'; });
+  });
 })();
 </script>`;
 }
@@ -305,10 +337,10 @@ function page(opts: { title: string; sentence: string; gateClass: "ok" | "blocke
   .row { margin: .75rem 0; }
   button { padding: .5rem 1rem; font-size: 1rem; }
   #msg { margin-top: 1rem; font-weight: 600; }
-  details.identity { margin: 1rem 0; border: 1px solid #ccc; border-radius: 6px; padding: .5rem 1rem; }
-  details.identity summary { cursor: pointer; font-weight: 600; }
-  details.identity textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: .8rem; margin: .5rem 0; }
-  details.identity label { display: block; font-weight: 600; margin-top: .5rem; }
+  details.identity, details.decline { margin: 1rem 0; border: 1px solid #ccc; border-radius: 6px; padding: .5rem 1rem; }
+  details.identity summary, details.decline summary { cursor: pointer; font-weight: 600; }
+  details.identity textarea, details.decline textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: .8rem; margin: .5rem 0; }
+  details.identity label, details.decline label { display: block; font-weight: 600; margin-top: .5rem; }
 </style>
 </head>
 <body>
@@ -357,12 +389,20 @@ function renderApprovalPage(
   }
 
   const { envelope } = resolution;
+  // §16 "Decline": core's `declineEnvelope` voids the WHOLE envelope, so a
+  // declined envelope resolves here exactly like any other sender-voided one
+  // (`status: "voided"`) — the declining signer is the only distinguishing
+  // signal available. Checked first: it overrides both the generic "voided"
+  // sentence below and (for the declining signer specifically) the
+  // seal-pending one, since a decline can never coexist with a completion.
+  const declinedSigner = resolution.status === "voided" ? envelope.signers.find((s) => s.status === "declined") : undefined;
   // D1: a `completed` envelope whose seal step hasn't produced a sealed PDF
   // yet (phase `seal_failed` or `awaiting_seal`) shows the seal-pending
   // sentence instead of "every signer has signed" — the signature really is
   // recorded either way; only the sealed artifact is pending.
-  const sentence =
-    resolution.status === "completed" && derivePhase(envelope) !== "sealed"
+  const sentence = declinedSigner
+    ? `This envelope was declined by ${declinedSigner.name}${declinedSigner.declineReason ? `: ${declinedSigner.declineReason}` : "."}`
+    : resolution.status === "completed" && derivePhase(envelope) !== "sealed"
       ? SEAL_PENDING_SENTENCE
       : GATE_SENTENCES[resolution.status];
   // §13: a PDF envelope shows the EXACT ingested bytes via a plain,
@@ -534,6 +574,53 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
         return;
       }
 
+      // §15/§16 "Decline": POST /sign/<token>/decline {reason?} — human-side
+      // only (never an MCP tool, same reasoning as signing itself). Checked
+      // before the plain /sign/<token> route below, same reason as
+      // /challenge and /document.pdf above.
+      const declineMatch = /^\/sign\/([^/]+)\/decline$/.exec(route);
+      if (declineMatch) {
+        if (req.method !== "POST") {
+          sendJson(res, 405, { error: "method not allowed" }, csp);
+          return;
+        }
+        const declineToken = decodeURIComponent(declineMatch[1]);
+        const ip = req.socket.remoteAddress ?? "unknown";
+        if (!limiter.allow(ip)) {
+          sendJson(res, 429, { error: "too many requests to /sign — please wait a moment and try again" }, csp);
+          return;
+        }
+        const ctype = String(req.headers["content-type"] ?? "");
+        if (!ctype.toLowerCase().startsWith("application/json")) {
+          sendJson(res, 415, { error: "content-type must be application/json" }, csp);
+          return;
+        }
+        let parsed: { reason?: unknown };
+        try {
+          const raw = await readBody(req, MAX_SIGN_BODY_BYTES);
+          parsed = raw.length > 0 ? JSON.parse(raw.toString("utf8")) : {};
+        } catch (e) {
+          sendJson(res, 400, { error: `invalid request body: ${messageOf(e)}` }, csp);
+          return;
+        }
+        let reason: string | undefined;
+        if (parsed.reason !== undefined) {
+          if (typeof parsed.reason !== "string" || parsed.reason.length > 500) {
+            sendJson(res, 400, { error: "reason must be a string of at most 500 characters" }, csp);
+            return;
+          }
+          // Defense in depth (SMTP/log-injection class), same rule create-envelope's `message` applies at rest.
+          reason = stripControlChars(parsed.reason) || undefined;
+        }
+        try {
+          const summary = await deps.envelopes.decline(declineToken, reason);
+          sendJson(res, 200, { status: summary.status, envelopeId: summary.envelopeId, declined: true }, csp);
+        } catch (e) {
+          sendJson(res, statusForSignError(e), { error: messageOf(e) }, csp);
+        }
+        return;
+      }
+
       const signMatch = /^\/sign\/([^/]+)$/.exec(route);
       if (!signMatch) {
         sendJson(res, 404, { error: "not found" }, csp);
@@ -559,6 +646,11 @@ export function createApprovalRequestHandler(deps: HttpDeps): http.RequestListen
         let requiredLevel: IdentityLevel = "none";
         let challenge: IdentityChallengePayload | undefined;
         if (resolution.status === "ok") {
+          // §16: once per signer (EnvelopeService.recordViewed is idempotent
+          // and never throws) — awaited so the event is durably recorded
+          // before this response is sent, but a failure here never blocks
+          // the page from rendering.
+          await deps.envelopes.recordViewed(resolution.envelope.id, resolution.signer.id);
           requiredLevel = getEnvelopeIdentityPolicy(resolution.envelope)?.minLevel ?? "none";
           if (requiredLevel !== "none") {
             try {

@@ -27,6 +27,8 @@ import { registerCreateEnvelopeTool } from "./tools/create-envelope.js";
 import { registerVoidEnvelopeTool } from "./tools/void-envelope.js";
 import { registerResealEnvelopeTool } from "./tools/reseal-envelope.js";
 import { registerIdentityChallengeTool } from "./tools/identity-challenge.js";
+import { registerSendReminderTool } from "./tools/send-reminder.js";
+import { registerListEventsTool } from "./tools/list-events.js";
 
 export type { McpServerDeps } from "./tools/types.js";
 
@@ -44,7 +46,9 @@ export const V0_1_TOOL_NAMES = [
   "esig_identity_challenge",
   "esig_ingest_document",
   "esig_list_envelopes",
+  "esig_list_events",
   "esig_reseal",
+  "esig_send_reminder",
   "esig_verify_document",
   "esig_void_envelope",
   "esig_whoami",
@@ -68,6 +72,8 @@ export function createMcpServer(deps: McpServerDeps): McpServer {
   registerVoidEnvelopeTool(server, deps);
   registerResealEnvelopeTool(server, deps);
   registerIdentityChallengeTool(server, deps);
+  registerSendReminderTool(server, deps);
+  registerListEventsTool(server, deps);
 
   return server;
 }

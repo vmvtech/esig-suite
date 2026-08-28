@@ -144,6 +144,8 @@ await client.callTool({
 | `esig_void_envelope` | prepare (audited) | Cancel a pending or partially-signed envelope. |
 | `esig_reseal` | prepare (audited) | Retry producing the sealed PDF for a completed envelope whose seal step failed or never ran (phase `seal_failed` / `awaiting_seal`). Refused if the envelope isn't completed yet, or is already sealed. |
 | `esig_identity_challenge` | prepare (audited) | Issue (or re-issue) the sole-control challenge a signer's wallet/agent signs to satisfy an envelope's identity requirement — see "Signer identity" below. |
+| `esig_send_reminder` | prepare (audited) | Resend a signing reminder to a pending signer (or every pending signer) — see "Email delivery and reminders" below. |
+| `esig_list_events` | read | List an envelope's lifecycle events, oldest first (`since` filters to events after a given timestamp) — see "Lifecycle events and webhooks" below. |
 
 Every tool's own `description` (visible to any connected agent) documents its exact input/output contract in more detail than this table.
 
@@ -268,6 +270,125 @@ function proveIdentity(challenge) {
 
 **L2 registry trust (G8, corrected — pinned-key, not TOFU, for the attestation itself).** `ESIG_MCP_UUAID_REGISTRY_URL` must be `https://` (no exception — unlike the webhook delivery channel, this URL is queried by the server itself on every L2 check, not a one-time operator-chosen receiver). The registry's badge is verified against `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY` — the registry's pinned Ed25519 public key (64 hex chars, from its `/.well-known/uuaid-registry.json`) — via hash binding, an Ed25519 signature, and freshness, so trust in the badge itself rests on that pin, not on TLS alone. What's still trust-on-first-use (TOFU) is *which* registry an envelope trusts at all, beyond the per-envelope URL pin at creation (G3, above: a later reconfiguration to a different registry URL is refused, but the FIRST registry an envelope's identity policy commits to is trusted as given). Every badge response is snapshotted verbatim into a content-addressed blob (`blobs/identity/<sha256>.json`) with the verification record's `registry.registrySnapshotDigest` referencing it, so the URL's TOFU decision is at least auditable after the fact even though it isn't pinned in advance.
 
+## Email delivery and reminders
+
+Set `ESIG_MCP_DELIVERY=email` to dispatch each signer's tokenized link as an email instead of the `file` outbox, `console`, or `webhook` channels above.
+
+```bash
+ESIG_MCP_DELIVERY=email
+ESIG_MCP_EMAIL_TRANSPORT=smtp   # or "ses"
+ESIG_MCP_EMAIL_FROM="Acme <noreply@acme.com>"
+
+# smtp:
+ESIG_MCP_SMTP_HOST=smtp.example.com
+ESIG_MCP_SMTP_PORT=587          # 465 implies implicit TLS even without ESIG_MCP_SMTP_SECURE=1
+ESIG_MCP_SMTP_USER=...
+ESIG_MCP_SMTP_PASS=...
+
+# ses (needs the optional peer dependency @aws-sdk/client-sesv2 installed):
+ESIG_MCP_SES_REGION=us-east-1
+```
+
+| Variable | Default | Notes |
+|---|---|---|
+| `ESIG_MCP_EMAIL_TRANSPORT` | — | Required: `smtp` or `ses`. |
+| `ESIG_MCP_EMAIL_FROM` | — | Required. `"Name <addr>"` or a bare address — also the envelope's SMTP sender. |
+| `ESIG_MCP_EMAIL_REPLY_TO` | — | Optional `Reply-To`. |
+| `ESIG_MCP_EMAIL_SUBJECT_PREFIX` | — | Optional: subjects become `"[prefix] Please sign: <title>"`. |
+| `ESIG_MCP_SMTP_HOST` / `ESIG_MCP_SMTP_PORT` | — / `587` | `smtp` transport only. |
+| `ESIG_MCP_SMTP_USER` / `ESIG_MCP_SMTP_PASS` | — | Both set or both unset. Never logged, never in a tool result or audit row. |
+| `ESIG_MCP_SMTP_SECURE` | off | `1` for implicit TLS from connect (also implied automatically by port `465`). |
+| `ESIG_MCP_SMTP_ALLOW_PLAINTEXT` | off | `1` to skip STARTTLS entirely. STARTTLS is required by default — TLS certificate verification is always on. |
+| `ESIG_MCP_SMTP_ALLOW_UNVERIFIED_TLS` | off | `1` to skip SMTP server certificate verification against the system CA (`rejectUnauthorized:false`). Leave unset — verification is on by default; a startup WARNING is printed whenever this is set. |
+| `ESIG_MCP_SES_REGION` | — | `ses` transport only. |
+
+**Transports.** `smtp` is dependency-free (`node:net`/`node:tls` only — EHLO, STARTTLS, AUTH PLAIN with AUTH LOGIN fallback, `MAIL FROM`/`RCPT TO`/`DATA` with CRLF normalization and RFC 5321 dot-stuffing). `ses` calls SESv2 `SendEmail` through `@aws-sdk/client-sesv2`, loaded with a dynamic `import()` — it is an **optional peer dependency this package never installs**; without it, `ESIG_MCP_EMAIL_TRANSPORT=ses` fails at first send with a clear `npm install @aws-sdk/client-sesv2` error, not a silent no-op.
+
+**What the email contains.** Plain text + minimal HTML: the envelope title, the configured from-address (shown in the body, separately from the SMTP `From:` header itself), an optional sender note (`esig_create_envelope`'s `message`, ≤ 500 chars), the signing link, and the expiry if one was set. It never contains the document body or any other signer's details — those never reach `templates.ts` in the first place. Title/note are stripped of control characters (SMTP header injection) and HTML-escaped; subjects are `"[prefix] Please sign: <title>"`.
+
+**Reminders (`ESIG_MCP_REMINDERS`).** Requires `ESIG_MCP_DELIVERY=email` — refused at startup otherwise, since there is no other channel to resend the original link through.
+
+```bash
+ESIG_MCP_REMINDERS=24h,72h   # durations after the envelope was created; default off (none)
+ESIG_MCP_REMINDER_MAX=3      # hard cap per signer, independent of how many durations are configured
+```
+
+An in-process 60-second tick sends a reminder to each still-`pending` signer whose next scheduled reminder is due, skipping voided/expired/completed envelopes entirely; the send history is persisted per signer so a restart resumes rather than re-sends. `esig_send_reminder(envelopeId, signerId?)` sends one on demand (a specific signer, or every pending signer when `signerId` is omitted) — audited (`envelope.reminder_sent`) and rate-limited under its own `"reminder"` bucket, separate from the scheduler's own send (which is throttled by the schedule + `ESIG_MCP_REMINDER_MAX` instead, so an agent retrying the manual tool can never starve — or be starved by — the automatic reminders a human is waiting on).
+
+**Link persistence — the one custody change.** Core mints each signing token once and never re-mints it, so a reminder needs the *original* link. When reminders are configured, every signer's link is stored **encrypted at rest** (AES-256-GCM, the same `encryptKeyPem`/`decryptKeyPem` helpers `@e-sig/core` already uses for the cert/PQ key bundles, under `ESIG_MCP_PASSPHRASE`) in `envelopes.json`, decrypted **only** inside the reminder-sending path, and never returned by any tool (I8 unchanged — `esig_create_envelope`'s result and `esig_envelope_status` are exactly as link-free as before). This is off entirely — no ciphertext written at all — unless `ESIG_MCP_REMINDERS` is set; a `file`/`console`/`webhook`-delivered envelope with no reminders configured behaves exactly as before.
+
+**Erased once it can never be used again.** A stored link is deleted the moment the state it exists to resend has passed: per-signer the moment that signer signs, and for the whole envelope on decline/void/expiry/completion — the ciphertext never outlives its purpose. If a prior run had reminders configured and this run doesn't, any links that run left behind are purged once, on the scheduler's first tick.
+
+## Lifecycle events and webhooks
+
+Every state change on an envelope appends an event to its log (`metadata.mcp.events[]`, capped at 200 — oldest trimmed off, their ids recorded in an `events.trimmed` audit row). `esig_envelope_status` returns the last 10; `esig_list_events(envelopeId, since?)` returns them all, oldest first, each carrying its webhook delivery status when a webhook is configured.
+
+| Event | Fires when |
+|---|---|
+| `envelope.created` | `esig_create_envelope` succeeds. |
+| `envelope.viewed` | `GET /sign/<token>` first resolves `"ok"` for a given signer (once per signer). |
+| `envelope.signed` | A signer's signature is recorded. |
+| `envelope.declined` | A signer declines (see "Decline" below). |
+| `envelope.completed` | Every signer has signed (core's own status transition — independent of whether sealing then succeeds). |
+| `envelope.sealed` / `envelope.seal_failed` | The seal step (automatic, or `esig_reseal`) succeeds or fails. |
+| `envelope.voided` | `esig_void_envelope`. |
+| `envelope.expired` | Emitted once, by a lazy 60-second tick — core itself expires an envelope lazily on token resolution, but never touches the event log; the tick catches every envelope nobody happened to poll. |
+| `envelope.reminder_sent` | A reminder (automatic or `esig_send_reminder`) is sent. |
+| `signer.identity_verified` / `signer.identity_rejected` | A signer identity check (§ "Signer identity" above) passes or fails. |
+
+Every event is `{id, type, createdAt, envelopeId, phase, signer?: {signerId, name, email, status}, data}`. `data` — and every other field — **never contains a signing link, token, proof, or document byte**; that rule applies identically to the webhook payload below.
+
+**Decline.** The approval page gains a "Decline to sign" control (reason optional, ≤ 500 characters, control characters stripped) — `POST /sign/<token>/decline {reason?}` calls core's `declineEnvelope`, which marks the signer `declined` and voids the whole envelope in one step, exactly like a sender-side void except attributable to a specific signer. Deliberately **not** an MCP tool — same reasoning as signing itself (human-side only).
+
+**Webhook delivery.** Set `ESIG_MCP_EVENTS_WEBHOOK_URL` + `ESIG_MCP_EVENTS_WEBHOOK_SECRET` (both required together, secret ≥ 32 characters; operator config only — no tool can ever set or change it) to POST every event as JSON to your receiver:
+
+```bash
+ESIG_MCP_EVENTS_WEBHOOK_URL=https://your-app.example.com/esig-events
+ESIG_MCP_EVENTS_WEBHOOK_SECRET="a random secret, at least 32 characters"
+```
+
+```json
+{
+  "id": "5c8e2b3e-...",
+  "type": "envelope.signed",
+  "createdAt": "2026-08-28T12:00:00.000Z",
+  "envelopeId": "e1a9...",
+  "phase": "partially_signed",
+  "signer": { "signerId": "s1...", "name": "Alice", "email": "alice@example.com", "status": "signed" },
+  "data": {}
+}
+```
+
+Every request carries `Content-Type: application/json`, `User-Agent: esig-mcp/<version>`, `X-Esig-Event-Id`, `X-Esig-Timestamp` (ISO-8601), and `X-Esig-Signature: sha256=<hex>` — an HMAC-SHA256 over `timestamp + "." + body`, keyed by `ESIG_MCP_EVENTS_WEBHOOK_SECRET`. Verify it (Node, `node:crypto`), reject anything older than 5 minutes, and **dedupe by `X-Esig-Event-Id`** within that same replay window — at-least-once delivery (below) means a retried event can legitimately arrive twice with an identical id and signature:
+
+```js
+import crypto from "node:crypto";
+
+// Swap for a real store (Redis, a DB row with a TTL, ...) in production —
+// this Map is a same-process example only.
+const seenEventIds = new Map(); // eventId -> firstSeenAtMs
+const REPLAY_WINDOW_MS = 5 * 60_000;
+
+function verifyEsigWebhook(req, rawBody, secret) {
+  const timestamp = req.headers["x-esig-timestamp"];
+  const signature = req.headers["x-esig-signature"];
+  const eventId = req.headers["x-esig-event-id"];
+  const expected = "sha256=" + crypto.createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
+  const ok = signature.length === expected.length && crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  if (!ok) throw new Error("bad signature");
+  if (Math.abs(Date.now() - Date.parse(timestamp)) > REPLAY_WINDOW_MS) throw new Error("stale timestamp");
+
+  for (const [id, seenAt] of seenEventIds) if (Date.now() - seenAt > REPLAY_WINDOW_MS) seenEventIds.delete(id);
+  if (seenEventIds.has(eventId)) return { duplicate: true }; // already processed — ack, don't re-apply side effects
+  seenEventIds.set(eventId, Date.now());
+  return { duplicate: false };
+}
+```
+
+**At-least-once, with backoff.** Every event is persisted to `<ESIG_MCP_DATA_DIR>/events/queue/<eventId>.json` **before** any delivery attempt — enqueuing never blocks or delays the signer-facing HTTP handlers; a separate loop delivers in order, per envelope. A non-2xx response, a timeout (10s), or **any 3xx redirect** (redirects are never followed — `redirect: "error"`) counts as a failure and is retried with exponential backoff (1m → 2m → 4m → 8m → 16m → 32m, up to 6 attempts), after which the event is parked `dead` (audited `webhook.dead_lettered`, visible via `esig_list_events`) — delivery is restart-safe (the queue directory is re-scanned from scratch on every pass, so nothing is lost across a restart).
+
+**SSRF / private-range policy (T18).** `ESIG_MCP_EVENTS_WEBHOOK_URL` must be `https://` unless `ESIG_MCP_ALLOW_INSECURE_EVENTS_WEBHOOK=1` — its **own** flag, deliberately separate from `ESIG_MCP_ALLOW_INSECURE_WEBHOOK` (the `webhook` *delivery* channel's own flag, above): relaxing one can never silently relax the other. Both `ESIG_MCP_EVENTS_WEBHOOK_URL` and `ESIG_MCP_DELIVERY_WEBHOOK_URL` are refused **at startup** (not only at send time) if they resolve to a private/local address, unless `ESIG_MCP_ALLOW_PRIVATE_WEBHOOK=1`. Before **every** send, the target host is resolved fresh (`dns.promises.lookup`, all addresses) and refused if any address is loopback, link-local (`169.254.0.0/16` — this covers the cloud-metadata address too — and `fe80::/10`), RFC1918 (`10/8`, `172.16/12`, `192.168/16`), unique-local (`fc00::/7`), unspecified (`0.0.0.0`, `::`), or an IPv4-mapped IPv6 literal wrapping any of the above — unless `ESIG_MCP_ALLOW_PRIVATE_WEBHOOK=1` (e.g. for a trusted local receiver in dev). A literal IP in the URL goes through the identical check; there is no separate code path to bypass it. The request then **connects to that exact vetted address**, never letting the HTTP stack re-resolve the hostname itself (a DNS answer that changes between the vetting lookup and the actual connection — DNS rebinding — would otherwise bypass the check entirely); the `Host` header and TLS SNI stay on the original hostname, so certificate validation is unaffected.
+
 ## Data directory layout
 
 Everything this server persists lives under `ESIG_MCP_DATA_DIR` (default `./.esig-mcp`), created at startup along with three subdirectories:
@@ -275,13 +396,14 @@ Everything this server persists lives under `ESIG_MCP_DATA_DIR` (default `./.esi
 | Path | What lives there |
 |---|---|
 | `certs.json` | The tenant's signing cert(s), private key AES-256-GCM-encrypted at rest under `ESIG_MCP_PASSPHRASE`. |
-| `envelopes.json` | Every envelope, its signers, and their signature images. |
+| `envelopes.json` | Every envelope, its signers, their signature images, and its lifecycle event log (`metadata.mcp.events[]`, capped at 200 — see "Lifecycle events and webhooks" above). When reminders are configured, also each pending signer's signing link, AES-256-GCM-encrypted under `ESIG_MCP_PASSPHRASE` (see "Email delivery and reminders" above) — never in plaintext. |
 | `audit-log.ndjson` | Append-only audit trail — one JSON row per line. |
 | `pq-keys.json` | The tenant's post-quantum key bundle, encrypted at rest (present when `ESIG_MCP_PQ` is on). |
 | `inbox/` (`ESIG_MCP_DOCS_ROOT`) | Where a caller-supplied `path` input to `esig_verify_document` / `esig_ingest_document` is confined — never an absolute path outside it, a `..` segment, or a symlink escaping it. |
 | `outbox/` | `<envelopeId>.json` — the CREATION receipt (signing links), written only when `ESIG_MCP_DELIVERY=file`. `<envelopeId>.completed.json` — a COMPLETION receipt (R2), written on every terminal seal outcome (`sealed`/`seal_failed`) **regardless of delivery channel**, containing each signer's identity record if any. Both mode `0600`, in a `0700` directory. |
 | `blobs/` | Sealed PDFs (`<tenant>/<envelopeId>/sealed.pdf`, stored by `esig_reseal`/the automatic seal step), and — under `identity/` — content-addressed signer-identity artifacts (proof JSON, presented credential JSON, registry signed-badge snapshots), named `<sha256-digest>.json`, the same digest recorded in `signers[].identity`. |
 | `documents/` | Content-addressed workdir for `esig_ingest_document` (docId = sha256 of the bytes) — separate from `inbox/`: this is where *this server* stores bytes it accepted, not where a caller's `path` input is confined. |
+| `events/queue/` | One `<eventId>.json` per not-yet-delivered lifecycle event, written **before** any webhook delivery attempt — present only when `ESIG_MCP_EVENTS_WEBHOOK_URL` is configured. `events/delivered/` holds successfully-delivered receipts for 24h (pruned after). |
 
 `inbox/`, `outbox/`, and `blobs/` are all created empty at startup, before any tool is ever called — the "ready" line on stderr prints their absolute paths.
 
@@ -302,7 +424,7 @@ Link custody, end to end: a raw signing token exists in exactly one place outsid
 | Variable | Default | Notes |
 |---|---|---|
 | `ESIG_MCP_PASSPHRASE` | *(required)* | Encrypts the tenant's signing cert + PQ key bundle at rest. Must be at least 24 characters — matching `@e-sig/core`'s own encryption floor exactly, so a passphrase that passes this check never later throws at first seal. |
-| `ESIG_MCP_DELIVERY` | *(required)* | `file` (writes `<ESIG_MCP_DATA_DIR>/outbox/<envelopeId>.json`, mode `0600` — the quickstart channel), `console` (prints links to stderr — opt-in only, loud startup warning; see "Security model" above), or `webhook`. No default: an operator must pick where signing links go. |
+| `ESIG_MCP_DELIVERY` | *(required)* | `file` (writes `<ESIG_MCP_DATA_DIR>/outbox/<envelopeId>.json`, mode `0600` — the quickstart channel), `console` (prints links to stderr — opt-in only, loud startup warning; see "Security model" above), `webhook`, or `email` (see "Email delivery and reminders" above). No default: an operator must pick where signing links go. |
 | `ESIG_MCP_MODES` | `H` | Comma-separated. Only `H` is implemented in v0.1 — anything containing `A` or `C` refuses to start. |
 | `ESIG_MCP_DATA_DIR` | `./.esig-mcp` | Root for the filesystem-backed stores — see "Data directory layout" above. Created at startup. |
 | `ESIG_MCP_DOCS_ROOT` | `<ESIG_MCP_DATA_DIR>/inbox` | Confines the `path` input on `esig_verify_document` / `esig_ingest_document` — a connected agent is untrusted by default, so a caller-supplied filesystem path may only resolve inside this directory (never an absolute path outside it, a `..` segment, or a symlink escaping it). Created at startup. |
@@ -312,16 +434,33 @@ Link custody, end to end: a raw signing token exists in exactly one place outsid
 | `ESIG_MCP_HTTP_PORT` | `7433` | Approval-page bind port. |
 | `ESIG_MCP_BASE_URL` | derived from host:port | Base URL signing links are built from. Set this to a real, reachable URL for anything beyond `localhost`. |
 | `ESIG_MCP_RETURN_LINKS` | off | Set to exactly `1` to include raw signing links in `esig_create_envelope`'s result. Local demos only — see T1 above. |
-| `ESIG_MCP_DELIVERY_WEBHOOK_URL` | — | Required when `ESIG_MCP_DELIVERY=webhook`. Must be `https://` unless `ESIG_MCP_ALLOW_INSECURE_WEBHOOK=1`. |
-| `ESIG_MCP_ALLOW_INSECURE_WEBHOOK` | off | Set to exactly `1` to allow a plain `http://` `ESIG_MCP_DELIVERY_WEBHOOK_URL` (e.g. a trusted loopback receiver). Leave unset for anything reachable over a real network — the signing link is the signing capability. |
+| `ESIG_MCP_DELIVERY_WEBHOOK_URL` | — | Required when `ESIG_MCP_DELIVERY=webhook`. Must be `https://` unless `ESIG_MCP_ALLOW_INSECURE_WEBHOOK=1`. Refused **at startup** (not only at send time) if it resolves to a private/local address, unless `ESIG_MCP_ALLOW_PRIVATE_WEBHOOK=1`. |
+| `ESIG_MCP_ALLOW_INSECURE_WEBHOOK` | off | Set to exactly `1` to allow a plain `http://` `ESIG_MCP_DELIVERY_WEBHOOK_URL` (e.g. a trusted loopback receiver). Leave unset for anything reachable over a real network — the signing link is the signing capability. The `ESIG_MCP_DELIVERY=webhook` channel's own flag — see `ESIG_MCP_ALLOW_INSECURE_EVENTS_WEBHOOK` below for the events webhook. |
 | `ESIG_MCP_PQ` | on | Set to `0` to disable the hybrid Ed25519 + ML-DSA-65 post-quantum seal at completion. |
 | `ESIG_MCP_MAX_HTML_BYTES` | `524288` (512 KiB) | Envelope HTML size cap. |
 | `ESIG_MCP_MAX_PDF_BYTES` | `26214400` (25 MiB) | Ingested/sealed PDF size cap. |
 | `ESIG_MCP_ENVELOPES_PER_HOUR` | `60` | Per-process rate limit on envelope creation, `esig_reseal`, and `esig_identity_challenge` (each under its own bucket). |
+| `ESIG_MCP_MAX_SIGNERS` | `25` | Per-envelope cap on `esig_create_envelope`'s `signers[]` — `esig_create_envelope` refuses with a clear error above this, bounding the email/webhook fan-out one call can trigger. |
 | `ESIG_MCP_IDENTITY_MIN_LEVEL` | `none` | Signer-identity floor: `none` \| `L0` \| `L1` \| `L2` — see "Signer identity" above. `esig_create_envelope` may only *raise* this per envelope. |
 | `ESIG_MCP_UUAID_REGISTRY_URL` | — | `https://` UUAID registry base URL. Required when `ESIG_MCP_IDENTITY_MIN_LEVEL=L2`, or when any envelope itself requests `L2`. |
 | `ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY` | — | The registry's pinned Ed25519 public key — 64 lowercase hex chars, `keys[].publicKey` (`uuaid-registry-1`) from the registry's `GET /.well-known/uuaid-registry.json`. Every registry-signed badge (`GET /iaaso/v1/badge/{uuaid}`) is verified against this pin before anything in it is trusted. Required when `ESIG_MCP_IDENTITY_MIN_LEVEL=L2`, or when any envelope itself requests `L2`. |
 | `ESIG_MCP_IDENTITY_CHALLENGE_TTL_SEC` | `900` | Sole-control challenge lifetime, in seconds. Max `3600`. |
+| `ESIG_MCP_EMAIL_TRANSPORT` | — | Required when `ESIG_MCP_DELIVERY=email`: `smtp` or `ses` — see "Email delivery and reminders" above. |
+| `ESIG_MCP_EMAIL_FROM` | — | Required when `ESIG_MCP_DELIVERY=email`: `"Name <addr>"` or a bare address. |
+| `ESIG_MCP_EMAIL_REPLY_TO` | — | Optional `Reply-To` for signing-notification emails. |
+| `ESIG_MCP_EMAIL_SUBJECT_PREFIX` | — | Optional: subjects become `"[prefix] Please sign: <title>"`. |
+| `ESIG_MCP_SMTP_HOST` / `ESIG_MCP_SMTP_PORT` | — / `587` | Required (host) when `ESIG_MCP_EMAIL_TRANSPORT=smtp`. Port `465` implies implicit TLS even without `ESIG_MCP_SMTP_SECURE=1`. |
+| `ESIG_MCP_SMTP_USER` / `ESIG_MCP_SMTP_PASS` | — | SMTP AUTH — both set or both unset. Never logged, never in a tool result or audit row. |
+| `ESIG_MCP_SMTP_SECURE` | off | Set to exactly `1` for implicit TLS from connect. |
+| `ESIG_MCP_SMTP_ALLOW_PLAINTEXT` | off | Set to exactly `1` to skip STARTTLS entirely. Leave unset — STARTTLS is required by default. |
+| `ESIG_MCP_SMTP_ALLOW_UNVERIFIED_TLS` | off | Set to exactly `1` to skip SMTP server certificate verification against the system CA. Leave unset — verification is on by default; a startup WARNING is printed whenever this is set. |
+| `ESIG_MCP_SES_REGION` | — | Required when `ESIG_MCP_EMAIL_TRANSPORT=ses`. Needs the optional peer dependency `@aws-sdk/client-sesv2` installed. |
+| `ESIG_MCP_REMINDERS` | off (none) | Comma-separated durations after send, e.g. `"24h,72h,30m"`. Requires `ESIG_MCP_DELIVERY=email`. |
+| `ESIG_MCP_REMINDER_MAX` | `3` | Hard cap on reminders sent per signer. |
+| `ESIG_MCP_EVENTS_WEBHOOK_URL` | — | Operator config only — no tool can ever set or change it. Both this and `ESIG_MCP_EVENTS_WEBHOOK_SECRET`, or neither. Must be `https://` unless `ESIG_MCP_ALLOW_INSECURE_EVENTS_WEBHOOK=1`. Refused **at startup** (not only at send time) if it resolves to a private/local address, unless `ESIG_MCP_ALLOW_PRIVATE_WEBHOOK=1`. See "Lifecycle events and webhooks" above. |
+| `ESIG_MCP_EVENTS_WEBHOOK_SECRET` | — | Required with `ESIG_MCP_EVENTS_WEBHOOK_URL`. At least 32 characters. Signs every event's `X-Esig-Signature` header. |
+| `ESIG_MCP_ALLOW_INSECURE_EVENTS_WEBHOOK` | off | Set to exactly `1` to allow a plain `http://` `ESIG_MCP_EVENTS_WEBHOOK_URL`. The events webhook's **own** flag — separate from `ESIG_MCP_ALLOW_INSECURE_WEBHOOK` above (the `ESIG_MCP_DELIVERY=webhook` link-delivery channel's own flag); relaxing one never relaxes the other. |
+| `ESIG_MCP_ALLOW_PRIVATE_WEBHOOK` | off | Set to exactly `1` to allow `ESIG_MCP_EVENTS_WEBHOOK_URL` (and, at startup, `ESIG_MCP_DELIVERY_WEBHOOK_URL`) to resolve to a loopback/link-local/RFC1918/unique-local address (e.g. a trusted local receiver). Checked on every send (T18). |
 | `ESIG_CHROME_PATH` / `PUPPETEER_EXECUTABLE_PATH` / `CHROME_PATH` | unset (auto-detect) | Override the Chrome/Chromium executable used to seal envelopes, checked in that order; falls back to a platform scan (or `@sparticuz/chromium` on Lambda/Vercel) when unset. Only needed for sealing — see "Requirements" above and `esig_whoami`'s `sealReady`. |
 
 ## v0.2 roadmap

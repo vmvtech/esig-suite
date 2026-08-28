@@ -433,6 +433,323 @@ and `ESIG_MCP_RETURN_LINKS=1` (loud, demo-only): ingest the bundled
 a curl one-liner; with `--auto` it performs the signature itself and prints
 the sealed PDF path plus the `verifyDocument` verdict.
 
+## 15. Email delivery and reminders (v0.4)
+
+**Channel `ESIG_MCP_DELIVERY=email`.** A new `EmailDelivery` channel sends
+each signer their signing link by email through an `EmailTransport` seam with
+two built-ins: `smtp` (dependency-free, `node:net`/`node:tls`, STARTTLS
+required unless `ESIG_MCP_SMTP_ALLOW_PLAINTEXT=1`, AUTH PLAIN/LOGIN, envelope
+sender = configured from-address) and `ses` (SESv2 `SendEmail` through
+`@aws-sdk/client-sesv2` as an **optional** peer dependency loaded dynamically,
+like the gateway's S3 client — a clear startup error if absent). Config:
+`ESIG_MCP_EMAIL_TRANSPORT=smtp|ses`, `ESIG_MCP_EMAIL_FROM` (required, `Name
+<addr>`), `ESIG_MCP_EMAIL_REPLY_TO?`, `ESIG_MCP_SMTP_HOST/PORT/USER/PASS`,
+`ESIG_MCP_SES_REGION`, `ESIG_MCP_EMAIL_SUBJECT_PREFIX?`. Credentials are env
+only, never logged, never in tool results or audit rows.
+
+**Message content (anti-phishing, PII minimization).** Plain text + minimal
+HTML; contains the envelope title, the operator-fixed from/reply-to, an
+optional sender note (`esig_create_envelope.message`, ≤ 500 chars, escaped,
+no HTML), the signing link, and the expiry. It never contains the document
+body, other signers' details, or anything agent-controlled beyond the escaped
+title and note. Subjects are `[prefix] Please sign: <title>`.
+
+**Reminders.** `ESIG_MCP_REMINDERS="24h,72h"` (durations after send; default
+none), `ESIG_MCP_REMINDER_MAX` (default 3). Scheduled sends drive the
+schedule (`sentAt[]`/`nextAt`); manual `esig_send_reminder` sends are recorded
+separately (`manualSentAt[]`) and never advance or cancel the schedule —
+both count toward the max (spam bound). Reminder state is persisted
+*before* sending so a store conflict can never duplicate an email; a
+transport failure rolls the slot back (audited `envelope.reminder_failed`)
+so the scheduler retries on the next tick. An in-process scheduler tick (60 s)
+sends a reminder to each signer still `pending` whose next reminder is due,
+skipping voided/expired/completed envelopes; the schedule is persisted per
+signer (`metadata.mcp.delivery.reminders[signerId] = {sentAt[], nextAt}`) so
+restarts resume rather than re-send. Manual `esig_send_reminder(envelopeId,
+signerId?)` is audited and rate-limited (`reminder` limiter key).
+
+**Link persistence for reminders (the one custody change).** Core returns raw
+tokens exactly once and cannot re-mint them, so a reminder needs the original
+link. When reminders are enabled, links are stored **encrypted at rest** with
+the operator passphrase (core's AES-256-GCM `encryptKeyPem`/`decryptKeyPem`
+helpers over the link string) under `metadata.mcp.delivery.links[signerId]`,
+decrypted only inside the reminder sender, and never exposed by any tool (I8
+unchanged). This is no worse than the existing `file` outbox (plaintext 0600)
+and is off unless reminders are configured.
+
+**Decline.** The approval page gains a "Decline" action (`POST
+/sign/<token>/decline {reason?}` → core `declineEnvelope`), audited and
+emitted as an event; the reason is escaped and capped.
+
+## 16. Lifecycle events and webhooks (v0.4)
+
+**Event log.** Every state change appends an event to
+`metadata.mcp.events[]` (capped, oldest trimmed into the audit trail):
+`envelope.created | envelope.viewed | envelope.signed | envelope.declined |
+envelope.completed | envelope.sealed | envelope.seal_failed |
+envelope.voided | envelope.expired | envelope.reminder_sent |
+signer.identity_verified | signer.identity_rejected`. `esig_envelope_status`
+returns the last N; `esig_list_events(envelopeId, since?)` returns them all.
+`envelope.expired` is emitted once by a lazy expiry tick (core expires on
+token resolution; the scheduler catches the rest).
+
+**Webhook delivery.** `ESIG_MCP_EVENTS_WEBHOOK_URL` (operator config only —
+an agent can never set or change it; https unless
+`ESIG_MCP_ALLOW_INSECURE_WEBHOOK=1`; hosts resolving to loopback, link-local
+(169.254/16 incl. cloud metadata), or RFC1918 ranges are refused unless
+`ESIG_MCP_ALLOW_PRIVATE_WEBHOOK=1`) and `ESIG_MCP_EVENTS_WEBHOOK_SECRET`
+(required with the URL). Each event is POSTed as JSON `{id, type, createdAt,
+envelopeId, phase, signer?: {signerId, name, email, status}, data}` with
+headers `X-Esig-Event-Id`, `X-Esig-Timestamp`, `X-Esig-Signature:
+sha256=HMAC(secret, timestamp + "." + body)`; receivers must reject
+timestamps older than 5 minutes (documented, with a verification snippet).
+Payloads never contain links, tokens, document bytes, or proofs.
+
+**At-least-once with backoff.** Events are persisted to
+`<DATA_DIR>/events/queue/<eventId>.json` before delivery; a worker loop
+delivers in order per envelope, retries on non-2xx/timeout with exponential
+backoff (1 m → 2 m → 4 m … up to 6 attempts), then parks the event as
+`dead` (audited `webhook.dead_lettered`, visible via `esig_list_events`).
+Idempotency is the event id. Delivery never blocks a signer's HTTP request.
+
+**Threats added.** T16 phishing/template injection via agent-controlled email
+content (escape, fixed sender, no document body, note cap); T17 link
+persistence (encrypted under passphrase, reminders-only, never via tools);
+T18 webhook SSRF (operator-only URL, private/link-local deny, 10 s timeout,
+no redirects followed); T19 webhook replay/forgery (HMAC over timestamp+body,
+5-minute window, secret env-only); T20 reminder spam (caps, pending-only,
+stop conditions, rate limit); T21 credential exposure (SMTP/SES creds env-only,
+redacted from every log/error/tool result — tested).
+
+**RedTeam RT-2026-08-27-05 (APPROVE_WITH_GAPS) — decisions folded in:**
+G1 the SSRF deny covers IPv6 (`::1`, `fe80::/10`, `fc00::/7`, and
+`::ffff:a.b.c.d` mapped forms), refuses if **any** A/AAAA record is private,
+**connects to the vetted address** (not the hostname) and re-resolves +
+re-vets on every retry (DNS-rebinding TOCTOU), with `redirect: "error"`
+explicit; G2 SMTP TLS policy is explicit — server cert verified against the
+system CA (loud `ESIG_MCP_SMTP_ALLOW_UNVERIFIED_TLS=1` opt-out), hard-fail
+when STARTTLS is missing, AUTH only after the upgrade completes; G3 stored
+links are **erased** at terminal states (signed / declined / voided /
+expired / completed) and when reminders are turned off — ciphertext never
+outlives its purpose; G4 the events queue files use the package's
+0700/0600 convention (they carry signer name + email); G5 the events webhook
+has its own `ESIG_MCP_ALLOW_INSECURE_EVENTS_WEBHOOK` flag rather than reusing
+the link-delivery one; G6 a per-envelope signer cap (`ESIG_MCP_MAX_SIGNERS`,
+default 25) bounds the email fan-out, and the receiver snippet dedupes by
+`X-Esig-Event-Id` inside the replay window. G1 + G2 are pre-publish gates.
+Q1 (passphrase-encrypted links) accepted as *at-rest* protection only — the
+passphrase is process-resident, so this is not a defense against process
+compromise; Q4 `envelope.viewed` is emitted.
+
+## 17. Pillar integration — agent-to-agent signing over UUAID's communication substrate (design, 2026-08-28)
+
+**What Pillar is (scout-verified against `/Volumes/X/XVX/pillar`
+@0.2.0-alpha.5; re-pinned to npm latest `0.2.0-alpha.11` 2026-08-28 by
+Uuaid-Lead — `keychain/jcs/e2e/envelope` byte-identical so the identity
+reading holds; `carrier-client` now takes `{tierGrant}` and sends
+`x-pillar-tier-grant`; `identity/tier.mjs` is new; `exports` still `{"."}`.
+**The local tree is not the source of what publishes**:
+`/Volumes/X/XVX/pillar` is alpha.5, has no `tier.mjs`, and `XVX/releases/`
+tarballs stop at alpha.5 — alpha.6–11 exist only on npm (Uuaid-Lead
+preserved the alpha.11 tarball in-lane:
+`/Volumes/X/uuaid/docs/evidence/2026-08-27-pillar-alpha11-instruments/uuaid-pillar-0.2.0-alpha.11.tgz`,
+sha256 `31d841cc…182afa87`). The exports PR is therefore gated on **source
+recovery**, not just owner assignment — escalated to ZZ 2026-08-28; the tree
+is outside every lane's registry and not a git repo.)**
+IAASO-3050's reference implementation: every agent holds an Ed25519 identity
+and exchanges **signed, end-to-end encrypted envelopes** (`uuaid-pillar-envelope/2`:
+`sender`, `recipient`, `kind`, `enc{x25519-hkdf-sha256-aes256gcm}`,
+`transportSignature{ed25519}`) over libp2p direct-dial, a store-and-forward
+HTTPS carrier (`https://pillar.uuaid.org/v1/envelopes`, inbox long-poll,
+at-least-once, 14-day TTL), or DHT. Its identity **is a UUAID in our grammar**:
+`uuaid:foundation:agent:<localId>` where `localId =
+hex(sha256(rawEd25519PubKey)[0..16])` formatted `8-4-4-4-12`
+(keychain.mjs `_localIdFromKey`) — **self-authenticating**: anyone can check
+that a key owns the uuaid without a registry, and Pillar's own `seal()`
+refuses to encrypt to a key that does not derive the recipient's uuaid. It
+carries no payment/escrow layer (the "escrow/RAIL" lessons refer to another
+system — **unverified which**). RedTeam 2026-08-25: protocol sound; one MEDIUM
+(no domain-separation string in transport signatures) slated for v1.1.
+
+**Why it fits.** Everything e-sig lacked for the *agent* side of signing
+exists here: a private, authenticated inbox per agent with no inbound HTTP,
+identities we already accept, and E2E custody of whatever we send.
+
+**Measured corrections (alpha.11, Uuaid-Lead 2026-08-28 — binding for this
+design; evidence: `/Volumes/X/uuaid/docs/evidence/2026-08-27-pillar-esig-bridge-answer.md`).**
+
+- **`kind` is convention only.** Unvalidated at `seal()`, `open()` AND
+  carrier ingest (verified: `kind:"esig:sign-request"` seals and opens
+  `ok:true`), and it is **cleartext** — every carrier/relay learns "uuaid X
+  asked uuaid Y to sign, at time T". What it does give: it sits inside the
+  signed canonical body with carrier-enforced sender-key binding, so it is
+  authenticated as *"this sender asserted this kind"* — a routing hint,
+  never a grant. ⇒ **All esig traffic uses the opaque wire kind `esig:m`;
+  the real verb travels inside the sealed payload. Never authorize on
+  `kind`; every security decision rests on the sealed payload's own
+  signature.** `esig:*` is reserved in Pillar's kind table as an unenforced
+  convention (Uuaid-Lead, exports PR).
+- **Carrier budget.** Fixed envelope overhead 811 B; `enc.ct` is hex (≈2 B
+  per plaintext byte): `maxJCS(payload) = (tier.maxBodyBytes − 811)/2 − 16`.
+  Community (default) tier = 512 KiB ⇒ **261,722 B** measured;
+  `ABSOLUTE_MAX_BODY` 2 MiB caps every tier; an invalid/foreign tier grant
+  **silently degrades to community** ⇒ assert effective tier at bridge
+  startup and **hard-fail** on mismatch (Uuaid-Lead: load-bearing, since
+  alpha.11 source is unrecoverable from the local tree — a mis-provisioned
+  grant would otherwise surface months later as a mystery 512 KiB ceiling;
+  a 413 body carries `maxBodyBytes` + `tier`).
+- **Time bounds.** `MAX_ENVELOPE_AGE_MS` = 24 h absolute (both directions)
+  ⇒ **mint sign-requests at send time** — pre-signed held requests die as
+  `400 stale-envelope`. The carrier deletes unfetched envelopes after 14 d
+  ⇒ authoritative envelope state stays in esig-mcp; the carrier is a relay,
+  not storage.
+- **JCS payload traps** (`jcs()` runs over the payload pre-encryption):
+  `Date` → `{}` **silently**; non-integer numbers and `undefined` **throw**;
+  `10n` → `10` fine. ⇒ esig-over-pillar payload schema: timestamps as
+  ISO-8601 strings, decimals as strings, validated before `seal()`.
+- **Replay/dedupe.** Re-delivering an envelope `id` → `202 {duplicate:true}`,
+  not an error — dedupe by envelope id on ingest.
+
+**Seams, in order of value ÷ cost.**
+
+1. **L1p — self-authenticating identity (esig-mcp core, no Pillar dependency).**
+   When a signer's uuaid is `uuaid:foundation:agent:<localId>` and the L1
+   proof key is Ed25519, verify `localIdFromKey(proofKey) === localId`. This
+   binds key ↔ uuaid **by construction, locally** — stronger than today's L1
+   (self-asserted binding) and independent of the registry badge. Recorded
+   as level `L1p`; policy may require it (`minLevel: L1p`). Pure function +
+   Uuaid-Lead's three alpha.11 vectors (see v0.5 below).
+2. **`ESIG_MCP_DELIVERY=pillar` (bridge package).** Signing links and the
+   sole-control challenge travel as wire-kind-`esig:m` envelopes whose sealed
+   payload is `{verb:"sign-request", envelopeId, title, url, challenge,
+   expiresAt, sender}` — E2E-encrypted, at-least-once via the carrier, minted
+   at send time (24 h carrier age limit). Custody moves to the recipient's
+   inbox; the sender-side agent still never sees the link (I8). Requires
+   `signers[].pillar = {uuaid, publicKey}` at creation; esig derives
+   `localIdFromKey(publicKey)` and requires it to equal the recipient uuaid's
+   `split(":")[3]` **and** `namespace === "foundation" && objectType ===
+   "agent"` — Pillar's binding covers index 3 only (live-proven: a seal to
+   `uuaid:EVIL:service:<same-lid>` with the legitimate key opens ok), so the
+   FULL uuaid string is pinned, never the local id alone.
+3. **Identity proof over Pillar.** The recipient agent replies with a sealed
+   `{verb:"identity-proof"}` payload carrying the DataIntegrityProof over the
+   challenge (our existing verifier); esig-mcp polls its own inbox, verifies
+   (L1p/L2), and stores a *pre-verified* identity bound to that challenge
+   nonce; `POST /sign` consumes it, so the human just signs — no pasting.
+   Machine-to-machine identity, human-held pen.
+4. **Events over Pillar (`EventSink` = pillar).** Lifecycle events are
+   sealed to configured subscriber uuaids instead of (or alongside) a public
+   webhook URL — an agent with no inbound listener gets signed, encrypted,
+   at-least-once events. Reuses the §16 queue/backoff.
+5. **Sealed-artifact notice** sealed payload `{verb:"sealed", envelopeId,
+   sha256, size, fetchHint}` to sender and signers' agents (digest only; the
+   PDF is fetched, not pushed).
+6. **Later — modes A/C over Pillar.** The recipient agent *signs* (IAASO TAE
+   exchange) and the human counter-signs: the "agents sign, humans hold the
+   pen" story on a real transport.
+
+**Packaging decision (re-settled 2026-08-28 on Uuaid-Lead's alpha.11
+measurements — do NOT vendor).** The six modules the bridge needs
+(`keychain`, `jcs`, `envelope`, `e2e`, `carrier-client`, `tier`) pull
+**21 modules, 0 libp2p, 0 better-sqlite3, 0.03 s cold start, 51.7 MiB RSS**
+at runtime, vs 763 modules / 107 MiB for `import "@uuaid/pillar"` — but
+`npm install` still drags **348 MB / 283 pkgs incl. a 12 MB native
+better-sqlite3 build** (exports gates specifiers, not install). Vendoring
+envelope v2 on `@noble/curves` would fork a *wire format* — the one
+divergence that surfaces as signatures verifying on one side only, months
+later — so the bridge consumes the real package. Structure stands:
+`@e-sig/mcp` exposes the three seams (`DeliveryChannel` exists; `EventSink`,
+`IdentityProofSource` new); **`@e-sig/pillar-bridge`** is a separate opt-in
+package, dynamic-loaded like SES, **carrier-only mode** (no libp2p node).
+**UPDATE 2026-08-28: the exports PR landed in `@uuaid/pillar@0.2.0-alpha.12`**
+(published 2026-08-28T01:31:29Z, dist.shasum `b01a09dba65858d3…16484`;
+verified by this lane from the published tarball + registry; load-resolution
+of all eight keys confirmed by Uuaid-Lead on the installed package — this
+lane re-verifies at dependency-wiring time). The map is exactly the eight
+requested keys (`.` + `./keychain ./jcs ./tier ./envelope ./e2e
+./carrier-client ./package.json`), `dist-tags.latest` = alpha.12, and
+`tier.mjs` / `keychain.mjs` / `jcs.mjs` / `e2e.mjs` / `envelope.mjs` are
+byte-identical to alpha.11 — the stale-alpha.5-tree regression
+ZZ-DP-2026-08-28-001 guarded against did not happen. The only bridge-relevant
+delta is `carrier-client.mjs` (additive: `onError` now gets a second
+`{ carrier }` context arg). The bridge uses **direct subpath imports**; the
+`createRequire(...)` → `file://` interim (measured 0 libp2p / 0 sqlite) is
+retired scaffolding. The exports map is a **CONVENTION, not a boundary** —
+`file://` deep imports still load (`src/identity/tier.mjs` reachable,
+Uuaid-Lead-verified on alpha.12); trust arguments rest on the crypto, never
+on specifier gating.
+**Did NOT land in alpha.12 — ride the next Pillar PR:** (1)
+`localIdFromKey` is still private (`Keychain._localIdFromKey`,
+`keychain.mjs:51`; no public export), so the v0.5 L1p verifier keeps the
+local 5-line derivation (drift-safe: `keychain.load` / `seal` / `open`
+re-derive and throw on mismatch); (2) the `esig:*` kind-prefix reservation
+(convention, unenforced) is absent from source and docs. Neither blocks the
+bridge. Install weight is still NOT solved by exports (alpha.12 also adds
+`@noble/curves` + `@noble/hashes` to `dependencies`): shipping the bridge to
+customer boxes/CI/Lambda needs a Pillar-side call (dependency-light
+`pillar-core` split, or libp2p + better-sqlite3 to optional/peer deps) —
+escalated to ZZ with the ownership question. `./tier` being exported
+unblocks the startup tier assert on the real
+`verifyTierGrant`/`TIER_DEFAULTS`.
+
+**Threats to carry into the RedTeam brief.** Recipient-key provenance (who
+asserts `signers[].pillar.publicKey`? — it derives the uuaid, so a wrong key
+simply fails the binding; a *substituted* uuaid+key pair is a pinning
+question for the creating agent/operator); inbox poller as a new listener
+(routes on the opaque `esig:m` kind as a HINT only — never authorization;
+authorization = full-uuaid pinning + the sealed payload's own signature;
+replay by envelope id — carrier re-delivery is `202 {duplicate:true}`);
+challenge freshness across a
+14-day carrier TTL (our 15-minute TTL still applies — late proofs refuse);
+operator Pillar keychain custody (passphrase env, same discipline as the
+signing passphrase); Pillar's pending domain-separation fix (our proofs are
+our own JCS documents, unaffected).
+
+**RedTeam RT-2026-08-28-01 (APPROVE_WITH_GAPS, design) — decisions folded
+in; G1–G4 gate publication.** G4 (HIGH) keychain custody: the bridge refuses
+an empty/short Pillar passphrase (same ≥24 floor as `ESIG_MCP_PASSPHRASE`),
+generated passphrases go only to the 0600 env path (never beside
+`keychain.json`), keychain files are 0600 and excluded from blobs/outbox/
+backups, with an audit row on load/generate (fleet precedent PILLAR-P1: 144
+identities burned on an empty default passphrase + a `.backups/` shadow).
+G1 pin the **full static import closure** of the deep-imported modules, not
+six files; allowlist exactly alpha.11 + alpha.12 (alpha.12 admitted with its
+own measurement pass); assert before first use; `ESIG_PILLAR_ALLOW_UNPINNED`
+is loud **and audited**. G2 recipient-key provenance: derivation + pinning
+cannot stop a substituted self-consistent (uuaid, key) pair — so whenever a
+registry is configured, `esig_create_envelope` requires the registry badge's
+`presentationKey` to equal `signers[].pillar.publicKey` (fail-closed; a badge
+404 is an audited opt-in) and the approval page surfaces unregistered
+signers; no blanket L2 mandate. G3 listener hardening: sender allowlist tied
+to active envelopes/subscribers, per-sender rate cap, pre-decrypt size cap
+against the tier budget, seen-set pruned at the 14-day carrier TTL,
+`expiresAt` on every `esig:*` verb, and the reference recipient replies only
+for envelopes addressed to it. G5 ladder composition: L1p stays fully local;
+when both L1p and an L2 badge are available and disagree → refuse. G6
+transport signatures/sender binding are never identity.
+
+**Recommended first build (v0.5):** seam 1 (L1p) inside `@e-sig/mcp` now —
+tiny, no dependency, immediately raises identity assurance for every
+Pillar-identified agent. L1p verifier spec (Uuaid-Lead-confirmed on
+alpha.11): derive `localId` = `8-4-4-4-12` hex of
+`sha256(**raw** 32-byte pubkey)[0..16]` — hash the RAW bytes, never the hex
+string (hashing hex yields a different, plausible-looking id); it is **not
+RFC 4122** (no version/variant bits — validate with
+`/^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$/`; a strict UUID validator
+rejects real ids); pin the FULL uuaid and check `namespace === "foundation"
+&& objectType === "agent"` independently (the binding covers
+`split(":")[3]` only). Test vectors (measured): RFC 8032 test1 seed →
+`21fe31df-a154-a261-626b-f854046fd227`; all-zero seed →
+`139e3940-e64b-5491-7220-88d9a0d74162`; all-ff seed →
+`af822958-f2d7-5afb-91f8-a8f4da253230`. Until `localIdFromKey` is public we
+reimplement the 5-line derivation locally (stability is mechanically
+enforced in Pillar — `keychain.load`, `seal`, `open` all re-derive and fail
+loudly on drift). Then `@e-sig/pillar-bridge` with seams 2 + 3 + a reference
+recipient handler (`examples/pillar-agent/`) so the other half exists.
+Seams 4–5 follow on the same bridge. Cross-lane: kind-prefix registration +
+payload schemas filed with Uuaid-Lead 2026-08-28 (reserved prefix,
+unenforced; our wire kind is the opaque `esig:m`).
+
 **Bindings (verified 2026-08-27 by scout).** `@e-sig/uaid-exch`:
 `createExchange`, `exchangeInputFromEsigEnvelope`, `jcs/jcsBytes`,
 `DataIntegrityProof`, `UaidSigningCredential`, `UaidExchange`,

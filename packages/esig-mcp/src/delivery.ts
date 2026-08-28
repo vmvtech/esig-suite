@@ -30,10 +30,22 @@ export interface Receipt {
   channel: string;
   ok: boolean;
   detail?: string;
+  /** email/delivery.ts's `EmailDelivery` only: the outgoing message's id (SMTP `Message-ID` / SES `MessageId`), set on success. */
+  messageId?: string;
 }
 
 export interface DeliveryChannel {
-  deliver(envelope: { id: string; title: string }, links: DeliveryLink[]): Promise<Receipt[]>;
+  deliver(
+    envelope: {
+      id: string;
+      title: string;
+      /** §15: `esig_create_envelope`'s optional sender note (`metadata.mcp.message`) — only `EmailDelivery` reads it. */
+      message?: string;
+      /** ISO-8601 envelope expiry, if any — only `EmailDelivery` reads it. */
+      expiresAt?: string;
+    },
+    links: DeliveryLink[],
+  ): Promise<Receipt[]>;
 }
 
 /**

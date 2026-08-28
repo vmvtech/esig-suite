@@ -117,9 +117,18 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
               "signature is recorded for this envelope. Omit entirely for v0.1 behavior (no identity " +
               "check) unless this server's own ESIG_MCP_IDENTITY_MIN_LEVEL floor already requires one.",
           ),
+        message: z
+          .string()
+          .max(500)
+          .optional()
+          .describe(
+            "Optional note shown to signers in the signing-notification email (ESIG_MCP_DELIVERY=email " +
+              "only; ignored by other channels). <= 500 chars; control characters are stripped and it is " +
+              "HTML-escaped wherever rendered. Never the document body, never other signers' details.",
+          ),
       },
     },
-    async ({ title, html, docId, signers, expiresAt, identity }) => {
+    async ({ title, html, docId, signers, expiresAt, identity, message }) => {
       const oneOf = exactlyOneOfHtmlOrDocId.safeParse({ html, docId });
       if (!oneOf.success) {
         return toolError(oneOf.error.issues[0]?.message ?? "exactly one of `html` or `docId` must be provided.");
@@ -135,7 +144,15 @@ export function registerCreateEnvelopeTool(server: McpServer, deps: McpServerDep
 
       let result;
       try {
-        result = await deps.envelopes.create({ title, html, docId, signers, expiresAt: expiresAtDate, identity });
+        result = await deps.envelopes.create({
+          title,
+          html,
+          docId,
+          signers,
+          expiresAt: expiresAtDate,
+          identity,
+          message,
+        });
       } catch (e) {
         return toolError(messageOf(e));
       }
