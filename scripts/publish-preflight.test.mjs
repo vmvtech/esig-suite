@@ -76,10 +76,13 @@ describe("discoverPackages", () => {
     expect(b.publishTag).toBe("next");
   });
 
-  it("real repo: discovers exactly the 8 @e-sig packages, core first, quickstart excluded", () => {
+  it("real repo: discovers exactly the 9 @e-sig packages, core first, quickstart excluded", () => {
     const names = discoverPackages(repoRoot).map((p) => p.name);
     expect(names[0]).toBe("@e-sig/core"); // everything else peer-depends on core
-    expect(names).toHaveLength(8);
+    // pillar-bridge joined the publishable set when its private flag was
+    // dropped for the 0.1.0 release (2026-08-28) — this pin broke on CI the
+    // moment that landed, which is exactly what the pin is for.
+    expect(names).toHaveLength(9);
     expect(new Set(names)).toEqual(
       new Set([
         "@e-sig/core",
@@ -90,6 +93,7 @@ describe("discoverPackages", () => {
         "@e-sig/worm",
         "@e-sig/hsm-pkcs11",
         "@e-sig/mcp",
+        "@e-sig/pillar-bridge",
       ]),
     );
   });

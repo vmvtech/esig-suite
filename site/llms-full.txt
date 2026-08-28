@@ -16,6 +16,7 @@ Why e-sig
 Verify
 Docs
 GitHub ↗
+◑
 
 MIT-licensed · no per-document fees · self-hosted
 
@@ -177,6 +178,7 @@ Pricing
 Why e-sig
 Docs
 GitHub ↗
+◑
 
 # Own your signatures.
 Verify your vendor.
@@ -345,6 +347,7 @@ Why e-sig
 Verify
 Docs
 GitHub ↗
+◑
 
 # Verify a signed PDF.
 Right here, offline.
@@ -417,6 +420,7 @@ Pricing
 Why e-sig
 Docs
 GitHub ↗
+◑
 
 MIT-licensed SDK · free forever · pay only for hosting
 
@@ -726,6 +730,7 @@ Pricing
 Verify
 Docs
 GitHub ↗
+◑
 
 # esig-suite vs DocuSign
 
@@ -814,6 +819,7 @@ Pricing
 Verify
 Docs
 GitHub ↗
+◑
 
 # esig-suite vs Documenso
 
@@ -902,6 +908,7 @@ Pricing
 Verify
 Docs
 GitHub ↗
+◑
 
 # esig-suite vs DocuSeal
 
@@ -988,6 +995,7 @@ Pricing
 Verify
 Docs
 GitHub ↗
+◑
 
 machine-readable · llms.txt · agent.json
 
@@ -1103,6 +1111,7 @@ Pricing
 Verify
 Docs
 GitHub ↗
+◑
 
 press kit · facts over hype
 
@@ -1206,6 +1215,7 @@ Pricing
 Why e-sig
 Docs
 GitHub ↗
+◑
 
 # Legal Notices
 
@@ -1373,6 +1383,7 @@ Pricing
 Why e-sig
 Docs
 GitHub ↗
+◑
 
 # Terms of Use
 
@@ -1582,6 +1593,7 @@ Pricing
 Why e-sig
 Docs
 GitHub ↗
+◑
 
 # Privacy Policy
 

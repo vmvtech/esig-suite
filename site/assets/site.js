@@ -1,5 +1,51 @@
-/* e-sig.org scroll-reveal (port of RHRF's FadeIn/StaggerChildren).
-   Progressive enhancement only: content is fully visible without JS.
+/* e-sig.org shared front-end behavior: theme toggle, sticky-header logo
+   shrink, and scroll-reveal (port of RHRF's FadeIn/StaggerChildren).
+   Progressive enhancement only: content is fully visible without JS. */
+
+/* ── Theme toggle (manual override; follows system preference by default) ── */
+(function () {
+  'use strict';
+  var STORAGE_KEY = 'esig-theme';
+
+  // Reconcile with anything stored (the inline head snippet already applied
+  // this before first paint; this keeps the two in sync defensively).
+  try {
+    var stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === 'light' || stored === 'dark') {
+      document.documentElement.setAttribute('data-theme', stored);
+    }
+  } catch (e) {}
+
+  document.addEventListener('click', function (event) {
+    var btn = event.target.closest && event.target.closest('.themetoggle');
+    if (!btn) return;
+
+    var attr = document.documentElement.getAttribute('data-theme');
+    var effective;
+    if (attr === 'light' || attr === 'dark') {
+      effective = attr;
+    } else {
+      var prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+      effective = prefersLight ? 'light' : 'dark';
+    }
+    var next = effective === 'light' ? 'dark' : 'light';
+
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem(STORAGE_KEY, next); } catch (e) {}
+  });
+})();
+
+/* ── Sticky header: shrink the logo once the page has scrolled ─────────── */
+(function () {
+  'use strict';
+  function sync() {
+    document.documentElement.classList.toggle('hdr-scrolled', window.scrollY > 8);
+  }
+  window.addEventListener('scroll', sync, { passive: true });
+  sync(); // deep-linked #anchors can start already scrolled
+})();
+
+/* ── Scroll-reveal ───────────────────────────────────────────────────────
    html.anim is added only when IntersectionObserver exists and the
    visitor has not requested reduced motion. */
 (function () {

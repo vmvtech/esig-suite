@@ -43,6 +43,7 @@
 <link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/vmvoneSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
+<script>(function(){try{var t=localStorage.getItem("esig-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})()</script>
 <link rel="stylesheet" href="/assets/site.css">
 <script defer src="/assets/site.js"></script>
 <style>
@@ -58,18 +59,19 @@
   .card .ic{font-size:18px}
 
   .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-family:var(--mono);font-size:14px;color:var(--mut);margin-top:6px}
-  .flow span{background:var(--bg2);border:1px solid var(--line);padding:5px 11px;border-radius:8px;color:var(--fg)}
+  .flow span{background:var(--bg2);border:1px solid var(--line);padding:5px 11px;border-radius:4px;color:var(--fg)}
   .flow .arw{color:var(--accent);border:0;background:none;padding:0 2px}
 
-  pre{background:#0a0c0f;border:1px solid var(--line);border-radius:14px;padding:20px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.7;margin:0}
-  @media (prefers-color-scheme:light){pre{background:#0d1117;color:#e6edf3}}
+  pre{background:#0a0c0f;border:1px solid var(--line);border-radius:7px;padding:20px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.7;margin:0}
+  @media (prefers-color-scheme:light){:root:not([data-theme=dark]) pre{background:#0d1117;color:#e6edf3}}
+  [data-theme=light] pre{background:#0d1117;color:#e6edf3}
   pre .k{color:#c98bff}pre .s{color:#8affc1}pre .c{color:#6b7785}pre .f{color:#5b9dff}pre .n{color:#ffc38a}
 
   /* Post-quantum verify readout */
-  .pqverify{margin:22px 0 4px;border:1px solid var(--line);border-radius:14px;background:var(--bg2);overflow:hidden;max-width:664px}
+  .pqverify{margin:22px 0 4px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);overflow:hidden;max-width:664px}
   .pqverify .row{display:flex;align-items:center;gap:14px;padding:15px 18px}
   .pqverify .row+.row{border-top:1px solid var(--line)}
-  .pqverify .tag{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:3px 8px;white-space:nowrap}
+  .pqverify .tag{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:3px 8px;white-space:nowrap}
   .pqverify .tag.pq{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 48%,var(--line))}
   .pqverify .lbl{flex:1;font-family:var(--mono);font-size:14px;font-weight:600;color:var(--fg)}
   .pqverify .lbl small{display:block;font-family:var(--sans);font-weight:400;color:var(--mut);font-size:12.5px;margin-top:3px}
@@ -87,6 +89,7 @@
   <a href="/verify">Verify</a>
   <a href="https://docs.e-sig.org">Docs</a>
   <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+  <button class="themetoggle" type="button" aria-label="Toggle light or dark theme" title="Light/dark theme">&#9681;</button>
 </nav></div></header>
 
 <main>
@@ -146,7 +149,7 @@
   <p class="lead rv">Compose your HTML, hand it to the orchestrator over your three stores, get back a stored URL, an audit id, and a cert fingerprint.</p>
   <span class="pill rv">⏱️ <b>60 seconds</b> · zero services · one command</span>
   <p class="rv mono" style="font-size:14px;color:var(--mut);margin:0 0 16px">$ npm install &amp;&amp; npm run build &amp;&amp; npm run quickstart</p>
-  <img class="rv" src="/assets/quickstart-demo.gif" width="811" height="560" loading="lazy" alt="esig-suite quickstart demo — issue a cert, sign, verify, reject tampering; 60 seconds, no services" style="display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:14px">
+  <img class="rv" src="/assets/quickstart-demo.gif" width="811" height="560" loading="lazy" alt="esig-suite quickstart demo — issue a cert, sign, verify, reject tampering; 60 seconds, no services" style="display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:7px">
   <div class="flow rv" style="margin-top:16px">
     <span>issue cert</span><span class="arw">→</span>
     <span>render html→pdf</span><span class="arw">→</span>

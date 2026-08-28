@@ -16,6 +16,7 @@
 <link rel="icon" type="image/svg+xml" href="/assets/e-sig.svg">
 <link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
+<script>(function(){try{var t=localStorage.getItem("esig-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})()</script>
 <link rel="stylesheet" href="/assets/site.css">
 <script defer src="/assets/site.js"></script>
 <style>
@@ -24,7 +25,7 @@
   .lead{font-size:17.5px;max-width:760px;margin:0 0 24px}
   section{padding:52px 0;border-top:1px solid var(--line)}
 
-  .boiler{max-width:760px;padding:24px 26px;border:1px solid var(--line);border-radius:14px;background:var(--bg2);color:var(--fg);font-size:15px;line-height:1.75}
+  .boiler{max-width:760px;padding:24px 26px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);color:var(--fg);font-size:15px;line-height:1.75}
 
   .facts{width:100%;border-collapse:collapse;max-width:760px;font-size:14.5px}
   .facts td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -35,10 +36,10 @@
   @media(max-width:820px){.grid{grid-template-columns:1fr}}
   .card h3{margin:0 0 6px;font-size:16px;letter-spacing:-.01em;font-weight:700}
   .card p{margin:0;color:var(--mut);font-size:14px}
-  .card img{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;margin-bottom:10px}
+  .card img{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:5px;margin-bottom:10px}
 
   ul.angles{list-style:none;padding:0;margin:0;display:grid;gap:12px;max-width:860px}
-  ul.angles li{padding:16px 18px;border:1px solid var(--line);border-radius:12px;background:var(--bg2)}
+  ul.angles li{padding:16px 18px;border:1px solid var(--line);border-radius:6px;background:var(--bg2)}
   ul.angles li b{display:block;font-size:15px;margin-bottom:4px}
   ul.angles li p{margin:0;color:var(--mut);font-size:14px;line-height:1.6}
 
@@ -56,6 +57,7 @@
   <a href="/verify">Verify</a>
   <a href="https://docs.e-sig.org">Docs</a>
   <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+  <button class="themetoggle" type="button" aria-label="Toggle light or dark theme" title="Light/dark theme">&#9681;</button>
 </nav></div></header>
 
 <main>

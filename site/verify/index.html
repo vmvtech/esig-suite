@@ -17,6 +17,7 @@
 <link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/vmvoneSerif-Italic.woff2" as="font" type="font/woff2" crossorigin>
+<script>(function(){try{var t=localStorage.getItem("esig-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})()</script>
 <link rel="stylesheet" href="/assets/site.css">
 <script defer src="/assets/site.js"></script>
 <script defer src="verify.js"></script>
@@ -25,20 +26,22 @@
   h1{font-size:clamp(34px,5vw,56px);line-height:1.08}
   .lead{font-size:17.5px;max-width:760px;margin:0 0 24px}
 
-  .drop{border:1.5px dashed var(--line);border-radius:16px;padding:56px 28px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;background:var(--card)}
+  .drop{border:1.5px dashed var(--line);border-radius:8px;padding:56px 28px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;background:var(--card)}
   .drop:hover,.drop:focus-visible,.drop.over{border-color:var(--accent);background:rgba(255,255,255,0.03)}
   .drop .big{font-size:19px;color:var(--ink);font-weight:600;margin-bottom:8px}
   .drop .small{color:var(--dim);font-size:13.5px}
-  .drop .small kbd{border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:12px;background:rgba(255,255,255,0.04)}
+  .drop .small kbd{border:1px solid var(--line);border-radius:3px;padding:1px 7px;font-size:12px;background:rgba(255,255,255,0.04)}
 
   .verdict{display:flex;align-items:center;gap:12px;font-size:21px;font-weight:700;margin:28px 0 6px;color:var(--ink)}
   .dot{width:13px;height:13px;border-radius:50%;flex:none}
   .verdict.valid .dot{background:#a6e3a1}
   .verdict.tampered .dot,.verdict.invalid .dot{background:#f38ba8}
   @media (prefers-color-scheme:light){
-    .verdict.valid .dot{background:#40a02b}
-    .verdict.tampered .dot,.verdict.invalid .dot{background:#d20f39}
+    :root:not([data-theme=dark]) .verdict.valid .dot{background:#40a02b}
+    :root:not([data-theme=dark]) .verdict.tampered .dot,:root:not([data-theme=dark]) .verdict.invalid .dot{background:#d20f39}
   }
+  [data-theme=light] .verdict.valid .dot{background:#40a02b}
+  [data-theme=light] .verdict.tampered .dot,[data-theme=light] .verdict.invalid .dot{background:#d20f39}
 
   .detail{width:100%;border-collapse:collapse;margin:14px 0 8px;font-size:14.5px}
   .detail td{padding:10px 14px;border-top:1px solid var(--line);vertical-align:top}
@@ -46,9 +49,11 @@
   .pass{color:#a6e3a1;font-weight:600}
   .fail{color:#f38ba8;font-weight:600}
   @media (prefers-color-scheme:light){
-    .pass{color:#40a02b}
-    .fail{color:#d20f39}
+    :root:not([data-theme=dark]) .pass{color:#40a02b}
+    :root:not([data-theme=dark]) .fail{color:#d20f39}
   }
+  [data-theme=light] .pass{color:#40a02b}
+  [data-theme=light] .fail{color:#d20f39}
   .dim{color:var(--dim)}
 
   .findings{margin:8px 0 0;padding-left:20px;font-size:14px}
@@ -68,6 +73,7 @@
   <a href="/verify" class="active">Verify</a>
   <a href="https://docs.e-sig.org">Docs</a>
   <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+  <button class="themetoggle" type="button" aria-label="Toggle light or dark theme" title="Light/dark theme">&#9681;</button>
 </nav></div></header>
 
 <main>

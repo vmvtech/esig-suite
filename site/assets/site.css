@@ -23,8 +23,9 @@
   --z-header:10;
 }
 @media (prefers-color-scheme:light){
-  :root{--bg:#fbfcfe;--bg2:#f2f5f9;--card:#ffffff;--line:#e4e9f0;--fg:#141a21;--mut:#54636f;--dim:#8494a0;--accent:#C2410C;--accent2:#0e9f6e;--ink:#141a21;}
+  :root:not([data-theme=dark]){--bg:#fbfcfe;--bg2:#f2f5f9;--card:#ffffff;--line:#e4e9f0;--fg:#141a21;--mut:#54636f;--dim:#8494a0;--accent:#C2410C;--accent2:#0e9f6e;--ink:#141a21;}
 }
+:root[data-theme=light]{--bg:#fbfcfe;--bg2:#f2f5f9;--card:#ffffff;--line:#e4e9f0;--fg:#141a21;--mut:#54636f;--dim:#8494a0;--accent:#C2410C;--accent2:#0e9f6e;--ink:#141a21;}
 
 /* ── Base ────────────────────────────────────────────────────────────── */
 *{box-sizing:border-box}
@@ -32,7 +33,7 @@ html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;font-size:16.5px}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
 ::selection{background:color-mix(in srgb,var(--accent) 30%,transparent)}
 .wrap{max-width:1040px;margin:0 auto;padding:0 24px}
 .mono{font-family:var(--mono)}
@@ -60,23 +61,27 @@ body>header{position:sticky;top:0;z-index:var(--z-header);backdrop-filter:blur(1
 body>header nav{display:flex;align-items:center;gap:20px;height:60px}
 .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.02em;font-size:18px;color:var(--fg)!important}
 .brand:hover{text-decoration:none}
-.brandmark{height:23px;width:auto;border-radius:5px;display:block}
+.brandmark{height:46px;width:auto;border-radius:2.5px;display:block;transition:height .22s var(--ease-out)}
+html.hdr-scrolled .brandmark{height:23px}
 body>header nav .spacer{flex:1}
 body>header nav a{color:var(--mut);font-size:14.5px;font-weight:500;transition:color .15s ease-out}
 body>header nav a:hover{color:var(--fg);text-decoration:none}
 body>header nav a.active{color:var(--fg)}
-.ghbtn{border:1px solid var(--line);padding:6px 13px;border-radius:8px;color:var(--fg)!important}
+.ghbtn{border:1px solid var(--line);padding:6px 13px;border-radius:4px;color:var(--fg)!important}
+.themetoggle{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--mut);font-size:16px;line-height:1;cursor:pointer;transition:color .15s ease-out,border-color .15s ease-out}
+.themetoggle:hover{color:var(--fg);border-color:var(--mut)}
 @media(max-width:720px){body>header nav{gap:14px;overflow-x:auto}body>header nav a{white-space:nowrap}}
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
 .cta{display:flex;flex-wrap:wrap;gap:12px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:10px;font-weight:600;font-size:15px;border:1px solid transparent;transition:transform .18s var(--ease-out),border-color .18s ease-out,filter .18s ease-out}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:5px;font-weight:600;font-size:15px;border:1px solid transparent;transition:transform .18s var(--ease-out),border-color .18s ease-out,filter .18s ease-out}
 .btn:hover{text-decoration:none;transform:translateY(-1px)}
 /* Dark text on the bright brand orange (accessible + energetic); light mode's
    deeper orange (--accent #C2410C) takes white text instead. */
 .btn.primary{background:var(--accent);color:#160c00}
 .btn.primary:hover{filter:brightness(1.07)}
-@media(prefers-color-scheme:light){.btn.primary{color:#fff}}
+@media(prefers-color-scheme:light){:root:not([data-theme=dark]) .btn.primary{color:#fff}}
+[data-theme=light] .btn.primary{color:#fff}
 .btn.ghost{border-color:var(--line);color:var(--fg);background:var(--card)}
 .btn.ghost:hover{border-color:var(--mut)}
 
@@ -84,11 +89,11 @@ body>header nav a.active{color:var(--fg)}
 .pill b{color:var(--accent2);font-weight:600}
 
 /* ── Cards ───────────────────────────────────────────────────────────── */
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;transition:transform .25s var(--ease-out),border-color .25s ease-out,box-shadow .25s ease-out}
+.card{background:var(--card);border:1px solid var(--line);border-radius:7px;padding:20px;transition:transform .25s var(--ease-out),border-color .25s ease-out,box-shadow .25s ease-out}
 .card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--mut) 55%,var(--line));box-shadow:0 12px 32px -20px color-mix(in srgb,var(--accent) 35%,transparent)}
 
 /* ── Comparison tables ───────────────────────────────────────────────── */
-.tblwrap{overflow-x:auto;border-radius:12px;border:1px solid var(--line)}
+.tblwrap{overflow-x:auto;border-radius:6px;border:1px solid var(--line)}
 table.cmp{width:100%;border-collapse:collapse;font-size:14.5px;background:var(--card)}
 table.cmp th,table.cmp td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line)}
 table.cmp thead th{background:var(--bg2);color:var(--mut);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em}
@@ -122,7 +127,7 @@ footer .spacer{flex:1}
 .doc-head h1{font-size:clamp(32px,5vw,52px)}
 .doc-head .updated{font-family:var(--mono);font-size:13px;color:var(--dim);margin:0 0 18px}
 .doc-head .lead{max-width:720px}
-.toc{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:18px 22px;margin:10px 0 12px}
+.toc{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:18px 22px;margin:10px 0 12px}
 .toc ol{margin:0;padding:0 0 0 20px;columns:2;column-gap:36px;font-size:14px}
 .toc li{padding:3px 0;break-inside:avoid}
 .toc a{color:var(--mut)}
@@ -146,7 +151,7 @@ html.anim .rv.in{opacity:1;transform:none}
 @media (prefers-reduced-motion:reduce){
   html.anim .rv{opacity:1;transform:none;transition:none}
   html.anim .sigword .sig-stroke path{stroke-dasharray:none;stroke-dashoffset:0;animation:none}
-  .btn,.card{transition:none}
+  .btn,.card,.brandmark{transition:none}
   .btn:hover,.card:hover{transform:none}
   html{scroll-behavior:auto}
 }

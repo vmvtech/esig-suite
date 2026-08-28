@@ -15,6 +15,7 @@
 <link rel="icon" type="image/svg+xml" href="/assets/e-sig.svg">
 <link rel="preload" href="/fonts/vmvoneCondensed-Black.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/vmvone-regular.woff2" as="font" type="font/woff2" crossorigin>
+<script>(function(){try{var t=localStorage.getItem("esig-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}})()</script>
 <link rel="stylesheet" href="/assets/site.css">
 <script defer src="/assets/site.js"></script>
 <style>
@@ -47,12 +48,12 @@
   .card ul li.dim::before{content:"·";color:var(--dim)}
   .card .btn{margin-top:auto}
 
-  .trust{display:flex;flex-wrap:wrap;gap:22px;margin-top:28px;padding:22px;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--mut);font-size:14px}
+  .trust{display:flex;flex-wrap:wrap;gap:22px;margin-top:28px;padding:22px;background:var(--card);border:1px solid var(--line);border-radius:6px;color:var(--mut);font-size:14px}
   .trust b{color:var(--fg)}
-  .waitlist{margin:0 0 24px;padding:18px 20px;background:color-mix(in srgb,var(--accent) 9%,var(--card));border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));border-radius:12px;color:var(--mut);font-size:14px}
+  .waitlist{margin:0 0 24px;padding:18px 20px;background:color-mix(in srgb,var(--accent) 9%,var(--card));border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));border-radius:6px;color:var(--mut);font-size:14px}
   .waitlist b{color:var(--fg)}
 
-  .waitlist-panel{display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.25fr);gap:34px;margin-top:28px;padding:clamp(22px,4vw,38px);background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 10%,var(--card)),var(--card) 55%);border:1px solid color-mix(in srgb,var(--accent) 50%,var(--line));border-radius:16px;scroll-margin-top:84px}
+  .waitlist-panel{display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.25fr);gap:34px;margin-top:28px;padding:clamp(22px,4vw,38px);background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 10%,var(--card)),var(--card) 55%);border:1px solid color-mix(in srgb,var(--accent) 50%,var(--line));border-radius:8px;scroll-margin-top:84px}
   .waitlist-intro{align-self:start;position:sticky;top:88px}
   .waitlist-kicker{display:block;margin-bottom:12px;color:var(--accent2);font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase}
   .waitlist-intro h2{font-size:clamp(28px,4vw,40px);line-height:1.04;margin-bottom:14px}
@@ -64,7 +65,7 @@
   .form-field.full{grid-column:1/-1}
   .form-field label{font-size:13.5px;font-weight:600;color:var(--fg)}
   .form-field .optional{color:var(--dim);font-size:11.5px;font-weight:400}
-  .form-field input,.form-field select,.form-field textarea{width:100%;border:1px solid var(--line);border-radius:9px;background:var(--bg2);color:var(--fg);font:inherit;font-size:15px;line-height:1.4;padding:10px 12px;transition:border-color .15s ease-out,box-shadow .15s ease-out}
+  .form-field input,.form-field select,.form-field textarea{width:100%;border:1px solid var(--line);border-radius:4.5px;background:var(--bg2);color:var(--fg);font:inherit;font-size:15px;line-height:1.4;padding:10px 12px;transition:border-color .15s ease-out,box-shadow .15s ease-out}
   .form-field textarea{min-height:116px;resize:vertical}
   .form-field input:hover,.form-field select:hover,.form-field textarea:hover{border-color:var(--mut)}
   .form-field input:focus,.form-field select:focus,.form-field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent);outline:0}
@@ -80,7 +81,8 @@
   .form-status[data-state="error"]{color:#ff9b9b}
   .email-fallback{margin:6px 0 0;color:var(--mut);font-size:13px}
   .waitlist-trap{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
-  @media(prefers-color-scheme:light){.form-status[data-state="error"]{color:#b42318}}
+  @media(prefers-color-scheme:light){:root:not([data-theme=dark]) .form-status[data-state="error"]{color:#b42318}}
+  [data-theme=light] .form-status[data-state="error"]{color:#b42318}
   @media(max-width:760px){.waitlist-panel{grid-template-columns:1fr;gap:22px}.waitlist-intro{position:static}.form-grid{grid-template-columns:1fr}.form-field.full{grid-column:auto}}
 </style>
 </head>
@@ -94,6 +96,7 @@
   <a href="/why-esig">Why e-sig</a>
   <a href="https://docs.e-sig.org">Docs</a>
   <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
+  <button class="themetoggle" type="button" aria-label="Toggle light or dark theme" title="Light/dark theme">&#9681;</button>
 </nav></div></header>
 
 <main>
