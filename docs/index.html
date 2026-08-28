@@ -128,6 +128,12 @@
   <div class="grp">Integrations</div>
   <a href="#adapters">Storage adapters</a>
   <a href="#react">React UI</a>
+  <div class="grp">Agent signing</div>
+  <a href="#mcp">MCP server</a>
+  <a href="#mcp-email">Email &amp; reminders</a>
+  <a href="#mcp-events">Lifecycle events &amp; webhooks</a>
+  <a href="#mcp-identity">Signer identity (L0–L2)</a>
+  <a href="#mcp-pillar">Agent-to-agent (Pillar)</a>
   <div class="grp">Reference</div>
   <a href="#compliance">Security &amp; compliance</a>
   <a href="#api">API reference</a>
@@ -147,13 +153,19 @@
       <span>verify</span><span class="arw">→</span>
       <span>audit</span>
     </div>
-    <p>The suite is three packages plus a Next.js starter:</p>
+    <p>The suite is nine published packages plus a Next.js starter example:</p>
     <div class="tblwrap"><table>
-      <thead><tr><th>Package</th><th>Role</th><th>Runtime</th></tr></thead>
+      <thead><tr><th>Package</th><th>Role</th></tr></thead>
       <tbody>
-        <tr><td><code>@e-sig/core</code></td><td>The engine — render, cert issuance, PKCS#7/PAdES signing (+ RFC-3161 TSA), verification, and the storage-adapter interfaces.</td><td>Node, stack-agnostic</td></tr>
-        <tr><td><code>@e-sig/supabase</code></td><td>Reference adapters: cert store, audit-log store, PDF storage over Supabase (Postgres + Storage).</td><td>Supabase</td></tr>
-        <tr><td><code>@e-sig/react</code></td><td>UI: draw-to-sign pad, self-sign flow, receipt.</td><td>React 18/19</td></tr>
+        <tr><td><code>@e-sig/core</code></td><td>The engine — render, cert issuance, PKCS#7/PAdES signing (+ RFC-3161 TSA), verification, and the storage-adapter interfaces.</td></tr>
+        <tr><td><code>@e-sig/supabase</code></td><td>Reference adapters: cert store, audit-log store, PDF storage over Supabase (Postgres + Storage).</td></tr>
+        <tr><td><code>@e-sig/react</code></td><td>Draw-to-sign UI: signature pad, self-sign flow, receipt.</td></tr>
+        <tr><td><code>@e-sig/uuaid</code></td><td>Opt-in adapter: stamps the acting AI agent's UUAID into the audit log and anchors the audit hash-chain.</td></tr>
+        <tr><td><code>@e-sig/uaid-exch</code></td><td>Preview of the IAASO Exchange Profile (ADR-006): wraps core envelopes as per-transaction exchange records.</td></tr>
+        <tr><td><code>@e-sig/worm</code></td><td>WORM archival adapter: signed PDFs + audit-chain exports to S3 Object-Lock.</td></tr>
+        <tr><td><code>@e-sig/hsm-pkcs11</code></td><td>PKCS#11 adapter: keep the signing key in AWS CloudHSM, YubiHSM 2, SoftHSM2, or any Cryptoki provider.</td></tr>
+        <tr><td><code>@e-sig/mcp</code></td><td>MCP server for agent-driven signing — envelopes, delivery, reminders, lifecycle webhooks, signer identity, Pillar delivery. See <a href="#mcp">Agent signing</a>.</td></tr>
+        <tr><td><code>@e-sig/pillar-bridge</code></td><td>Optional agent-to-agent delivery bridge for <code>@e-sig/mcp</code> over UUAID's Pillar substrate. See <a href="#mcp-pillar">Agent-to-agent (Pillar)</a>.</td></tr>
       </tbody>
     </table></div>
     <div class="note warn">
@@ -418,6 +430,183 @@ import {
   onSigned={(receipt) =&gt; { /* persist / redirect */ }}
 /&gt;</code></pre>
     <p class="mut">Signature images are validated as image data URLs before they reach the PDF template.</p>
+  </section>
+
+  <section id="mcp">
+    <h2>MCP server (@e-sig/mcp)</h2>
+    <p>An MCP (Model Context Protocol) server for agent-driven e-signature workflows: agents draft, send, and track envelopes over <code>@e-sig/core</code>; a human holds the pen by default. Cryptographic control of signing stays with the human — no tool can produce a signature, and no tool can return a raw signing link, unless an operator explicitly opts in (<code>ESIG_MCP_RETURN_LINKS=1</code>, local demos only).</p>
+    <pre><code># zero setup — no passphrase, no data dir, no Chrome
+npx @e-sig/mcp demo --auto
+
+# wire it in for real: writes ./esig-data/, a .esig-mcp.env, and a ready .mcp.json snippet
+npx @e-sig/mcp init</code></pre>
+    <p class="mut">Three env vars start it: <code>ESIG_MCP_PASSPHRASE</code> (≥ 24 chars — encrypts the tenant's signing cert + PQ key bundle at rest), <code>ESIG_MCP_DELIVERY</code> (no default — see <a href="#mcp-email">Email delivery and reminders</a>), and <code>ESIG_MCP_DATA_DIR</code>.</p>
+    <h3>Tool surface</h3>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Tool</th><th>Kind</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>esig_create_envelope</code></td><td>prepare</td><td>Create an envelope from exactly one of <code>html</code> or a PDF <code>docId</code> + a signer list; dispatches signing links through the configured delivery channel.</td></tr>
+        <tr><td><code>esig_envelope_status</code></td><td>read</td><td>One envelope's status, phase, per-signer state (incl. verified identity), seal state, and sealed PDF path once sealed.</td></tr>
+        <tr><td><code>esig_identity_challenge</code></td><td>prepare</td><td>Issue (or re-issue) the sole-control challenge a signer's wallet/agent signs to satisfy an identity requirement.</td></tr>
+        <tr><td><code>esig_ingest_document</code></td><td>prepare</td><td>Store PDF bytes in a content-addressed workdir; returns a <code>docId</code> for a Chrome-free PDF envelope, or for <code>esig_verify_document</code>.</td></tr>
+        <tr><td><code>esig_list_envelopes</code></td><td>read</td><td>List envelopes for this server's tenant, optionally filtered by status.</td></tr>
+        <tr><td><code>esig_list_events</code></td><td>read</td><td>An envelope's lifecycle events, oldest first (<code>since</code> filters to events after a timestamp).</td></tr>
+        <tr><td><code>esig_reseal</code></td><td>prepare</td><td>Retry producing the sealed PDF for a completed envelope whose seal step failed or never ran.</td></tr>
+        <tr><td><code>esig_send_reminder</code></td><td>prepare</td><td>Resend a signing reminder to one pending signer, or every pending signer.</td></tr>
+        <tr><td><code>esig_verify_document</code></td><td>read</td><td>Verify a PDF's classical signature and, if present, its post-quantum seal — by <code>path</code> (confined to <code>ESIG_MCP_DOCS_ROOT</code>), <code>base64</code>, or a prior <code>docId</code>.</td></tr>
+        <tr><td><code>esig_void_envelope</code></td><td>prepare</td><td>Cancel a pending or partially-signed envelope.</td></tr>
+        <tr><td><code>esig_whoami</code></td><td>read</td><td>This server's tenant, enabled modes, caps, seal readiness, and public cert/PQ fingerprints — never key material.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note warn"><p><b>Modes: H today; A/C refuse to start by design.</b> There is no tool that signs. <code>esig_sign_as_agent</code> and <code>esig_cosign_start</code> (modes A/C — an agent signing as itself, and dual-key co-sign) are v0.2, gated behind a RedTeam review: <code>ESIG_MCP_MODES</code> containing <code>A</code> or <code>C</code> refuses to build a config at all, so there is no reachable code path in this package that can start a server for a mode it doesn't implement.</p></div>
+  </section>
+
+  <section id="mcp-email">
+    <h2>Email delivery and reminders</h2>
+    <p><code>ESIG_MCP_DELIVERY</code> has no default — an operator must pick where signing links go:</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Value</th><th>Where the link goes</th></tr></thead>
+      <tbody>
+        <tr><td><code>file</code></td><td>One JSON receipt per envelope, <code>&lt;ESIG_MCP_DATA_DIR&gt;/outbox/&lt;envelopeId&gt;.json</code> (mode <code>0600</code>) — the quickstart channel.</td></tr>
+        <tr><td><code>console</code></td><td>Printed to stderr — opt-in only, loud startup warning (stderr is the agent harness's own log in a stdio deployment).</td></tr>
+        <tr><td><code>webhook</code></td><td>POSTed to <code>ESIG_MCP_DELIVERY_WEBHOOK_URL</code>.</td></tr>
+        <tr><td><code>email</code></td><td>SMTP or SES — below.</td></tr>
+        <tr><td><code>pillar</code></td><td>Sealed over UUAID's Pillar substrate — see <a href="#mcp-pillar">Agent-to-agent (Pillar)</a>.</td></tr>
+      </tbody>
+    </table></div>
+    <pre><code>ESIG_MCP_DELIVERY=email
+ESIG_MCP_EMAIL_TRANSPORT=smtp        # or "ses"
+ESIG_MCP_EMAIL_FROM="Acme &lt;noreply@acme.com&gt;"
+ESIG_MCP_EMAIL_REPLY_TO=support@acme.com      # optional
+ESIG_MCP_EMAIL_SUBJECT_PREFIX="[Acme] "       # optional
+
+# smtp:
+ESIG_MCP_SMTP_HOST=smtp.example.com
+ESIG_MCP_SMTP_PORT=587               # 465 implies implicit TLS even without SMTP_SECURE=1
+ESIG_MCP_SMTP_USER=...
+ESIG_MCP_SMTP_PASS=...
+
+# ses (needs the optional peer dependency @aws-sdk/client-sesv2):
+ESIG_MCP_SES_REGION=us-east-1</code></pre>
+    <div class="note warn"><p><b>TLS rules, stated exactly.</b> STARTTLS is required by default; <code>ESIG_MCP_SMTP_ALLOW_PLAINTEXT=1</code> skips it entirely. Server certificate verification against the system CA is on by default; <code>ESIG_MCP_SMTP_ALLOW_UNVERIFIED_TLS=1</code> turns it off (<code>rejectUnauthorized:false</code>) — a loud startup warning prints every time that flag is set. Leave both unset for anything beyond a trusted loopback receiver.</p></div>
+    <p><code>smtp</code> is dependency-free (<code>node:net</code>/<code>node:tls</code> only — EHLO, STARTTLS, AUTH PLAIN/LOGIN). <code>ses</code> calls SESv2 <code>SendEmail</code> through <code>@aws-sdk/client-sesv2</code>, an <b>optional peer dependency this package never installs</b> — without it, <code>ESIG_MCP_EMAIL_TRANSPORT=ses</code> fails at first send with a clear install error, not a silent no-op.</p>
+    <h3>Reminders</h3>
+    <pre><code>ESIG_MCP_REMINDERS=24h,72h   # durations after creation; default off
+ESIG_MCP_REMINDER_MAX=3      # hard cap per signer</code></pre>
+    <p>Requires <code>ESIG_MCP_DELIVERY=email</code> — refused at startup otherwise, since there's no other channel to resend the original link through. An in-process 60-second tick sends a reminder to each still-<code>pending</code> signer whose next scheduled reminder is due; <code>esig_send_reminder(envelopeId, signerId?)</code> sends one on demand, counted against the server's shared hourly rate window (the same one envelope creation and other write tools draw from). The scheduler's automatic sends take no rate limit at all — so a burst of manual tool calls can never starve the reminders a human is actually waiting on, though a manual call can itself be refused while the hourly window is exhausted.</p>
+    <div class="note"><p><b>Link custody — the one custody change.</b> Core mints each signing token once and never re-mints it, so a reminder needs the original link. When reminders are configured, every signer's link is stored <b>encrypted at rest</b> (AES-256-GCM under <code>ESIG_MCP_PASSPHRASE</code>) and decrypted only inside the reminder-sending path — no tool ever returns it, exactly as link-free as before. It's erased the moment the state it exists to resend has passed: per-signer the moment they sign, and for the whole envelope on decline/void/expiry/completion.</p></div>
+  </section>
+
+  <section id="mcp-events">
+    <h2>Lifecycle events and webhooks</h2>
+    <p>Every state change on an envelope appends an event to its log (<code>metadata.mcp.events[]</code>, capped at 200). <code>esig_envelope_status</code> returns the last 10; <code>esig_list_events(envelopeId, since?)</code> returns them all, oldest first.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Event</th><th>Fires when</th></tr></thead>
+      <tbody>
+        <tr><td><code>envelope.created</code></td><td><code>esig_create_envelope</code> succeeds.</td></tr>
+        <tr><td><code>envelope.viewed</code></td><td><code>GET /sign/&lt;token&gt;</code> first resolves ok for a given signer (once per signer).</td></tr>
+        <tr><td><code>envelope.signed</code></td><td>A signer's signature is recorded.</td></tr>
+        <tr><td><code>envelope.declined</code></td><td>A signer declines — voids the whole envelope, attributed to that signer.</td></tr>
+        <tr><td><code>envelope.completed</code></td><td>Every signer has signed (independent of whether sealing then succeeds).</td></tr>
+        <tr><td><code>envelope.sealed</code> / <code>envelope.seal_failed</code></td><td>The seal step (automatic, or <code>esig_reseal</code>) succeeds or fails.</td></tr>
+        <tr><td><code>envelope.voided</code></td><td><code>esig_void_envelope</code>.</td></tr>
+        <tr><td><code>envelope.expired</code></td><td>A lazy 60-second tick catches any envelope nobody happened to poll.</td></tr>
+        <tr><td><code>envelope.reminder_sent</code></td><td>A reminder (automatic or <code>esig_send_reminder</code>) is sent.</td></tr>
+        <tr><td><code>signer.identity_verified</code> / <code>signer.identity_rejected</code></td><td>A signer identity check passes or fails.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="mut">12 types total (the two seal/decline pairs above each share a row). <code>data</code> — and every other field — never contains a signing link, token, proof, or document byte.</p>
+    <h3>Webhook delivery</h3>
+    <pre><code>ESIG_MCP_EVENTS_WEBHOOK_URL=https://your-app.example.com/esig-events
+ESIG_MCP_EVENTS_WEBHOOK_SECRET="a random secret, at least 32 characters"</code></pre>
+    <p>Operator config only — no tool can ever set or change it. Every event is persisted to <code>&lt;ESIG_MCP_DATA_DIR&gt;/events/queue/&lt;eventId&gt;.json</code> before any delivery attempt, then delivered in order, per envelope, <b>at-least-once</b>: a non-2xx response, a timeout (10s), or any 3xx redirect (never followed) counts as a failure and retries with exponential backoff — 1m → 2m → 4m → 8m → 16m → 32m, up to 6 attempts — after which the event is parked <code>dead</code> (audited <code>webhook.dead_lettered</code>).</p>
+    <p>Every request carries <code>Content-Type: application/json</code>, <code>User-Agent: esig-mcp/&lt;version&gt;</code>, <code>X-Esig-Event-Id</code>, <code>X-Esig-Timestamp</code> (ISO-8601), and <code>X-Esig-Signature: sha256=&lt;hex&gt;</code> — an HMAC-SHA256 over <code>timestamp + "." + body</code>, keyed by the webhook secret:</p>
+    <pre><code>import crypto from "node:crypto";
+
+const expected = "sha256=" + crypto
+  .createHmac("sha256", secret)
+  .update(`${timestamp}.${rawBody}`)
+  .digest("hex");
+// constant-time compare against the X-Esig-Signature header, reject
+// anything older than 5 minutes, and dedupe by X-Esig-Event-Id — at-least-
+// once delivery means a retried event can legitimately arrive twice.</code></pre>
+    <div class="note warn"><p><b>SSRF / private-range policy.</b> Both webhook URLs must be <code>https://</code> — <code>ESIG_MCP_ALLOW_INSECURE_WEBHOOK=1</code> (the link-delivery channel) and <code>ESIG_MCP_ALLOW_INSECURE_EVENTS_WEBHOOK=1</code> (the events channel) are deliberately separate flags, so relaxing one never relaxes the other. Before every send, the target host is resolved fresh and refused if any address is loopback, link-local (<code>169.254.0.0/16</code> — covers the cloud-metadata address — and <code>fe80::/10</code>), RFC1918, unique-local (<code>fc00::/7</code>), unspecified, or an IPv4-mapped IPv6 literal wrapping any of those — unless <code>ESIG_MCP_ALLOW_PRIVATE_WEBHOOK=1</code>. The request then connects to that exact vetted address, never letting the HTTP stack re-resolve the hostname itself (closing a DNS-rebinding TOCTOU); the <code>Host</code> header and TLS SNI stay on the original hostname.</p></div>
+  </section>
+
+  <section id="mcp-identity">
+    <h2>Signer identity (L0–L2)</h2>
+    <p>Bind <em>who signed</em> to a verifiable identity — <a href="https://uuaid.org">UUAID</a> identifiers and IAASO TAE assurance levels (ADR-006). Off by default; set it per envelope, per server floor, or both.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Level</th><th>What's proven</th><th>What the server checks</th></tr></thead>
+      <tbody>
+        <tr><td><code>none</code></td><td>Nothing (default).</td><td>—</td></tr>
+        <tr><td><code>L0</code></td><td>Nothing — self-asserted <code>uuaid</code>.</td><td>Well-formed, and matches the pinned <code>uuaid</code> if one was set at creation.</td></tr>
+        <tr><td><code>L1</code></td><td>Sole control of a key, self-asserted identity.</td><td>An <code>eddsa-jcs-2022</code> <code>DataIntegrityProof</code> over a server-issued, single-use, 15-minute challenge, verified locally against the key in <code>proof.verificationMethod</code>.</td></tr>
+        <tr><td><code>L1p</code></td><td>Key↔uuaid binding by construction.</td><td>Like <code>L1</code>, plus: when the <code>uuaid</code> is <code>uuaid:foundation:agent:&lt;localId&gt;</code>, <code>localId</code> must equal <code>localIdFromEd25519Key(proof key)</code> — no registry needed.</td></tr>
+        <tr><td><code>L2</code></td><td>Key↔uuaid binding, third-party verified.</td><td><code>L1</code>, plus: the registry's signed badge (<code>GET /iaaso/v1/badge/{uuaid}</code>) verifies against the pinned <code>ESIG_MCP_UUAID_REGISTRY_SIGNING_KEY</code>, and its subject matches both the presented key and the proving <code>uuaid</code>.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note warn"><p><b>Docs honesty.</b> <code>L0</code> and <code>L1</code> bind a <code>uuaid</code> to a signer only by self-assertion — the signer says "this uuaid is mine," and at <code>L1</code> proves they control a specific key, but nothing checks that claim against anything outside the request. Only <code>L2</code> actually verifies the key↔uuaid binding, against the UUAID registry.</p></div>
+    <pre><code>{
+  "identity": {
+    "minLevel": "L1",
+    "signers": [{ "index": 0, "uuaid": "uuaid:foundation:agent:&lt;uuid&gt;" }]
+  }
+}</code></pre>
+    <p class="mut"><code>minLevel</code> may only <b>raise</b> the server's <code>ESIG_MCP_IDENTITY_MIN_LEVEL</code> floor (default <code>none</code>) for that one envelope, never lower it. Obtain a challenge with the <code>esig_identity_challenge</code> tool or <code>GET /sign/&lt;token&gt;/challenge</code> — both idempotently re-issue the same live challenge until it's consumed or expires.</p>
+    <h3>Refusal codes</h3>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>L1_PROOF_REQUIRED</code></td><td>Level ≥ L1 requested but no proof presented.</td></tr>
+        <tr><td><code>L1_PROOF_INVALID</code></td><td>The Ed25519 signature over the challenge doesn't verify.</td></tr>
+        <tr><td><code>L1_NO_CHALLENGE</code> / <code>L1_NONCE_CONSUMED</code> / <code>L1_CHALLENGE_EXPIRED</code></td><td>No challenge was issued, it was already used, or its 15-minute TTL passed.</td></tr>
+        <tr><td><code>L1P_KEY_UUAID_MISMATCH</code></td><td>A <code>foundation:agent</code>-shaped uuaid whose local id doesn't derive from the proof key — refused, never silently accepted as plain L1.</td></tr>
+        <tr><td><code>L2_UUAID_NOT_FOUND</code></td><td>The registry has no badge for this uuaid (tombstoned or absent).</td></tr>
+        <tr><td><code>L2_BADGE_SUBJECT_MISMATCH</code></td><td>A badge signed for a different subject that happens to share the presentation key.</td></tr>
+        <tr><td><code>L2_REGISTRY_URL_CHANGED</code></td><td>The server's currently configured registry differs from the one this envelope pinned at creation.</td></tr>
+        <tr><td><code>L2_REGISTRY_UNAVAILABLE</code></td><td>A down/unreachable/malformed registry response — a hard failure, never a silent drop to L1.</td></tr>
+      </tbody>
+    </table></div>
+    <p><b>Pre-verified identity via proof sources.</b> A recipient agent can reply with a sealed identity proof instead of a human ever pasting JSON — <code>esig-mcp</code> polls its own inbox (see <a href="#mcp-pillar">Agent-to-agent (Pillar)</a> below), runs the same verification path <code>POST /sign</code>'s <code>identityProof</code> uses, and stores the result bound to that signer's challenge. The approval page then shows "Identity verified" and <code>POST /sign</code> accepts the signature with no <code>identityProof</code> at all.</p>
+  </section>
+
+  <section id="mcp-pillar">
+    <h2>Agent-to-agent over Pillar</h2>
+    <p>Reach a signer that is itself an agent — no inbound HTTP, no email — over <a href="https://uuaid.org">Pillar</a> (IAASO-3050), UUAID's agent-to-agent communication substrate: signed, end-to-end encrypted envelopes over a store-and-forward carrier. Delivered by the optional peer package <a href="https://www.npmjs.com/package/@e-sig/pillar-bridge"><code>@e-sig/pillar-bridge</code></a> (published, <code>0.1.0</code>) — <code>@e-sig/mcp</code> never depends on it, and loads it only with a dynamic <code>import()</code> the moment it's actually needed.</p>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Wire kind</th><th>Sender → recipient</th><th>What travels</th></tr></thead>
+      <tbody>
+        <tr><td><code>esig:sign-request</code></td><td>esig-mcp → signer</td><td>Signing link + sole-control challenge, sealed end-to-end. Refused (no send) without an <code>expiresAt</code>.</td></tr>
+        <tr><td><code>esig:event</code></td><td>esig-mcp → subscribers</td><td>One lifecycle event (see <a href="#mcp-events">above</a>), sealed the same way as the webhook payload.</td></tr>
+        <tr><td><code>esig:identity-proof</code></td><td>signer's agent → esig-mcp</td><td>A <code>DataIntegrityProof</code> (+ optional credential) over an issued challenge — see <a href="#mcp-identity">above</a>.</td></tr>
+        <tr><td><code>esig:sealed</code></td><td><em>reserved</em></td><td>Not implemented by this bridge.</td></tr>
+      </tbody>
+    </table></div>
+    <pre><code>ESIG_PILLAR_HOME          # keychain dir, default &lt;ESIG_MCP_DATA_DIR&gt;/pillar
+ESIG_PILLAR_PASSPHRASE    # required with pillar — same ≥24-char floor as ESIG_MCP_PASSPHRASE
+ESIG_PILLAR_CARRIERS      # required with pillar — comma-separated https:// carrier URLs
+ESIG_PILLAR_SUBSCRIBERS   # optional JSON [{uuaid, publicKey}] — lifecycle-event subscribers
+ESIG_PILLAR_PROOF_POLL    # seconds between inbox long-polls for identity proofs, default 1
+ESIG_MCP_PILLAR_ALLOW_UNREGISTERED   # "1" to allow a signer with no UUAID registry badge</code></pre>
+    <p><b>Sender verification, in order.</b> Before an <code>esig:identity-proof</code> payload is ever decrypted or handed to a caller: (1) a pre-decrypt size cap (default 512 KiB, the community carrier-tier floor) is checked against the envelope's own serialized size; (2) the envelope's transport signature is verified against the sender's key <em>before</em> decryption; (3) the now-authenticated sender must pass an injectable allowlist — <b>default deny</b>, omitting it refuses every sender; (4) a per-sender rate cap (default 30/minute) applies. Anything that fails any of these is dropped and counted, never logged in detail.</p>
+    <div class="note"><p><b>The hash-pinned shim.</b> Importing Pillar's own entry point pulls its full dependency graph — libp2p, native <code>better-sqlite3</code>. This bridge instead resolves and imports only the five small files it actually needs (envelope sealing/opening, keychain, JCS canonicalization, the carrier HTTP client, tier grants), asserted at startup against a pinned sha256 table for each supported Pillar version — a version drift or an unrecognized import throws unless <code>ESIG_PILLAR_ALLOW_UNPINNED=1</code> is set (loud, audited escape hatch). Said honestly: <code>npm install @e-sig/pillar-bridge</code> still pulls libp2p and better-sqlite3 as installed dependencies — this shim only keeps them out of the running <em>process</em>, not out of <code>node_modules</code>.</p></div>
+    <h3>Verifying a counter-signed document (A2A recipe)</h3>
+    <pre><code>import { verifyDocument } from "@e-sig/core";
+
+// 1. Transport: envelope.open() already proved the sealed message came
+//    from the claimed sender's Pillar key (see "Sender verification" above).
+
+// 2. Document seal: check the PDF itself before counter-signing.
+const v = verifyDocument(pdfBytes, {
+  expectedUuaid: senderUuaid,
+  requirePq: true,
+});
+if (!v.ok || !v.postQuantum.uuaidMatches) {
+  throw new Error("seal identity does not match the claimed sender");
+}
+// only now countersign / accept</code></pre>
+    <div class="note warn"><p><b>Honest limitation.</b> MCP mode A — the server signing as a dedicated agent identity — is designed and explicitly gated OFF (<code>ESIG_MCP_MODES</code> refuses to start with <code>A</code>); it is not implemented. The working path for "an agent signs as itself" today is <code>@e-sig/core</code>'s SDK directly: <code>signPdf({ ..., pqSeal: { keys, uuaid } })</code> embeds the agent's UUAID in the post-quantum seal, verifiable with <code>verifyDocument</code> above.</p></div>
   </section>
 
   <section id="compliance">

@@ -53,8 +53,13 @@
     },
     {
       "name": "@e-sig/mcp",
-      "repo": "https://github.com/vmvtech/esig-suite/tree/main/packages/esig-mcp",
-      "role": "MCP server for agent-driven signing: PDF envelopes, email + reminders, lifecycle webhooks, signer identity levels L0/L1/L1p/L2. Install from the repo until the next npm release."
+      "npm": "https://www.npmjs.com/package/@e-sig/mcp",
+      "role": "MCP server for agent-driven signing: PDF envelopes, email + reminders, lifecycle webhooks, signer identity levels L0/L1/L1p/L2, and agent-to-agent delivery over Pillar."
+    },
+    {
+      "name": "@e-sig/pillar-bridge",
+      "npm": "https://www.npmjs.com/package/@e-sig/pillar-bridge",
+      "role": "Optional bridge for @e-sig/mcp: signing links, lifecycle events, and identity proofs as signed, end-to-end encrypted envelopes over UUAID's Pillar substrate, instead of (or alongside) email/webhooks."
     }
   ],
   "quickstart": {
@@ -73,7 +78,9 @@
     "Append-only, hash-chained audit log (actor, IP, UA, cert fingerprint)",
     "Pluggable CertStore / AuditLogStore / PdfStorageStore / EnvelopeStore interfaces",
     "esig verify: CLI verification of a signed PDF (npx -y -p @e-sig/core esig verify <file.pdf> --json)",
-    "GitHub Action: verify signed PDFs in CI (action.yml; docs/verify-in-ci.md)"
+    "GitHub Action: verify signed PDFs in CI (action.yml; docs/verify-in-ci.md)",
+    "ESIG_MCP_DELIVERY=pillar: agent-to-agent signing-link delivery over UUAID's Pillar substrate (no inbound HTTP, no email)",
+    "Pillar identity proofs: a signer's own agent replies with a sealed DataIntegrityProof so a human just signs, no pasting"
   ],
   "trustNotes": [
     "Self-issued certificates are cryptographically valid but not trusted by default in stock PDF readers.",

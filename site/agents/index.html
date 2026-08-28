@@ -103,6 +103,7 @@
     <li>Pluggable <code>CertStore</code> / <code>AuditLogStore</code> / <code>PdfStorageStore</code> / <code>EnvelopeStore</code> — Supabase and filesystem adapters included</li>
     <li><code>esig verify</code> — CLI verification of a signed PDF (<code>npx -y -p @e-sig/core esig verify &lt;file.pdf&gt; --json</code>)</li>
     <li>GitHub Action — verify signed PDFs in CI (<code>action.yml</code>; <a href="https://github.com/vmvtech/esig-suite/blob/main/docs/verify-in-ci.md">docs/verify-in-ci.md</a>)</li>
+    <li><code>@e-sig/pillar-bridge</code> — agent-to-agent signing delivery + identity proofs over UUAID's Pillar substrate (published, <code>0.1.0</code>)</li>
   </ul>
 </div></section>
 
@@ -130,7 +131,42 @@ $ npm run quickstart   <span class="c"># issue cert → render → sign (+timest
 
 <section id="mcp"><div class="wrap" data-stagger="80">
   <h2 class="rv"><span class="mono">@e-sig/mcp</span> — agent-driven signing</h2>
-  <p class="lead rv">An MCP server that lets an agent drive the whole envelope lifecycle — create a PDF envelope, track its signers, poll status, and confirm the sealed result — while cryptographic control of signing stays with a human by default. Two commands to try it: <span class="mono">npx @e-sig/mcp demo --auto</span> for a scripted end-to-end run, or <span class="mono">npx @e-sig/mcp init</span> to wire it into Claude Desktop or a project's <span class="mono">.mcp.json</span>. Delivery channels include a file outbox, console, webhook, email with reminders, and lifecycle events with signed webhook delivery (at-least-once, with backoff). Signer identity is checked at one of four levels — <span class="mono">L0</span>/<span class="mono">L1</span>/<span class="mono">L1p</span>/<span class="mono">L2</span> — from a self-asserted UUAID up to a registry-verified badge, with <span class="mono">L1p</span> deriving identity straight from an Ed25519 key with no registry needed. Source: <a href="https://github.com/vmvtech/esig-suite/tree/main/packages/esig-mcp"><span class="mono">packages/esig-mcp</span> ↗</a>. The repo carries 0.5.0; npm currently serves 0.3.0.</p>
+  <p class="lead rv">An MCP server that lets an agent drive the whole envelope lifecycle — create a PDF envelope, track its signers, poll status, and confirm the sealed result — while cryptographic control of signing stays with a human by default. Two commands to try it: <span class="mono">npx @e-sig/mcp demo --auto</span> for a scripted end-to-end run, or <span class="mono">npx @e-sig/mcp init</span> to wire it into Claude Desktop or a project's <span class="mono">.mcp.json</span>. Published to npm at <span class="mono">0.5.0</span> — <a href="https://www.npmjs.com/package/@e-sig/mcp">npm ↗</a>. Source: <a href="https://github.com/vmvtech/esig-suite/tree/main/packages/esig-mcp"><span class="mono">packages/esig-mcp</span> ↗</a>. Full reference: <a href="https://docs.e-sig.org/#mcp">docs.e-sig.org</a>.</p>
+
+  <h3 style="margin:28px 0 12px;font-size:15.5px">Tool surface (11 tools)</h3>
+  <div class="tblwrap rv"><table class="cmp">
+    <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">esig_create_envelope</td><td>Create an envelope from HTML or a PDF <span class="mono">docId</span> + signers; dispatches links through the configured delivery channel.</td></tr>
+      <tr><td class="mono">esig_envelope_status</td><td>One envelope's status, phase, per-signer state, seal state, sealed PDF path.</td></tr>
+      <tr><td class="mono">esig_identity_challenge</td><td>Issue the sole-control challenge a signer's key must sign.</td></tr>
+      <tr><td class="mono">esig_ingest_document</td><td>Store PDF bytes; returns a <span class="mono">docId</span> for a Chrome-free PDF envelope, or for verification.</td></tr>
+      <tr><td class="mono">esig_list_envelopes</td><td>List envelopes for this server's tenant, optionally by status.</td></tr>
+      <tr><td class="mono">esig_list_events</td><td>An envelope's lifecycle events, oldest first.</td></tr>
+      <tr><td class="mono">esig_reseal</td><td>Retry the sealed-PDF step after a seal failure.</td></tr>
+      <tr><td class="mono">esig_send_reminder</td><td>Resend a signing reminder, on demand.</td></tr>
+      <tr><td class="mono">esig_verify_document</td><td>Verify a PDF's classical signature and, if present, its post-quantum seal.</td></tr>
+      <tr><td class="mono">esig_void_envelope</td><td>Cancel a pending or partially-signed envelope.</td></tr>
+      <tr><td class="mono">esig_whoami</td><td>Tenant, enabled modes, caps, seal readiness, cert/PQ fingerprints — never key material.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note rv" style="margin-top:10px"><b>No tool signs.</b> Modes A/C (agent-signs-as-itself; dual-key co-sign) are v0.2, gated behind a RedTeam review — <span class="mono">ESIG_MCP_MODES</span> refuses to even start a server configured for them. Full tool contracts: <a href="https://docs.e-sig.org/#mcp">docs.e-sig.org/#mcp</a>.</p>
+
+  <h3 style="margin:28px 0 12px;font-size:15.5px">Delivery and lifecycle events</h3>
+  <p class="lead rv" style="font-size:15.5px">Delivery channels: a <span class="mono">file</span> outbox, <span class="mono">console</span>, <span class="mono">webhook</span>, <span class="mono">email</span> (SMTP or SES, with reminders), and <span class="mono">pillar</span> — reaching a signer that is itself an agent, over UUAID's <a href="https://uuaid.org">Pillar</a> substrate via the published bridge <a href="https://www.npmjs.com/package/@e-sig/pillar-bridge"><span class="mono">@e-sig/pillar-bridge</span> ↗</a> (<span class="mono">0.1.0</span>). Every state change appends one of 12 lifecycle event types (<span class="mono">envelope.created</span> … <span class="mono">signer.identity_rejected</span>) to a signed, at-least-once webhook queue with exponential backoff. Full event catalog: <a href="https://docs.e-sig.org/#mcp-events">docs.e-sig.org/#mcp-events</a>.</p>
+
+  <h3 style="margin:28px 0 12px;font-size:15.5px">Signer identity</h3>
+  <div class="tblwrap rv"><table class="cmp">
+    <thead><tr><th>Level</th><th>What's proven</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">none</td><td>Nothing (default).</td></tr>
+      <tr><td class="mono">L0</td><td>Self-asserted <span class="mono">uuaid</span> — no cryptographic proof.</td></tr>
+      <tr><td class="mono">L1</td><td>Sole control of a key (Ed25519 <span class="mono">DataIntegrityProof</span>) — identity itself still self-asserted.</td></tr>
+      <tr><td class="mono">L1p</td><td>Key↔uuaid binding by construction — a Pillar agent identity, no registry needed.</td></tr>
+      <tr><td class="mono">L2</td><td>Key↔uuaid binding verified against the UUAID registry's signed badge.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note rv">Full ladder, refusal codes, and pre-verified identity via Pillar: <a href="https://docs.e-sig.org/#mcp-identity">docs.e-sig.org/#mcp-identity</a>. Agent-to-agent delivery detail: <a href="https://docs.e-sig.org/#mcp-pillar">docs.e-sig.org/#mcp-pillar</a>.</p>
 </div></section>
 
 <section id="agent-signing"><div class="wrap" data-stagger="80">

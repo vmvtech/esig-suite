@@ -33,8 +33,10 @@
 - [Agents](https://e-sig.org/agents): machine-oriented integration guide — capabilities, exact API names, quickstart commands, and trust semantics.
 - [agent.json](https://e-sig.org/agent.json): machine-readable manifest (packages, endpoints, contacts).
 - [Full site digest](https://e-sig.org/llms-full.txt): all public pages as plain text.
+- [Agent signing docs](https://docs.e-sig.org/#mcp): MCP server, email delivery, lifecycle events/webhooks, signer identity (L0–L2), and agent-to-agent delivery over Pillar.
 - [@e-sig/uuaid](https://www.npmjs.com/package/@e-sig/uuaid): stamp the acting AI agent's identity into the signature's audit log.
-- [@e-sig/mcp](https://github.com/vmvtech/esig-suite/tree/main/packages/esig-mcp): MCP server for agent-driven signing. Install from the repo until the next npm release.
+- [@e-sig/mcp](https://www.npmjs.com/package/@e-sig/mcp): MCP server for agent-driven signing — envelopes, file/console/webhook/email/Pillar delivery, lifecycle events, signer identity L0–L2. npm 0.5.0.
+- [@e-sig/pillar-bridge](https://www.npmjs.com/package/@e-sig/pillar-bridge): optional agent-to-agent delivery bridge for @e-sig/mcp over UUAID's Pillar substrate. npm 0.1.0.
 
 ## Press
 
