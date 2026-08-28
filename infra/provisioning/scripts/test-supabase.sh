@@ -20,12 +20,28 @@ docker run --detach \
   --env POSTGRES_HOST_AUTH_METHOD=trust \
   "$SUPABASE_DB_IMAGE" >/dev/null
 
+# The supabase image starts postgres, runs init, then RESTARTS it — a single
+# pg_isready success can land in the pre-restart window, after which the very
+# next connection fails with "the database system is shutting down" (seen live:
+# CI run 33186318424). Readiness therefore requires THREE consecutive
+# one-second-apart successes of a real query, not one probe.
 database_ready=0
-for _ in $(seq 1 30); do
+consecutive=0
+for _ in $(seq 1 60); do
+  # `select 1` is not enough: the image's own migrations can still be running
+  # (locally under amd64 emulation this window is seconds long), and DDL issued
+  # then dies inside the image's graphql event trigger with "could not open
+  # relation" on graphql.seq_schema_version. Reading that very sequence proves
+  # the migration that creates it has completed.
   if docker exec "$DB_CONTAINER" \
-    pg_isready -U supabase_admin -d postgres >/dev/null 2>&1; then
-    database_ready=1
-    break
+    psql -X -U supabase_admin -d postgres -Atc 'select last_value from graphql.seq_schema_version' >/dev/null 2>&1; then
+    consecutive=$((consecutive + 1))
+    if [[ "$consecutive" -ge 3 ]]; then
+      database_ready=1
+      break
+    fi
+  else
+    consecutive=0
   fi
   sleep 1
 done
