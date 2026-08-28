@@ -3,7 +3,7 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
-## @e-sig/mcp 0.5.0 — 2026-08-28
+## @e-sig/mcp 0.5.0 — 2026-08-27
 
 ### `@e-sig/mcp` 0.5.0: L1p self-authenticating identity + Pillar seams (docs/architecture/esig-mcp.md §17 Stage B)
 
