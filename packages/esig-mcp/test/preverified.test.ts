@@ -99,8 +99,15 @@ describe("EnvelopeService.acceptPreVerifiedIdentity (§17 seam 3)", () => {
     const { base, server } = await startHttp(config, envelopes);
     const wallet = makeSelfAuthenticatingWallet();
     const proofSource = new FakeProofSource();
+    // Capture the acceptance promise so the test can await it: the real
+    // wiring is fire-and-forget, but asserting after a wall-clock sleep is
+    // racy — on a slow CI runner the acceptance write can still be in
+    // flight when POST /sign lands, and the two writes collide on the same
+    // envelope (EnvelopeConflictError -> 409, I3 semantics; seen live on
+    // CI run 33142029021, Node 22, while 5 consecutive local runs passed).
+    let acceptance: Promise<unknown> = Promise.resolve();
     proofSource.start((evt) => {
-      void envelopes.acceptPreVerifiedIdentity(evt);
+      acceptance = envelopes.acceptPreVerifiedIdentity(evt);
     });
 
     const created = await envelopes.create({
@@ -126,9 +133,12 @@ describe("EnvelopeService.acceptPreVerifiedIdentity (§17 seam 3)", () => {
       senderUuaid: wallet.uuaid,
       pillarEnvelopeId: "pillar-env-1",
     });
-    // acceptPreVerifiedIdentity is async but fire-and-forget from onProof —
-    // give its microtask/IO a moment to land before asserting.
-    await new Promise((r) => setTimeout(r, 50));
+    // Deterministic: the acceptance write has fully landed before the POST,
+    // so the only writer during /sign is /sign itself.
+    // acceptPreVerifiedIdentity resolves to the stored SignerIdentityRecord
+    // on success (undefined = refused) — assert the acceptance actually
+    // verified before exercising the sign path that consumes it.
+    expect(await acceptance).toBeTruthy();
 
     // The human just signs — NO identityProof in the POST body.
     const res = await fetch(`${base}/sign/${token}`, {
