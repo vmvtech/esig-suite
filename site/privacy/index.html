@@ -21,7 +21,7 @@
   <span class="spacer"></span>
   <a href="/#how">How it works</a>
   <a href="/pricing">Pricing</a>
-  <a href="/why-vmv">Why VMV</a>
+  <a href="/why-esig">Why e-sig</a>
   <a href="https://docs.e-sig.org">Docs</a>
   <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
 </nav></div></header>
@@ -29,7 +29,7 @@
 <main><div class="wrap">
 <header class="doc-head">
   <h1>Privacy Policy</h1>
-  <p class="updated">Effective date: July 5, 2026</p>
+  <p class="updated">Effective date: August 6, 2026</p>
   <p class="lead">This page explains what information VMVTech, Ltd. collects through the e-sig.org website and its services, why we collect it, who we share it with, and the rights you have. This paragraph is only a plain-English summary and is not a substitute for the full policy below. The short version: this website has no accounts, no trackers, no advertising, and sets no cookies, and our self-hosted software sends us nothing.</p>
 </header>
 <nav class="toc" aria-label="On this page"><ol>
@@ -37,7 +37,7 @@
   <li><a href="#s2">The short version: what we do not do</a></li>
   <li><a href="#s3">What we actually collect on this website</a></li>
   <li><a href="#s4">The self-hosted SDK sends us nothing</a></li>
-  <li><a href="#s5">The e-sig Cloud service: we act as a processor</a></li>
+  <li><a href="#s5">The e-sig Cloud private preview</a></li>
   <li><a href="#s6">How we use information</a></li>
   <li><a href="#s7">Legal bases for processing (EEA and UK)</a></li>
   <li><a href="#s8">How long we keep information</a></li>
@@ -62,7 +62,7 @@
     <h2 id="s2">2. The short version: what we do not do</h2>
     <p>Before the detail, here is what does <strong>not</strong> happen on this Site, stated plainly:</p>
     <ul>
-      <li><strong>No accounts.</strong> The Site has no user accounts, no login, and no registration forms.</li>
+      <li><strong>No accounts.</strong> The Site has no user accounts, no login, and no account-registration forms. The pricing page has a contact form for Cloud and commercial-offer waitlist requests.</li>
       <li><strong>No analytics trackers.</strong> We run no analytics scripts and no visitor-measurement pixels.</li>
       <li><strong>No advertising.</strong> We show no ads, embed no ad networks, and place no advertising trackers.</li>
       <li><strong>No cookies set by this Site.</strong> The Site itself sets no cookies of any kind, first-party or third-party.</li>
@@ -73,11 +73,11 @@
   </section>
   <section>
     <h2 id="s3">3. What we actually collect on this website</h2>
-    <p>The Site is a static site hosted on Amazon Web Services (AWS S3 and CloudFront). The information connected with your visit is limited to the following:</p>
+    <p>The public Site pages are hosted on Amazon Web Services (AWS S3 and CloudFront), and the waitlist form sends submissions to an AWS-hosted API. The information connected with your visit is limited to the following:</p>
     <ul>
       <li><strong>Server and CDN access logs.</strong> Like almost every website, our AWS hosting infrastructure automatically generates access logs when you request a page. These logs contain your IP address, browser user agent string, timestamps, and the URLs requested. We use them for <em>security</em> (detecting abuse, denial-of-service attempts, and scanning) and <em>operations</em> (diagnosing availability and performance problems). They are not used to build visitor profiles.</li>
       <li><strong>Email correspondence.</strong> If you email us (for example at <a href="mailto:legal@e-sig.org">legal@e-sig.org</a>, sales@e-sig.org, or security@e-sig.org), we receive your email address, anything you choose to include in your message, and routine email metadata. We use it to respond to you and to keep a record of the correspondence.</li>
-      <li><strong>Checkout and payment.</strong> If you purchase a paid plan from <a href="/pricing">/pricing</a>, checkout is routed to our payment processor, <strong>Stripe</strong>. Stripe collects and processes your payment details directly. <strong>VMVTech never stores your card numbers.</strong> Stripe's handling of your data is governed by its own privacy policy at <a href="https://stripe.com/privacy">https://stripe.com/privacy</a>. We may receive limited, non-card information about your order from Stripe (for example, confirmation that a payment succeeded and the contact details needed to administer the subscription).</li>
+      <li><strong>Cloud and commercial-offer waitlist.</strong> The Site does not currently offer paid Cloud checkout. If you submit the waitlist form, we collect the email address and selected offer you enter, your checkbox assertion authorizing one-to-one follow-up about that specific request, and any optional name, company, use case, and expected monthly volume you provide. AWS also processes routine request metadata needed to deliver and secure the form. Intake does not verify email ownership, and we do not send a verification email: email ownership is recorded as unverified, and contact permission is stored as asserted and unverified. The submitted email and checkbox values are not proof of identity, email ownership, or consent to unrelated marketing. We use the submission to record your interest, understand your use case, and respond about the requested private-preview or commercial access. Joining the waitlist does not create an account, subscription, payment obligation, or promise of access.</li>
     </ul>
     <p>That is the complete list of what we intentionally collect through the Site. We do not collect precise location data, biometric data, or your browsing history on other websites, and we do not currently enrich Site data with information purchased from data brokers.</p>
   </section>
@@ -91,8 +91,8 @@
     <p>Because the SDK operates entirely under your control, you (not VMVTech) are responsible for the personal data your deployment processes and for your own compliance obligations as its controller or processor.</p>
   </section>
   <section>
-    <h2 id="s5">5. The e-sig Cloud service: we act as a processor</h2>
-    <p>When a customer uses the paid e-sig Cloud service, VMVTech hosts and operates the signing infrastructure on that customer's behalf. In doing so we process <strong>customer content</strong>, which can include:</p>
+    <h2 id="s5">5. The e-sig Cloud private preview</h2>
+    <p>Paid Cloud checkout is not currently available. If we invite a waitlisted organization into the private preview under a separate written agreement, VMVTech will host and operate the signing infrastructure on that customer's behalf. In doing so we may process <strong>customer content</strong>, which can include:</p>
     <ul>
       <li>documents uploaded for signature;</li>
       <li>signer names and email addresses;</li>
@@ -108,7 +108,7 @@
     <p>We use the limited information described above only for the following purposes:</p>
     <ul>
       <li>to operate, secure, and troubleshoot the Site and our services (access logs);</li>
-      <li>to respond to inquiries, sales questions, legal requests, and security reports (email correspondence);</li>
+      <li>to record and respond to waitlist requests, inquiries, sales questions, legal requests, and security reports (waitlist form submissions and email correspondence);</li>
       <li>to provide, bill for, and support paid services you purchase (order and billing information, customer content as instructed);</li>
       <li>to comply with legal obligations, including tax, accounting, and lawful requests from authorities; and</li>
       <li>to establish, exercise, or defend legal claims.</li>
@@ -120,7 +120,7 @@
     <p>Where the EU or UK General Data Protection Regulation applies, we rely on the following legal bases:</p>
     <ul>
       <li><strong>Legitimate interests</strong> (Article 6(1)(f)): maintaining access logs to secure and operate the Site, preventing abuse, and defending legal claims. Our interest in keeping the Site available and secure is balanced against the minimal intrusiveness of standard access logs.</li>
-      <li><strong>Performance of a contract</strong> (Article 6(1)(b)): providing services you purchase, processing your checkout, and responding to your pre-contract inquiries.</li>
+      <li><strong>Performance of a contract or steps requested before a contract</strong> (Article 6(1)(b)): providing separately agreed services and responding to your waitlist or other pre-contract inquiries.</li>
       <li><strong>Legal obligation</strong> (Article 6(1)(c)): retaining records and disclosing information where the law requires it.</li>
     </ul>
     <p>For customer content processed through e-sig Cloud, the legal basis is determined by the customer as controller; we process on the customer's instructions.</p>
@@ -129,16 +129,17 @@
     <h2 id="s8">8. How long we keep information</h2>
     <ul>
       <li><strong>Access logs</strong> are kept only as long as needed for security and operational purposes and are then deleted or rotated out in the ordinary course.</li>
+      <li><strong>Waitlist form submissions</strong> are automatically deleted by time-to-live (TTL) within 180 days. If a legal obligation requires us to retain a business record for longer, that record is retained separately rather than extending the waitlist record's TTL. Smoke-test submissions using an <span class="mono">@example.com</span> address are automatically deleted by TTL within 24 hours.</li>
       <li><strong>Email correspondence</strong> is kept as long as needed to handle the matter it relates to and to maintain a reasonable business record, after which it may be deleted.</li>
       <li><strong>Billing and transaction records</strong> are kept for as long as tax, accounting, and other legal obligations require.</li>
-      <li><strong>e-sig Cloud customer content</strong> is retained according to the customer's instructions and the applicable service agreement, and is deleted or returned as that agreement provides.</li>
+      <li><strong>e-sig Cloud private-preview customer content</strong>, if any, is retained according to the customer's instructions and the applicable service agreement, and is deleted or returned as that agreement provides.</li>
     </ul>
   </section>
   <section>
     <h2 id="s9">9. When we share information</h2>
     <p>We <strong>never sell</strong> personal information. We share it only in these circumstances:</p>
     <ul>
-      <li><strong>Service providers and subprocessors.</strong> We use a small number of infrastructure and payment providers to run our business, currently including <strong>Amazon Web Services</strong> (hosting and content delivery) and <strong>Stripe</strong> (payment processing). They may process personal information only to provide their services to us and are bound by their own contractual and legal obligations.</li>
+      <li><strong>Service providers and subprocessors.</strong> We use a small number of providers to run our business, including <strong>Amazon Web Services</strong> for hosting, content delivery, and waitlist-form processing and storage, and our email provider for correspondence. They may process personal information only to provide their services to us and are bound by their own contractual and legal obligations.</li>
       <li><strong>Legal compulsion.</strong> We may disclose information where required by law, regulation, subpoena, court order, or other lawful process, or where reasonably necessary to protect the rights, safety, or property of VMVTech, our customers, or others.</li>
       <li><strong>Corporate transactions.</strong> If VMVTech is involved in a merger, acquisition, financing, reorganization, or sale of assets, personal information may be transferred as part of that transaction, subject to this policy or successor terms that provide comparable protection.</li>
     </ul>
@@ -187,7 +188,7 @@
   </section>
   <section>
     <h2 id="s15">15. Third-party sites and services</h2>
-    <p>The Site links to third-party sites and services we do not control, including GitHub, npm, Stripe's checkout pages, and the websites of other vendors named in our comparison tables. Those third parties have their own privacy practices and policies, and this policy does not apply to them. In particular, if you proceed to checkout, Stripe's pages operate under Stripe's own privacy policy, and Stripe may set its own cookies on its own domains. We encourage you to review the policies of any third-party service before providing it your information.</p>
+    <p>The Site links to third-party sites and services we do not control, including GitHub, npm, and the websites of other vendors named in our comparison tables. Those third parties have their own privacy practices and policies, and this policy does not apply to them. The waitlist form is a first-party e-sig form hosted on AWS and is governed by this policy. We encourage you to review the policies of any third-party service before providing it your information.</p>
   </section>
   <section>
     <h2 id="s16">16. Changes to this policy</h2>
@@ -211,7 +212,7 @@
     <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
     <span class="spacer"></span>
     <a href="/pricing">Pricing</a>
-    <a href="/why-vmv">Why VMV</a>
+    <a href="/why-esig">Why e-sig</a>
     <a href="https://docs.e-sig.org">Docs</a>
     <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
     <a href="https://www.npmjs.com/package/@e-sig/core">npm</a>

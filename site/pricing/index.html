@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pricing — e-sig</title>
-<meta name="description" content="MIT SDK free forever. Managed Cloud from $19/mo. Business (self-hosted) $299/mo. Enterprise from $18k/yr. $0.20/envelope overage — the cheapest on the market.">
+<meta name="description" content="MIT SDK free forever. Join the waitlist for e-sig Shared Cloud with RLS isolation or Dedicated Cloud with a separate Supabase and AWS stack.">
 <meta property="og:title" content="Pricing — e-sig">
-<meta property="og:description" content="MIT free forever. Cloud from $19/mo. Business $299/mo. Enterprise from $18k/yr.">
+<meta property="og:description" content="MIT free forever. Shared and Dedicated e-sig Cloud are in private preview with waitlist-only access.">
 <meta property="og:url" content="https://e-sig.org/pricing">
 <meta property="og:image" content="https://e-sig.org/assets/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -49,6 +49,39 @@
 
   .trust{display:flex;flex-wrap:wrap;gap:22px;margin-top:28px;padding:22px;background:var(--card);border:1px solid var(--line);border-radius:12px;color:var(--mut);font-size:14px}
   .trust b{color:var(--fg)}
+  .waitlist{margin:0 0 24px;padding:18px 20px;background:color-mix(in srgb,var(--accent) 9%,var(--card));border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));border-radius:12px;color:var(--mut);font-size:14px}
+  .waitlist b{color:var(--fg)}
+
+  .waitlist-panel{display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.25fr);gap:34px;margin-top:28px;padding:clamp(22px,4vw,38px);background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 10%,var(--card)),var(--card) 55%);border:1px solid color-mix(in srgb,var(--accent) 50%,var(--line));border-radius:16px;scroll-margin-top:84px}
+  .waitlist-intro{align-self:start;position:sticky;top:88px}
+  .waitlist-kicker{display:block;margin-bottom:12px;color:var(--accent2);font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase}
+  .waitlist-intro h2{font-size:clamp(28px,4vw,40px);line-height:1.04;margin-bottom:14px}
+  .waitlist-intro p{margin:0 0 14px;color:var(--mut);font-size:14.5px}
+  .waitlist-intro .selected-offer{color:var(--fg);font-weight:600}
+  .waitlist-form{min-width:0}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+  .form-field{display:flex;flex-direction:column;gap:6px;min-width:0}
+  .form-field.full{grid-column:1/-1}
+  .form-field label{font-size:13.5px;font-weight:600;color:var(--fg)}
+  .form-field .optional{color:var(--dim);font-size:11.5px;font-weight:400}
+  .form-field input,.form-field select,.form-field textarea{width:100%;border:1px solid var(--line);border-radius:9px;background:var(--bg2);color:var(--fg);font:inherit;font-size:15px;line-height:1.4;padding:10px 12px;transition:border-color .15s ease-out,box-shadow .15s ease-out}
+  .form-field textarea{min-height:116px;resize:vertical}
+  .form-field input:hover,.form-field select:hover,.form-field textarea:hover{border-color:var(--mut)}
+  .form-field input:focus,.form-field select:focus,.form-field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent);outline:0}
+  .form-field [aria-invalid="true"]{border-color:#ff7a7a;box-shadow:0 0 0 3px color-mix(in srgb,#ff7a7a 16%,transparent)}
+  .form-help{margin:0;color:var(--dim);font-size:11.5px}
+  .consent-row{display:flex;align-items:flex-start;gap:10px;margin:18px 0 16px;color:var(--mut);font-size:13px}
+  .consent-row input{width:17px;height:17px;flex:0 0 auto;margin-top:2px;accent-color:var(--accent)}
+  .consent-row label{cursor:pointer}
+  .waitlist-submit{width:100%;cursor:pointer;font-family:inherit}
+  .waitlist-submit:disabled{cursor:wait;filter:saturate(.35);opacity:.72;transform:none}
+  .form-status{min-height:24px;margin:12px 0 0;color:var(--mut);font-size:13.5px;font-weight:600}
+  .form-status[data-state="success"]{color:var(--accent2)}
+  .form-status[data-state="error"]{color:#ff9b9b}
+  .email-fallback{margin:6px 0 0;color:var(--mut);font-size:13px}
+  .waitlist-trap{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
+  @media(prefers-color-scheme:light){.form-status[data-state="error"]{color:#b42318}}
+  @media(max-width:760px){.waitlist-panel{grid-template-columns:1fr;gap:22px}.waitlist-intro{position:static}.form-grid{grid-template-columns:1fr}.form-field.full{grid-column:auto}}
 </style>
 </head>
 <body>
@@ -58,7 +91,7 @@
   <span class="spacer"></span>
   <a href="/#how">How it works</a>
   <a href="/pricing" class="active">Pricing</a>
-  <a href="/why-vmv">Why VMV</a>
+  <a href="/why-esig">Why e-sig</a>
   <a href="https://docs.e-sig.org">Docs</a>
   <a class="ghbtn" href="https://github.com/vmvtech/esig-suite">GitHub ↗</a>
 </nav></div></header>
@@ -69,7 +102,9 @@
   <div data-stagger="90">
   <span class="pill rv">MIT-licensed SDK · <b>free forever</b> · pay only for hosting</span>
   <h1 class="rv">Pricing<span class="accent-serif">.</span></h1>
-  <p class="sub rv">The SDK is <a href="https://github.com/vmvtech/esig-suite">MIT-licensed</a> and free forever. When you don't want to run Postgres, rotate certs, chase deliverability, or answer auditors — Cloud starts at $19/mo. Per-envelope overage is $0.20, the cheapest on the market.</p>
+  <p class="sub rv">The SDK is <a href="https://github.com/vmvtech/esig-suite">MIT-licensed</a> and free forever. Managed Cloud is in private preview while we finish automatic account and workspace provisioning.</p>
+
+  <div class="waitlist rv" id="cloud-waitlist"><b>No checkout yet.</b> Join the Cloud waitlist and tell us what you need. We will not take payment until your account can be provisioned and used end to end. Shared prices below are support-backed planning estimates; invitation-only 90-day founding previews may be offered at a lower, best-effort rate.</div>
 
   <div class="toggle rv" role="tablist" aria-label="Billing interval">
     <button class="active" data-interval="monthly" aria-selected="true">Monthly</button>
@@ -84,6 +119,7 @@
       <div class="sub-line">MIT SDK. Self-host anything, anywhere.</div>
       <ul>
         <li><span class="mono">@e-sig/core</span>, React UI, Supabase adapters</li>
+        <li><span class="mono">@e-sig/mcp</span> — MCP server for agent-driven signing (in-repo at <span class="mono">packages/esig-mcp</span>)</li>
         <li>PKCS#7 + RFC-3161 + PAdES</li>
         <li><b>Post-quantum seal</b> — ML-DSA-65 (FIPS 204)</li>
         <li>Multi-signer envelopes</li>
@@ -96,9 +132,9 @@
     </div>
 
     <div class="card featured rv">
-      <div class="name">Cloud Starter</div>
-      <div class="price" data-price-monthly="$19" data-price-yearly="$190">$19<small>/ mo</small></div>
-      <div class="sub-line">Managed hosting for individuals.</div>
+      <div class="name">Shared Cloud Starter · private preview</div>
+      <div class="price" data-price-monthly="$79" data-price-yearly="$790">$79<small>/ mo</small></div>
+      <div class="sub-line">RLS-isolated managed hosting for individuals.</div>
       <ul>
         <li><b>100 envelopes/mo</b> · 1 user</li>
         <li>Managed Postgres audit chain</li>
@@ -107,39 +143,42 @@
         <li>REST API + TypeScript SDK</li>
         <li>Webhooks, tokenized links</li>
         <li>$0.20/envelope overage</li>
-        <li>Email support · 24h response</li>
+        <li>Email support · 2-business-day response</li>
+        <li class="dim">Founding preview may start at $19/mo for 90 days · best effort</li>
       </ul>
-      <a class="btn primary" data-checkout="cloud_starter" href="/api/checkout?plan=cloud_starter">Start free trial</a>
+      <a class="btn primary" href="#waitlist-form" data-waitlist-offer="shared_starter" aria-controls="waitlist-form">Join Starter waitlist</a>
     </div>
 
     <div class="card rv">
-      <div class="name">Cloud Team</div>
-      <div class="price" data-price-monthly="$49" data-price-yearly="$490">$49<small>/ mo</small></div>
-      <div class="sub-line">Managed hosting for growing teams.</div>
+      <div class="name">Shared Cloud Team · private preview</div>
+      <div class="price" data-price-monthly="$199" data-price-yearly="$1,990">$199<small>/ mo</small></div>
+      <div class="sub-line">RLS-isolated managed hosting for growing teams.</div>
       <ul>
         <li><b>500 envelopes/mo</b> · 5 users</li>
         <li>Everything in Starter</li>
         <li>Higher rate limits (300 req/min)</li>
         <li>Custom subdomain</li>
         <li>$0.20/envelope overage</li>
-        <li>Priority email · 12h response</li>
+        <li>Priority email · 1-business-day response</li>
+        <li class="dim">Founding preview may start at $49/mo for 90 days · best effort</li>
       </ul>
-      <a class="btn ghost" data-checkout="cloud_team" href="/api/checkout?plan=cloud_team">Choose Team</a>
+      <a class="btn ghost" href="#waitlist-form" data-waitlist-offer="shared_team" aria-controls="waitlist-form">Join Team waitlist</a>
     </div>
 
     <div class="card rv">
-      <div class="name">Cloud Scale</div>
-      <div class="price" data-price-monthly="$79" data-price-yearly="$790">$79<small>/ mo</small></div>
-      <div class="sub-line">Managed hosting at volume.</div>
+      <div class="name">Shared Cloud Scale · private preview</div>
+      <div class="price" data-price-monthly="$499" data-price-yearly="$4,990">$499<small>/ mo</small></div>
+      <div class="sub-line">RLS-isolated managed hosting at volume.</div>
       <ul>
         <li><b>1,500 envelopes/mo</b> · 15 users</li>
         <li>Everything in Team</li>
         <li>1,000 req/min rate limit</li>
         <li>Priority queue on signing</li>
         <li>$0.20/envelope overage</li>
-        <li>Priority email · 4h response</li>
+        <li>Priority email · 8-business-hour response</li>
+        <li class="dim">Founding preview may start at $79/mo for 90 days · best effort</li>
       </ul>
-      <a class="btn ghost" data-checkout="cloud_scale" href="/api/checkout?plan=cloud_scale">Choose Scale</a>
+      <a class="btn ghost" href="#waitlist-form" data-waitlist-offer="shared_scale" aria-controls="waitlist-form">Join Scale waitlist</a>
     </div>
   </div>
 
@@ -151,53 +190,120 @@
       <ul>
         <li>Priority email + Slack Connect · 8-business-hour response</li>
         <li>Signed commercial invoice + W-9 + insurance certificate</li>
-        <li>Vendor security questionnaire pack (CAIQ, SIG Core, DPA)</li>
+        <li>Security questionnaire responses, DPA, W-9, and insurance certificate on request</li>
         <li>Quarterly security patches · 90-day breaking-change notice</li>
         <li>DPA and BAA available</li>
-        <li>Non-public <span class="mono">@e-sig/enterprise</span> adapters (SSO/SAML, LDAP audit sink, S3 Object-Lock, HSM)</li>
+        <li><b>Published MIT adapters</b> — <span class="mono">@e-sig/hsm-pkcs11</span> (PKCS#11 / CloudHSM / YubiHSM) and <span class="mono">@e-sig/worm</span> (S3 Object-Lock archival)</li>
+        <li>SSO/SAML and LDAP audit sink available on request</li>
         <li>Named contact — a founder, not a queue</li>
       </ul>
-      <a class="btn ghost" href="mailto:sales@e-sig.org?subject=Business%20tier">Talk to us</a>
+      <a class="btn ghost" href="#waitlist-form" data-waitlist-offer="business" aria-controls="waitlist-form">Talk to us</a>
     </div>
 
     <div class="card rv">
-      <div class="name">Enterprise</div>
-      <div class="price">from $18k<small>/ yr</small></div>
-      <div class="sub-line">Signed MSA, indemnity, SOC 2, HSM, BAA, 99.99% SLA.</div>
+      <div class="name">Dedicated Cloud · private preview</div>
+      <div class="price">from $30k<small>/ yr + $5k setup</small></div>
+      <div class="sub-line">A separate Supabase project and AWS data-plane stack for one customer.</div>
       <ul>
-        <li>Everything in Business</li>
-        <li>Signed MSA (Common Paper base, redlined)</li>
-        <li>Air-gapped / on-prem via Helm chart + installer</li>
-        <li>HSM signer (CloudHSM / YubiHSM / on-prem PKCS#11)</li>
-        <li>WORM archival (S3 Object-Lock or Glacier Vault Lock)</li>
-        <li>SSO/SAML + SCIM</li>
-        <li>Custom SLA (99.95% / 99.99% with credits)</li>
-        <li>24×7 Sev-1 · dedicated Slack Connect</li>
-        <li>Volume-tiered per-envelope pricing above 100k/mo</li>
+        <li>Dedicated Postgres, auth, storage namespace, and API credentials</li>
+        <li>Customer-specific KMS key, private versioned S3, queue + DLQ</li>
+        <li>Deterministic, resumable infrastructure provisioning</li>
+        <li>Signed order form, DPA, and scoped support policy</li>
+        <li>SSO, HIPAA, HSM, WORM, private networking, and enhanced SLA quoted separately</li>
+        <li>Custom integrations and usage above contract limits are not included</li>
       </ul>
-      <a class="btn ghost" href="mailto:sales@e-sig.org?subject=Enterprise">Talk to us</a>
+      <a class="btn ghost" href="#waitlist-form" data-waitlist-offer="dedicated" aria-controls="waitlist-form">Join Dedicated waitlist</a>
     </div>
+  </div>
+
+  <div class="waitlist-panel" id="waitlist-form" tabindex="-1">
+    <div class="waitlist-intro">
+      <span class="waitlist-kicker">Private preview intake</span>
+      <h2>Tell us what you need<span class="accent-serif">.</span></h2>
+      <p>Choose an offer, share the shape of your rollout, and we will follow up when the right provisioning path is ready. This is a request for access—not checkout.</p>
+      <p class="selected-offer" id="waitlist-selection" role="status" aria-live="polite">Choose an offer in the form.</p>
+      <p>No card details. No subscription. No promise of access.</p>
+    </div>
+
+    <form class="waitlist-form" id="cloud-waitlist-form" data-endpoint="https://e998xqnsrd.execute-api.us-east-1.amazonaws.com/Prod/waitlist">
+      <div class="form-grid">
+        <div class="form-field full">
+          <label for="waitlist-offer">Offer</label>
+          <select id="waitlist-offer" name="offer" required>
+            <option value="">Choose an offer</option>
+            <option value="shared_starter">Shared Cloud Starter — $79/mo planning estimate</option>
+            <option value="shared_team">Shared Cloud Team — $199/mo planning estimate</option>
+            <option value="shared_scale">Shared Cloud Scale — $499/mo planning estimate</option>
+            <option value="business">Business — self-hosted support</option>
+            <option value="dedicated">Dedicated Cloud — from $30k/yr + setup</option>
+            <option value="addon_hipaa_baa">Add-on — HIPAA BAA + Healthcare Runbook</option>
+            <option value="addon_hsm_signer">Add-on — HSM Signer (PKCS#11)</option>
+            <option value="addon_eidas_qes">Add-on — eIDAS QES Integration</option>
+            <option value="addon_21cfr_part11">Add-on — 21 CFR Part 11</option>
+            <option value="addon_uuaid_ent">Add-on — UUAID Enterprise</option>
+            <option value="addon_worm">Add-on — WORM Archival (Object-Lock)</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="waitlist-email">Work email</label>
+          <input id="waitlist-email" name="email" type="email" autocomplete="email" maxlength="254" required>
+        </div>
+        <div class="form-field">
+          <label for="waitlist-name">Name <span class="optional">optional</span></label>
+          <input id="waitlist-name" name="name" type="text" autocomplete="name" maxlength="100">
+        </div>
+        <div class="form-field">
+          <label for="waitlist-company">Company <span class="optional">optional</span></label>
+          <input id="waitlist-company" name="company" type="text" autocomplete="organization" maxlength="160">
+        </div>
+        <div class="form-field">
+          <label for="waitlist-volume">Expected monthly envelopes <span class="optional">optional</span></label>
+          <input id="waitlist-volume" name="expectedMonthlyEnvelopes" type="text" inputmode="numeric" maxlength="64" placeholder="e.g. 500 now, 2,000 at launch">
+        </div>
+        <div class="form-field full">
+          <label for="waitlist-use-case">What are you building? <span class="optional">optional</span></label>
+          <textarea id="waitlist-use-case" name="useCase" maxlength="2000" aria-describedby="waitlist-use-case-help" placeholder="Workflow, compliance needs, region, and target launch date"></textarea>
+          <p class="form-help" id="waitlist-use-case-help">Do not include documents, signer data, health information, or other sensitive personal data.</p>
+        </div>
+      </div>
+
+      <div class="waitlist-trap" aria-hidden="true">
+        <label for="waitlist-website">Website</label>
+        <input id="waitlist-website" name="website" type="text" autocomplete="off" tabindex="-1">
+      </div>
+
+      <div class="consent-row">
+        <input id="waitlist-consent" name="consent" type="checkbox" required>
+        <label for="waitlist-consent">I authorize e-sig to contact me at the email I entered about this specific preview or commercial-offer request. This is not consent to unrelated marketing. See the <a href="/privacy">Privacy Policy</a>.</label>
+      </div>
+
+      <button class="btn primary waitlist-submit" id="waitlist-submit" type="submit" disabled>Request preview access</button>
+      <p class="form-status" id="waitlist-status" role="status" aria-live="polite" aria-atomic="true"></p>
+      <p class="email-fallback" id="waitlist-email-fallback" hidden>If the form still fails, email sales@e-sig.org.</p>
+      <noscript><p class="email-fallback">JavaScript is required for the secure form. Email sales@e-sig.org and include the offer you want.</p></noscript>
+    </form>
   </div>
 
   <div class="trust rv">
     <div><b>MIT-licensed.</b> No AGPL, no rug-pulls, ever.</div>
-    <div><b>$0.20 / envelope</b> overage — vs Dropbox Sign $1+, BoldSign $0.75, DocuSign $2–$4.</div>
-    <div><b>Or self-host for $0.</b> The Cloud tier exists because operations aren't free — not because the SDK is crippled.</div>
+    <div><b>$0.20 / envelope</b> planned Cloud overage — vs Dropbox Sign $1+, BoldSign $0.75, DocuSign $2–$4.</div>
+    <div><b>Or self-host for $0.</b> The planned Cloud tier exists because operations aren't free — not because the SDK is crippled.</div>
   </div>
 </div></section>
 
 <section id="addons"><div class="wrap">
   <h2 class="rv">Vertical add-ons</h2>
-  <p class="lead rv">Available on Business + Enterprise. Priced separately so they never inflate the base — turn on the ones you need, leave the rest off.</p>
+  <p class="lead rv">Available on Business and Dedicated Cloud. Priced separately so they never inflate the base — turn on the ones you need, leave the rest off.</p>
   <div class="tblwrap rv"><table class="cmp">
     <thead><tr><th>Add-on</th><th>Monthly</th><th>Who buys it</th><th></th></tr></thead>
     <tbody>
-      <tr><td><b>HIPAA BAA + Healthcare Runbook</b></td><td>$500 / mo</td><td>Clinical trials, EHR, telehealth</td><td><a class="addlink" href="/api/checkout?plan=addon_hipaa_baa&amp;interval=monthly">Add &rarr;</a></td></tr>
-      <tr><td><b>HSM Signer (PKCS#11)</b></td><td>$800 / mo</td><td>Regulated finance, notary, government</td><td><a class="addlink" href="/api/checkout?plan=addon_hsm_signer&amp;interval=monthly">Add &rarr;</a></td></tr>
-      <tr><td><b>eIDAS QES Integration</b></td><td>$1,500 / mo</td><td>EU legal, real-estate, insurance</td><td><a class="addlink" href="mailto:sales@e-sig.org?subject=eIDAS%20QES%20Integration">Contact sales &rarr;</a></td></tr>
-      <tr><td><b>21 CFR Part 11</b></td><td>$1,200 / mo</td><td>Pharma, medical devices</td><td><a class="addlink" href="/api/checkout?plan=addon_21cfr_part11&amp;interval=monthly">Add &rarr;</a></td></tr>
-      <tr><td><b>UUAID Enterprise (agent-signed docs)</b></td><td>$500 / mo</td><td>AI agent platforms</td><td><a class="addlink" href="/api/checkout?plan=addon_uuaid_ent&amp;interval=monthly">Add &rarr;</a></td></tr>
-      <tr><td><b>WORM Archival (Object-Lock)</b></td><td>$300 / mo</td><td>SEC / FINRA, legal discovery</td><td><a class="addlink" href="/api/checkout?plan=addon_worm&amp;interval=monthly">Add &rarr;</a></td></tr>
+      <tr><td><b>HIPAA BAA + Healthcare Runbook</b></td><td>$500 / mo</td><td>Clinical trials, EHR, telehealth</td><td><a class="addlink" href="#waitlist-form" data-waitlist-offer="addon_hipaa_baa" aria-controls="waitlist-form">Contact sales &rarr;</a></td></tr>
+      <tr><td><b>HSM Signer (PKCS#11)</b></td><td>$800 / mo</td><td>Regulated finance, notary, government</td><td><a class="addlink" href="#waitlist-form" data-waitlist-offer="addon_hsm_signer" aria-controls="waitlist-form">Contact sales &rarr;</a></td></tr>
+      <tr><td><b>eIDAS QES Integration</b></td><td>$1,500 / mo</td><td>EU legal, real-estate, insurance</td><td><a class="addlink" href="#waitlist-form" data-waitlist-offer="addon_eidas_qes" aria-controls="waitlist-form">Contact sales &rarr;</a></td></tr>
+      <tr><td><b>21 CFR Part 11</b></td><td>$1,200 / mo</td><td>Pharma, medical devices</td><td><a class="addlink" href="#waitlist-form" data-waitlist-offer="addon_21cfr_part11" aria-controls="waitlist-form">Contact sales &rarr;</a></td></tr>
+      <tr><td><b>UUAID Enterprise (agent-signed docs)</b></td><td>$500 / mo</td><td>AI agent platforms</td><td><a class="addlink" href="#waitlist-form" data-waitlist-offer="addon_uuaid_ent" aria-controls="waitlist-form">Contact sales &rarr;</a></td></tr>
+      <tr><td><b>WORM Archival (Object-Lock)</b></td><td>$300 / mo</td><td>SEC / FINRA, legal discovery</td><td><a class="addlink" href="#waitlist-form" data-waitlist-offer="addon_worm" aria-controls="waitlist-form">Contact sales &rarr;</a></td></tr>
     </tbody>
   </table></div>
 </div></section>
@@ -217,10 +323,10 @@
     </thead>
     <tbody>
       <tr class="me">
-        <td><b>e-sig Cloud</b></td>
-        <td class="us">$19/mo (100 env)</td>
-        <td class="us">$79/mo (1,500 env)</td>
-        <td class="us">$0.20</td>
+        <td><b>e-sig Cloud (preview)</b></td>
+        <td class="us">planned $79/mo (100 env)</td>
+        <td class="us">planned $499/mo (1,500 env)</td>
+        <td class="us">target $0.20</td>
         <td class="us">Yes, free</td>
         <td class="us">MIT</td>
       </tr>
@@ -252,7 +358,7 @@
   </div>
   <div class="faq rv">
     <h3>What about SSO / SAML?</h3>
-    <p>Available on Business and Enterprise. We don't put SSO behind a $50k+ tax — it's a $299/mo Business feature.</p>
+    <p>Available on Business and Dedicated Cloud. We don't put SSO behind a $50k+ tax — it's a $299/mo Business feature.</p>
   </div>
   <div class="faq rv">
     <h3>Is signing legally binding?</h3>
@@ -260,7 +366,7 @@
   </div>
   <div class="faq rv">
     <h3>What are your uptime commitments?</h3>
-    <p>Cloud is a 99.9% target (not contractually credited). Business is 99.95% credited. Enterprise negotiates 99.99% with credits, up to 30% of monthly fees.</p>
+    <p>Cloud is in private preview and has no paid SLA yet. Any uptime commitment will be published before checkout opens. Business and Dedicated Cloud commitments are defined in their signed agreements.</p>
   </div>
   </div>
 </div></section>
@@ -272,7 +378,7 @@
     <a class="brand" href="/"><img class="brandmark" src="/assets/e-sig.svg" alt="e-sig" width="31" height="23">e-sig</a>
     <span class="spacer"></span>
     <a href="/pricing">Pricing</a>
-    <a href="/why-vmv">Why VMV</a>
+    <a href="/why-esig">Why e-sig</a>
     <a href="https://docs.e-sig.org">Docs</a>
     <a href="https://github.com/vmvtech/esig-suite">GitHub</a>
     <a href="https://www.npmjs.com/package/@e-sig/core">npm</a>
@@ -307,13 +413,156 @@
       el.firstChild.nodeValue = v;
       el.querySelector('small').textContent = (interval === 'yearly') ? '/ yr' : '/ mo';
     }
-    // Also append &interval= on checkout links so the Lambda picks up the right price
-    var ctas = document.querySelectorAll('[data-checkout]');
-    for (var k=0;k<ctas.length;k++){
-      var plan = ctas[k].dataset.checkout;
-      ctas[k].href = '/api/checkout?plan=' + plan + '&interval=' + interval;
-    }
   });
+
+  // First-party private-preview waitlist
+  (function(){
+    'use strict';
+
+    var form = document.getElementById('cloud-waitlist-form');
+    var offer = document.getElementById('waitlist-offer');
+    var email = document.getElementById('waitlist-email');
+    var submit = document.getElementById('waitlist-submit');
+    var status = document.getElementById('waitlist-status');
+    var selection = document.getElementById('waitlist-selection');
+    var fallback = document.getElementById('waitlist-email-fallback');
+    var endpoint = form.getAttribute('data-endpoint');
+    var submitLabel = submit.textContent;
+
+    function endpointIsConfigured(value){
+      if (!value || value.indexOf('__ESIG_') !== -1) return false;
+      try {
+        return new URL(value, window.location.href).protocol === 'https:';
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    function selectedOfferLabel(){
+      return offer.selectedIndex > 0 ? offer.options[offer.selectedIndex].text : '';
+    }
+
+    function updateSelection(){
+      var label = selectedOfferLabel();
+      selection.textContent = label ? 'Selected: ' + label : 'Choose an offer in the form.';
+    }
+
+    function setStatus(message, state){
+      status.textContent = message;
+      if (state) status.setAttribute('data-state', state);
+      else status.removeAttribute('data-state');
+    }
+
+    function optionalValue(name){
+      var value = form.elements[name].value.trim();
+      return value || null;
+    }
+
+    function markInvalidFields(fields){
+      var first = null;
+      fields.forEach(function(name){
+        var field = form.elements[name];
+        if (!field || typeof field.setAttribute !== 'function') return;
+        field.setAttribute('aria-invalid', 'true');
+        if (!first) first = field;
+      });
+      if (first) first.focus();
+    }
+
+    document.querySelectorAll('[data-waitlist-offer]').forEach(function(cta){
+      cta.addEventListener('click', function(event){
+        var nextOffer = cta.getAttribute('data-waitlist-offer');
+        if (!offer.querySelector('option[value="' + nextOffer + '"]')) return;
+        offer.value = nextOffer;
+        updateSelection();
+        window.setTimeout(function(){ email.focus(); }, 250);
+      });
+    });
+
+    offer.addEventListener('change', updateSelection);
+    form.addEventListener('input', function(event){
+      if (event.target && event.target.removeAttribute) event.target.removeAttribute('aria-invalid');
+    });
+
+    form.addEventListener('submit', async function(event){
+      event.preventDefault();
+      fallback.hidden = true;
+      setStatus('', '');
+
+      if (!form.checkValidity()) {
+        setStatus('Complete the required fields before submitting.', 'error');
+        form.reportValidity();
+        return;
+      }
+
+      if (!endpointIsConfigured(endpoint)) {
+        setStatus('The waitlist service is not configured yet. Please try again shortly.', 'error');
+        fallback.hidden = false;
+        return;
+      }
+
+      var payload = {
+        offer: offer.value,
+        email: email.value.trim(),
+        consent: form.elements.consent.checked,
+        website: form.elements.website.value.trim(),
+        source: 'pricing'
+      };
+      var optionalFields = ['name', 'company', 'useCase', 'expectedMonthlyEnvelopes'];
+      optionalFields.forEach(function(name){
+        var value = optionalValue(name);
+        if (value !== null) payload[name] = value;
+      });
+
+      submit.disabled = true;
+      submit.textContent = 'Submitting…';
+      form.setAttribute('aria-busy', 'true');
+      setStatus('Sending your request…', '');
+
+      try {
+        var response = await fetch(endpoint, {
+          method: 'POST',
+          mode: 'cors',
+          credentials: 'omit',
+          headers: {'Accept': 'application/json', 'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        var body = {};
+        try { body = await response.json(); } catch (_error) { body = {}; }
+
+        if (!response.ok) {
+          if (response.status === 400 && Array.isArray(body.fields)) {
+            markInvalidFields(body.fields);
+            throw new Error('validation');
+          }
+          throw new Error('request');
+        }
+
+        if (response.status !== 202 || body.status !== 'accepted') {
+          throw new Error('request');
+        }
+
+        setStatus('Request received. If it is a fit for the preview, we will contact you when access is ready.', 'success');
+        form.reset();
+        offer.value = payload.offer;
+        updateSelection();
+      } catch (error) {
+        if (error && error.message === 'validation') {
+          setStatus('Review the highlighted fields and try again.', 'error');
+        } else {
+          setStatus('We could not submit your request. Please try again.', 'error');
+        }
+        fallback.hidden = false;
+      } finally {
+        form.removeAttribute('aria-busy');
+        submit.disabled = false;
+        submit.textContent = submitLabel;
+      }
+    });
+
+    submit.disabled = false;
+    updateSelection();
+  })();
 </script>
 </body>
 </html>
