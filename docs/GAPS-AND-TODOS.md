@@ -54,6 +54,8 @@ L (a week+).
    appeal email is still with the owner. The launch thread that *did* go out
    went through **AlliShare's API to VMVTech's Bluesky**, using the
    cross-tenant admin key — not an e-sig account, not an e-sig org.
+   *Update 2026-09-02:* the e-sig org and its own scoped key now exist
+   (§8.2); zero platform accounts are connected to it yet (EX-03).
 8. **AlliShare can carry e-sig marketing today, narrowly:** prod is live
    (`api.allishare.com` 200) but runs 2026-07-13 code; only **Bluesky +
    Telegram** can publish without a platform developer app. X/LinkedIn/Reddit
@@ -196,10 +198,10 @@ post.ts:66`; schema `packages/shared/src/schemas/post.ts:150-178`) with
 
 | ID | Pri | Item | Files | Effort |
 |----|-----|------|-------|--------|
-| MK-01 | P1 | **Dedicated e-sig org on AlliShare** (not the VMVTech Portal profile, not the admin key): org `e-sig`, profile `title:"e-sig.org", refId:"esig-marketing"`, a scoped `as_live_` key stored in Secrets Station (Key-Master) as `ESIG_ALLISHARE_API_KEY`; the cross-tenant `AISWARA_ADMIN_KEY_ALLISHARE` is never used from this repo again. Provisioning is AS-REQ-05 (Allishare-Lead). | Secrets Station, `docs/growth/allishare.md` | S |
+| MK-01 | **DONE 2026-09-02** | **Dedicated e-sig org on AlliShare** — provisioned: org `e-sig`, profile `title:"e-sig.org", refId:"esig-marketing"`, org-scoped key live in Secrets Station at `allishare/esig/api_key` → env **`ALLISHARE_API_KEY_ESIG`**. Ids and the `profileKey` are deliberately not recorded in this public repo (§8.2). Verified by Esig-Lead: `/user` 200, `/profiles` 200, `/admin/orgs` **403**. `AISWARA_ADMIN_KEY_ALLISHARE` is VMVTech-only — never used here, and **never rotated or revoked by us**. Remaining work is the checker script (GAPS-05). | Secrets Station, `docs/growth/allishare.md` | S |
 | MK-02 | P1 | **First owned channels: Bluesky + Telegram** (the only wave-0 platforms). Bluesky handle as a **domain handle** `@e-sig.org` (DNS `TXT _atproto.e-sig.org "did=did:plc:…"` — a trust signal that matches the brand); Telegram channel `@esig_dev` with a bot as admin. Connect both through the profile from MK-01. Accounts/DNS/bot token are EX-03. | AlliShare profile, DNS, `site/press/index.html` | S (after EX-03) |
 | MK-03 | P1 | **Blog index + RSS on docs.e-sig.org** — `docs/blog/` has one post (`der-length-bug.md`) linked only from press/llms/HN draft; no index, no `/blog` route, no feed **[verified]**. Generate `docs/blog/index.html` + `docs/blog/feed.xml` from `docs/blog/*.md` (front-matter `title/date/summary`) with a script beside `scripts/ops/gen-llms-full.mjs`; nav link on `docs/index.html` and `site/index.html`. Then register the feed on AlliShare `POST /api/v1/rss {feedUrl, platforms:['bluesky','telegram'], requiresApproval:true, template}` so every proof post auto-drafts. | `scripts/ops/gen-blog.mjs`, `docs/blog/`, `docs/index.html` | M |
-| MK-04 | P1 | **Publish queue → AlliShare** `scripts/growth/publish.mjs`: reads `docs/growth/queue/*.json` (`{id, platforms, text per platform, mediaRef→demos/manifest.json, scheduleAt, utm_campaign}`), adds `utm_source=<platform>&utm_medium=social&utm_campaign=<id>`, `shortenLinks:true`, `idempotencyKey:id`, `firstComment` for the repo link; **dry-run by default**, `--live` requires `ESIG_ALLISHARE_API_KEY`; writes the API response to `docs/growth/evidence/week-NN/<id>.json`. Unit-test with mocked fetch like `scripts/publish-preflight.test.mjs`. | `scripts/growth/publish.mjs` + test, `docs/growth/queue/` | M |
+| MK-04 | P1 | **Publish queue → AlliShare** `scripts/growth/publish.mjs`: reads `docs/growth/queue/*.json` (`{id, platforms, text per platform, mediaRef→demos/manifest.json, scheduleAt, utm_campaign}`), adds `utm_source=<platform>&utm_medium=social&utm_campaign=<id>`, `shortenLinks:true`, `idempotencyKey:id`, `firstComment` for the repo link; **dry-run by default**, `--live` requires `ALLISHARE_API_KEY_ESIG` (Secrets Station `allishare/esig/api_key`, loaded via `secrets run`) plus the `Profile-Key` header resolved at runtime from `refId "esig-marketing"`; writes the API response to `docs/growth/evidence/week-NN/<id>.json`. Unit-test with mocked fetch like `scripts/publish-preflight.test.mjs`. | `scripts/growth/publish.mjs` + test, `docs/growth/queue/` | M |
 | MK-05 | P1 | **Evidence + baseline, weeks 1-5.** Create `docs/growth/evidence/week-01`…`week-13/` and `experiments/`; `scripts/growth/baseline.mjs` snapshots GitHub (stars/forks/issues/discussions) + npm last-week per package (public APIs, no auth) into `week-NN/baseline.md`; re-score weeks 1-4 pass/fail against `90-day-playbook.md:185` board from git history; record WVOA = 0 honestly with the Show-and-tell ledger (SU-05) as the counting rule. | `docs/growth/evidence/`, `scripts/growth/baseline.mjs` | S |
 | MK-06 | P1 | **Weekly proof calendar, weeks 5-13** (`docs/growth/calendar.md`): wk5 MIT-SDK-vs-app architecture proof (+DM-02), wk6 tamper anatomy (+DM-05/06), wk7 Supabase recipe (+GP-02), wk8 verification receipt prototype (MK-10), wk9 launch candidate dry run, wk10 OSS launch (r/selfhosted, r/node, Lobsters, dev.to — **not HN**, per the one-submission rule), wk11-13 per playbook. Each row: proof URL, platform copy (Bluesky ≤ 300 chars, Telegram long-form), media from DM-10, `queue/*.json` id. | `docs/growth/calendar.md`, `docs/growth/queue/` | S |
 | MK-07 | P2 | **Site social wiring**: footer + press kit list Bluesky/Telegram/GitHub Discussions; `site/agent.json` `sameAs`; add `twitter:site` **only** when an X handle exists. | `site/*` | S |
@@ -235,7 +237,7 @@ post.ts:66`; schema `packages/shared/src/schemas/post.ts:150-178`) with
 | EX-03 | **Bluesky account** for e-sig (+ DNS `TXT _atproto.e-sig.org` for the `@e-sig.org` handle, + app password → Secrets Station) and a **Telegram channel + bot token**. | MK-02 → every MK post | AlliShare `LAUNCH.md:454-455` |
 | EX-04 | **X / LinkedIn / Reddit** accounts (human-required, through AlliShare's registration plane so checkpoints are recorded) and AlliShare's platform OAuth apps; X write = paid tier decision. | MK-09 | AlliShare `docs/GAPS-AND-TODOS.md` EX-02; `registration-policy.ts:407-715` |
 | EX-05 | **AlliShare prod deploy decision** — the support features we bridge to (staff replies, escalation email) are merged but not deployed (live OpenAPI lacks `POST /support/admin/conversations/{id}/messages`). | SU-03 usefulness, SU-06 | AlliShare `WORKLOG.md:455-483`, their EX-03 |
-| EX-06 | **Approve the AlliShare cross-project requests** in §8 (Allishare-Lead's queue, their playbook GAPS-03/05). | SU-03 (long-term), SU-06, MK-01 | this doc §8 |
+| EX-06 | **Approve the AlliShare cross-project requests** in §8 — **done 2026-09-01/02**: all six accepted by Allishare-Lead (§8.1), AS-REQ-05 provisioned and the key handed over by Key-Master. Remaining AlliShare work is on their side. | SU-03 (long-term), SU-06, MK-01 | this doc §8 |
 | EX-07 | GitHub: enable **Sponsors** (optional), set repo `homepage`/topics if `gh api` lacks rights (SU-08), create Discussion categories (SU-05). | SU-04/05/08 | `gh api repos/vmvtech/esig-suite` |
 | EX-08 | **New npm name `@e-sig/notify`** (MSG-01): Trusted-Publisher web-UI setup before first publish; first publish of a new name cannot be OIDC (pillar-bridge precedent). | MSG-01 release | `memory/release-via-trusted-publisher.md` |
 
@@ -249,7 +251,7 @@ AlliShare repo.
 
 | ID | Request | Maps to their item | Why e-sig needs it |
 |----|---------|--------------------|--------------------|
-| AS-REQ-05 | **Provision an `e-sig` org + profile + scoped API key**, hand the key to Key-Master as `ESIG_ALLISHARE_API_KEY`. (`POST /enterprise/tenants` or `onboard-client.ts`.) | — (ops) | MK-01; retire admin-key use |
+| AS-REQ-05 | **Provision an `e-sig` org + profile + scoped API key**, hand the key to Key-Master. — **DELIVERED 2026-09-02**: org `e-sig`/`e-sig-cb48b1`, profile `esig-marketing`, key at Secrets Station `allishare/esig/api_key` → `ALLISHARE_API_KEY_ESIG`. | — (ops) | MK-01 — **closed**; admin-key use retired |
 | AS-REQ-01 | **Public, captcha'd/rate-limited support intake** with `brand`/org scoping and a `requesterEmail` field on `SupportConversation`, so staff replies go to the third party, not org owners (`core/support.ts:246`). | SU-11 + a schema field | SU-03 long-term |
 | AS-REQ-02 | **Org-scoped ticket list** `GET /support/conversations` + **`support.escalated` / `support.replied` webhook events**. | SU-02, IN-03 | SU-06 |
 | AS-REQ-03 | **Per-tenant support branding**: `From:` address and assistant persona per org (today hard-coded `support@allishare.com`, `core/support.ts:28-42,235`). | new | SU-03 reply quality |
@@ -263,7 +265,7 @@ playbooks: `/Volumes/X/VMV/vmv-office/.maestro/playbooks/fleet/allishare/2026-09
 
 | Ours | Theirs | Playbook | What we actually get | Effect on our plan |
 |------|--------|----------|----------------------|--------------------|
-| AS-REQ-05 | MK-17 + EX-08 | GAPS-05 (human step) | `scripts/ops/provision-tenant.mjs` (zero-dep, idempotent on org slug + profile refId): `POST /admin/orgs` → impersonate → `POST /profiles` (refId `esig-marketing`, title `e-sig.org`) → `POST /user/api-keys` (read,write, org-scoped, 0600 file). Runs against **prod as-is**. Z runs it with a platform-admin session (~2 min). Key → Key-Master only. | MK-01 unblocked once Z runs it. They need `TENANT_OWNER_EMAIL` from us → **`support@e-sig.org`** (see EX-02). **No further posts with `AISWARA_ADMIN_KEY_ALLISHARE`.** |
+| AS-REQ-05 — **DELIVERED 2026-09-02** | MK-17 + EX-08 | GAPS-05 (human step, done) | `scripts/ops/provision-tenant.mjs` (zero-dep, idempotent on org slug + profile refId): `POST /admin/orgs` → impersonate → `POST /profiles` (refId `esig-marketing`, title `e-sig.org`) → `POST /user/api-keys` (read,write, org-scoped, 0600 file). Runs against **prod as-is**. Z runs it with a platform-admin session (~2 min). Key → Key-Master only. | MK-01 unblocked once Z runs it. They need `TENANT_OWNER_EMAIL` from us → **`support@e-sig.org`** (see EX-02). **No further posts with `AISWARA_ADMIN_KEY_ALLISHARE`.** |
 | AS-REQ-01 | SU-14 (near) + SU-11 (later) | GAPS-03 / GAPS-06 | SU-14: `requesterEmail`/`requesterName` on `POST /support/chat`, honoured for API-key callers only; staff-reply mail goes requesterEmail → user.email → org owners. SU-11: `POST /public/support/intake { orgSlug, name, email, message, captchaToken }`, per-org opt-in `features.publicSupportIntake`. | Keep our own intake Lambda (SU-03) — it is the org-key caller that SU-14 is designed for. |
 | AS-REQ-02 | SU-02 + SU-15 | GAPS-03 | `GET /support/conversations?status&cursor&limit` (API-key caller sees every ticket in its org; api-key tickets have `userId null`); `support.escalated` / `support.replied` in `WEBHOOK_EVENTS`, payload `{ conversationId, status, topic, requesterEmail, message:{id,role,content,createdAt} }`. | SU-06 poll and MK-08 webhook handler target these shapes; not merged yet — build v1 against prod (below). |
 | AS-REQ-03 | SU-16 | GAPS-06 block B | `Organization.supportBranding { displayName, replyTo, persona }` → From **name**, Reply-To, persona. From **address stays `support@allishare.com`** until per-tenant sender domains are verified. | Site copy must not say "we reply from support@e-sig.org" for desk replies — say "reply-to support@e-sig.org". |
@@ -276,7 +278,40 @@ playbooks: `/Volumes/X/VMV/vmv-office/.maestro/playbooks/fleet/allishare/2026-09
 - Not merged (their GAPS-03): the list route (SU-02), `requesterEmail` (SU-14), `support.*` events (SU-15 — same `x-allishare-signature: t=<unix>,v1=<hex>` path as every existing event, 300 s tolerance; written into their GAPS-03 as an invariant with a header-shape test).
 - Deploy: nothing scheduled; merge-to-main auto-deploys, gated on their P0 fixes (GAPS-01) first — Z's call (their EX-03).
 - Therefore **v1** = create via `POST /support/chat` (requester email on the first line of `message` until SU-14) + poll `GET /support/conversations/:id` and alert on `status === "escalated"` (the staff-message branch is coded but dormant until their deploy); **v2** = `requesterEmail` field, list route, `support.*` webhooks. GAPS-05 SU-03a and GAPS-06 SU-06 are written this way.
-- Tenant provisioning (their `core/tenancy.ts:105-109`): succeeds even if `support@e-sig.org` bounces — welcome mail is best-effort, the API key is unaffected. Until EX-02 lands, nobody can magic-link into the e-sig AlliShare dashboard (owner address is the only login identity; admin impersonation still works) and owner-notification mail bounces silently. Their ping on provisioning will state which owner address Z actually used.
+- Tenant provisioning (their `core/tenancy.ts:105-109`): succeeds even if `support@e-sig.org` bounces — welcome mail is best-effort, the API key is unaffected. Until EX-02 lands, nobody can magic-link into the e-sig AlliShare dashboard (owner address is the only login identity; admin impersonation still works) and owner-notification mail bounces silently. Provisioning completed 2026-09-02 (§8.2).
+
+### 8.2 Credential of record (Key-Master handoff, 2026-09-02)
+
+The e-sig AlliShare tenant exists and its key is live. **[verified by Esig-Lead
+2026-09-02]** — `GET /api/v1/user` 200, `GET /api/v1/profiles` 200,
+`GET /api/v1/admin/orgs` **403** (org-scoped, not admin).
+
+| Fact | Value |
+|------|-------|
+| Secrets Station path | `allishare/esig/api_key` (grant: project `x-vmv-esig-suite`, kind env, holds-copy) |
+| Env var | `ALLISHARE_API_KEY_ESIG` |
+| Org | name `e-sig` — id and slug are **not recorded here** (this repo is public); Key-Master holds them, and `GET /api/v1/user` returns them |
+| Profile | `title "e-sig.org"`, `refId "esig-marketing"` — the stable handle scripts look up by |
+| `profileKey` | **never written to this repo.** Returned by `GET /api/v1/profiles` for `refId "esig-marketing"`; a wrong value is rejected **403** by the API, so treat it as a credential, not a label |
+| Connected accounts | **0** — publishing still blocked by EX-03 |
+
+Rules, binding on every script and playbook in this repo:
+
+1. **Load via Secrets Station only** — `~/secrets-station/.venv/bin/secrets run -- <cmd>`
+   (preferred; it dies with the process), or the standard `set -a` / source of
+   `~/.config/secrets-station/.env` documented in the global CLAUDE.md. A key
+   *value* never enters a file, fixture, log, PR, commit message, or transcript.
+2. **`Profile-Key` header**: resolve the `profileKey` at runtime from
+   `GET /api/v1/profiles` where `refId === "esig-marketing"`. **Never hardcode it
+   and never commit it** — verified 2026-09-03 that the API answers **403** to a
+   tampered value, i.e. it is enforced like a credential. This repo is public.
+3. **`AISWARA_ADMIN_KEY_ALLISHARE` is VMVTech-only.** Not used for any AlliShare
+   call from this repo, and **never rotated or revoked by us** — that authority
+   belongs to VMVTech alone.
+4. **Fail closed**: any script touching AlliShare exits non-zero if
+   `organization.name !== "e-sig"`, if the key lacks the `as_` prefix, or if
+   `/admin/orgs` answers anything but 401/403 (admin-capable key tripwire).
+
 
 ---
 
