@@ -1,0 +1,12 @@
+{"version":3,"term":{"cols":100,"rows":30},"timestamp":1790608224,"idle_time_limit":1.0,"command":"npm run demo:pq --silent","env":{"SHELL":"/bin/zsh"}}
+[0.433, "o", "1. issued classical cert  sha256:6e5f262dea63d383…\r\n"]
+[0.071, "o", "2. signed out.pdf       pqSealed=true\r\n"]
+[0.000, "o", "   ML-DSA-65 fingerprint=702ecb3a4450018c0777f3bb5962aa4fe08d621d76e130e891cc1c805ae4a391\r\n3. verify sealed document\r\n"]
+[0.124, "o", "$ node packages/esig-core/dist/bin/esig.js verify --require-pq --expected-mldsa65-fpr 702ecb3a4450018c0777f3bb5962aa4fe08d621d76e130e891cc1c805ae4a391 out.pdf\r\nout.pdf: OK\r\n  digest valid:      yes\r\n  signature valid:   yes\r\n  signer:            E-sig (Example Organization)\r\n  timestamped:       no\r\n  post-quantum:      present, ok\r\n    mldsa65Fpr:      702ecb3a4450018c0777f3bb5962aa4fe08d621d76e130e891cc1c805ae4a391\r\n    uuaid:           (none)\r\n  failures:          (none)\r\n"]
+[0.000, "o", "   ✓ classical + post-quantum verification passed\r\n"]
+[0.001, "o", "4. flipped byte 17720 inside the signed PDF body\r\n"]
+[0.000, "o", "5. verify tampered document (expected failure)\r\n"]
+[0.131, "o", "$ node packages/esig-core/dist/bin/esig.js verify --require-pq --expected-mldsa65-fpr 702ecb3a4450018c0777f3bb5962aa4fe08d621d76e130e891cc1c805ae4a391 tampered.pdf\r\n"]
+[0.000, "o", "tampered.pdf: FAIL\r\n  digest valid:      no\r\n  signature valid:   yes\r\n  signer:            E-sig (Example Organization)\r\n  timestamped:       no\r\n  post-quantum:      present, FAIL\r\n    mldsa65Fpr:      702ecb3a4450018c0777f3bb5962aa4fe08d621d76e130e891cc1c805ae4a391\r\n    uuaid:           (none)\r\n  failures:          \r\n    - document digest does not match messageDigest attribute — content altered after signing\r\n    - post-quantum digest does not match the document — content altered\r\n"]
+[0.000, "o", "\r\npost-quantum seal demo passed ✓\r\n"]
+[0.007, "x", "0"]

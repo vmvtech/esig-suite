@@ -70,4 +70,35 @@ describe("published demo assets", () => {
     );
     expect(events.at(-1)?.slice(1)).toEqual(["x", "0"]);
   });
+
+  it("keeps the successful post-quantum cast and published site asset", () => {
+    const cast = new URL("demos/casts/pq-seal.cast", repoRoot);
+    const siteGif = new URL("site/assets/pq-seal-demo.gif", repoRoot);
+    const siteHtml = new URL("site/index.html", repoRoot);
+
+    expect(existsSync(cast)).toBe(true);
+    expect(existsSync(siteGif)).toBe(true);
+    expect(readFileSync(siteGif).subarray(0, 6).toString("ascii")).toBe("GIF89a");
+
+    const [header, ...events] = readFileSync(cast, "utf8")
+      .trimEnd()
+      .split("\n")
+      .map(JSON.parse);
+    const output = events
+      .filter((event) => event[1] === "o")
+      .map((event) => event[2])
+      .join("");
+
+    expect(header.command).toBe("npm run demo:pq --silent");
+    expect(output).toContain("pqSealed=true");
+    expect(output).toContain("out.pdf: OK");
+    expect(output).toContain("tampered.pdf: FAIL");
+    expect(output).toContain("post-quantum digest does not match the document — content altered");
+    expect(output).toContain("post-quantum seal demo passed ✓");
+    expect(events.at(-1)?.slice(1)).toEqual(["x", "0"]);
+
+    const html = readFileSync(siteHtml, "utf8");
+    expect(html).toContain('src="/assets/pq-seal-demo.gif"');
+    expect(html).toContain("recorded from <code>npm run demo:pq</code>");
+  });
 });
