@@ -190,8 +190,10 @@ trap 'rm -rf "$release_dir"' EXIT
 build_dir="$release_dir/build"
 mkdir -m 700 "$build_dir"
 cp "$ROOT_DIR/infra/waitlist/template.yaml" "$build_dir/template.yaml"
-cp "$ROOT_DIR/infra/waitlist/package.json" "$build_dir/package.json"
-cp "$ROOT_DIR/infra/waitlist/package-lock.json" "$build_dir/package-lock.json"
+cp "$ROOT_DIR/package.json" "$build_dir/package.json"
+cp "$ROOT_DIR/package-lock.json" "$build_dir/package-lock.json"
+mkdir -p "$build_dir/infra/waitlist"
+cp "$ROOT_DIR/infra/waitlist/package.json" "$build_dir/infra/waitlist/package.json"
 cp -R "$ROOT_DIR/infra/waitlist/src" "$build_dir/src"
 
 "$NPM_BIN" ci \
@@ -199,6 +201,8 @@ cp -R "$ROOT_DIR/infra/waitlist/src" "$build_dir/src"
   --ignore-scripts \
   --no-audit \
   --no-fund \
+  --workspace @e-sig/waitlist-api \
+  --include-workspace-root=false \
   --prefix "$build_dir"
 
 read_activation_proof_receipt() {

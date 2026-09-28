@@ -10,7 +10,7 @@
     "test": "node test.mjs"
   },
   "dependencies": {
-    "@e-sig/pillar-bridge": "file:../../packages/esig-pillar-bridge",
+    "@e-sig/pillar-bridge": "*",
     "@e-sig/uaid-exch": "^0.1.0-preview.2"
   }
 }
