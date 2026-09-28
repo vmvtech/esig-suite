@@ -7,6 +7,7 @@
   "workspaces": [
     "packages/*",
     "examples/quickstart",
+    "examples/react-playground",
     "examples/nextjs-supabase",
     "examples/pillar-agent",
     "infra/provisioning",
@@ -18,7 +19,7 @@
     "lint": "eslint .",
     "smoke": "node scripts/smoke.mjs",
     "quickstart": "npm start -w esig-quickstart",
-    "test": "npm run test -w @e-sig/core && npm run test -w @e-sig/supabase && npm run test -w @e-sig/react && npm run test -w @e-sig/uuaid && npm run test -w @e-sig/uaid-exch && npm run test -w @e-sig/worm && npm run test -w @e-sig/hsm-pkcs11 && npm run test -w @e-sig/assurance-gateway && npm run test -w @e-sig/pillar-bridge && npm run test -w @e-sig/mcp && npm run test -w @e-sig/cloud-provisioning && npm run test -w esig-pillar-agent-example && npm run test:scripts",
+    "test": "npm run test -w @e-sig/core && npm run test -w @e-sig/supabase && npm run test -w @e-sig/react && npm run test -w esig-react-playground && npm run test -w @e-sig/uuaid && npm run test -w @e-sig/uaid-exch && npm run test -w @e-sig/worm && npm run test -w @e-sig/hsm-pkcs11 && npm run test -w @e-sig/assurance-gateway && npm run test -w @e-sig/pillar-bridge && npm run test -w @e-sig/mcp && npm run test -w @e-sig/cloud-provisioning && npm run test -w esig-pillar-agent-example && npm run test:scripts",
     "test:provisioning": "npm run test -w @e-sig/cloud-provisioning",
     "test:provisioning:supabase": "npm run test:supabase -w @e-sig/cloud-provisioning",
     "test:provisioning:templates": "npm run test:templates -w @e-sig/cloud-provisioning",
