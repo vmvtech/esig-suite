@@ -12,6 +12,9 @@
   "scripts": {
     "build": "npm run build -w @e-sig/core && npm run build -w @e-sig/supabase && npm run build -w @e-sig/react && npm run build -w @e-sig/uuaid && npm run build -w @e-sig/uaid-exch && npm run build -w @e-sig/worm && npm run build -w @e-sig/hsm-pkcs11 && npm run build -w @e-sig/assurance-gateway && npm run build -w @e-sig/pillar-bridge && npm run build -w @e-sig/mcp && npm run build -w @e-sig/cloud-provisioning",
     "clean": "npm run clean -w @e-sig/core && npm run clean -w @e-sig/supabase && npm run clean -w @e-sig/react && npm run clean -w @e-sig/uuaid && npm run clean -w @e-sig/uaid-exch && npm run clean -w @e-sig/worm && npm run clean -w @e-sig/hsm-pkcs11 && npm run clean -w @e-sig/assurance-gateway && npm run clean -w @e-sig/pillar-bridge && npm run clean -w @e-sig/mcp && npm run clean -w @e-sig/cloud-provisioning",
+    "demos": "bash demos/render-all.sh",
+    "demo:envelope": "node demos/envelope.mjs",
+    "demo:pq": "node demos/pq-seal.mjs",
     "smoke": "node scripts/smoke.mjs",
     "quickstart": "npm start -w esig-quickstart",
     "test": "npm run test -w @e-sig/core && npm run test -w @e-sig/supabase && npm run test -w @e-sig/uuaid && npm run test -w @e-sig/uaid-exch && npm run test -w @e-sig/worm && npm run test -w @e-sig/hsm-pkcs11 && npm run test -w @e-sig/assurance-gateway && npm run test -w @e-sig/pillar-bridge && npm run test -w @e-sig/mcp && npm run test -w @e-sig/cloud-provisioning && npm run test:scripts",

@@ -151,11 +151,17 @@ CF_UPDATED_ETAG=$(jq -r '.ETag' "$BACKUP_DIR/cf-function.updated.json")
 "$AWS" cloudfront publish-function --name "$CF_FN" --if-match "$CF_UPDATED_ETAG" \
   > "$BACKUP_DIR/cf-function.published.json"
 CF_STATUS="IN_PROGRESS"
-for _ in $(seq 1 30); do
+CF_WAIT_TIMEOUT_SECONDS=600
+CF_WAIT_INTERVAL_SECONDS=10
+CF_WAIT_STARTED=$SECONDS
+while :; do
   CF_STATUS=$("$AWS" cloudfront describe-function --name "$CF_FN" --stage LIVE \
     --query 'FunctionSummary.Status' --output text)
+  CF_WAIT_ELAPSED=$((SECONDS - CF_WAIT_STARTED))
+  printf '  … CloudFront function status: %s (%ss elapsed)\n' "$CF_STATUS" "$CF_WAIT_ELAPSED"
   [[ "$CF_STATUS" == "DEPLOYED" ]] && break
-  sleep 2
+  ((CF_WAIT_ELAPSED >= CF_WAIT_TIMEOUT_SECONDS)) && break
+  sleep "$CF_WAIT_INTERVAL_SECONDS"
 done
 [[ "$CF_STATUS" == "DEPLOYED" ]] || die "LIVE CloudFront function did not reach DEPLOYED"
 "$AWS" cloudfront get-function --name "$CF_FN" --stage LIVE \

@@ -18,6 +18,8 @@ See the whole flow work with zero setup — no passphrase to pick, no data direc
 npx @e-sig/mcp demo --auto
 ```
 
+![Terminal recording of the @e-sig/mcp automatic signing demo](demo.gif)
+
 That ingests a bundled sample PDF, creates a one-signer envelope in a temp data dir, signs it in-process, and prints the sealed PDF's path plus an `esig_verify_document`-style verdict (`ok`, `classical.digestValid`, `postQuantum.ok`). Drop `--auto` and it prints a real signing URL instead, then waits for you to open it and sign from a browser yourself.
 
 When you're ready to wire this into an agent for real, set up a local data directory:

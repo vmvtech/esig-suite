@@ -136,6 +136,10 @@
     <div class="row"><span class="tag">classical</span><span class="lbl">PAdES · PKCS#7 RSA<small>Opens valid in every PDF reader, including Adobe Acrobat.</small></span><span class="ok">✓ valid</span></div>
     <div class="row"><span class="tag pq">post-quantum</span><span class="lbl">ML-DSA-65 · FIPS 204<small>Quantum-resistant hybrid seal — Ed25519 + ML-DSA-65.</small></span><span class="ok">✓ verified</span></div>
   </div>
+  <figure class="rv" style="margin:28px 0 0">
+    <img src="/assets/pq-seal-demo.gif" width="1009" height="694" loading="lazy" alt="Terminal demo verifying a hybrid classical and ML-DSA-65 PDF seal, then rejecting a one-byte tamper" style="display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:7px">
+    <figcaption class="mono" style="margin-top:8px;color:var(--mut);font-size:13px">recorded from <code>npm run demo:pq</code></figcaption>
+  </figure>
   <div class="grid" style="margin-top:28px" data-stagger="70">
     <div class="card rv"><h3><span class="ic">🛡️</span>Hybrid, not either-or</h3><p>Both a classical Ed25519 <em>and</em> a post-quantum ML-DSA-65 signature must verify — the NIST / CNSA 2.0 migration path. Breaking the seal means breaking both schemes at once.</p></div>
     <div class="card rv"><h3><span class="ic">📄</span>Still opens in Acrobat</h3><p>No reader validates ML-DSA in PAdES yet, so the seal rides <em>under</em> the RSA signature the reader already trusts. Zero disruption for the people signing and receiving your documents.</p></div>

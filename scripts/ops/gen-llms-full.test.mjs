@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -41,5 +41,12 @@ describe("llms-full.txt digest", () => {
       expect(digest).toContain(url);
     }
     expect(digest).toContain("signDocument");
+  });
+
+  it("keeps the checked-in digest synchronized with the live pages", async () => {
+    const digest = await buildDigest();
+    const checkedIn = await readFile(join(ROOT, "site/llms-full.txt"), "utf8");
+
+    expect(checkedIn).toBe(`${digest}\n`);
   });
 });

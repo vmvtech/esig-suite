@@ -1,0 +1,8 @@
+{"version":3,"term":{"cols":100,"rows":30},"timestamp":1790607534,"idle_time_limit":1.0,"command":"node demos/envelope.mjs","env":{"SHELL":"/bin/zsh"}}
+[0.209, "o", "1. created envelope  id=dc357431-cfec-4f26-b9c8-067f79c35811 signers=2\r\n"]
+[0.000, "o", "2. alice link       https://example.com/sign/4QUt4Rac… (masked)\r\n3. bob link         https://example.com/sign/hLyMCBI2… (masked)\r\n"]
+[0.000, "o", "4. signing gates    alice=pending bob=not_your_turn (not yet your turn)\r\n"]
+[0.001, "o", "5. alice signed     status=partially_signed\r\n"]
+[0.001, "o", "6. bob signed       status=completed\r\n"]
+[0.127, "o", "7. completed + verified  status=completed ok=true digestValid=true signatureValid=true\r\n"]
+[0.006, "x", "0"]

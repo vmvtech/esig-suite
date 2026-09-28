@@ -1,6 +1,6 @@
 # @e-sig/uaid-exch
 
-**Preview implementation of the proposed [IAASO Exchange Profile (ADR-006)](../../../../iaaso/proposals/ADR-006-exchange-profile.md).** The doctrine is under review by the IAASO standards council. This package is versioned `0.1.0-preview` and its wire format will be re-shaped to conform to the accepted schemas when ADR-006 lands. Use in production only after ADR-006 is Accepted and the schemas ship under `iaaso/artifacts/schemas/exchange/*/v1/`.
+**Preview implementation of the proposed IAASO Exchange Profile (ADR-006).** The doctrine is under review by the IAASO standards council. This package is versioned `0.1.0-preview` and its wire format will be re-shaped to conform to the accepted schemas when ADR-006 lands. Use in production only after ADR-006 is Accepted and the schemas ship under `iaaso/artifacts/schemas/exchange/*/v1/`.
 
 Wraps every `@e-sig/core` signing operation as a per-transaction signed authorization on the UUAID Network — subject + issuer proofs, network-side receipt, scope-checked authorization, and a Polygon-anchored batch inclusion proof that anyone can look up at `tx.uuaid.org/<id>`.
 

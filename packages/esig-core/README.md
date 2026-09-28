@@ -202,6 +202,8 @@ const signed = await recordSignature({ store, token, signatureImageDataUrl }); /
 const composed = composeEnvelopeHtml(signed, { platformLabel: "Your App" });
 ```
 
+![Terminal demo of a two-signer envelope progressing through ordered signatures to completed and verified status](./demo-envelope.gif)
+
 `declineEnvelope`/`voidEnvelope` cover the two ways an envelope ends without completing. Implement `EnvelopeStore` against your DB, or use `@e-sig/core/fs`'s `FsEnvelopeStore` (single-process only — see its own header comment).
 
 ## Persisting certs + audit logs across requests
