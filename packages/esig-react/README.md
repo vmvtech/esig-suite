@@ -39,6 +39,31 @@ import { SelfSignFlow, SelfSignedReceipt, SignaturePadCanvas } from "@e-sig/reac
 - **`SelfSignedReceipt`** — download link + signature image + cert-fingerprint /
   IP metadata; `downloadHref` maps a storage path → a fetchable URL.
 
+### `VerifyPanel`
+
+Renders the result of a PDF signature verification without fetching or managing
+state.
+
+| Prop | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `result` | `VerifyPanelResult` | Yes | Verification verdict and details to display. |
+| `fileName` | `string` | No | Verified file name shown below the verdict. |
+
+```tsx
+import { VerifyPanel } from "@e-sig/react";
+const result = await fetch("/api/esign/verify", {
+  method: "POST",
+  body: formData,
+}).then((response) => response.json());
+
+<VerifyPanel
+  result={result}
+  fileName={file.name}
+/>;
+```
+
+Testing: `npm run test -w @e-sig/react`.
+
 Uses Tailwind utility classes (incl. shadcn-style theme tokens like
 `bg-primary`, `text-muted-foreground`); they degrade gracefully without Tailwind
 and are overridable via `className`. Peer deps: `react`, `react-dom`. Dep:
