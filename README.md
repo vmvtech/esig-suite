@@ -21,9 +21,14 @@ Extracted from the Opendelphi production pipeline (live since 2026-05).
 | Package | What | Stack |
 |---|---|---|
 | **`@e-sig/core`** | The engine: `renderHtmlToPdf` → `signPdf` (+TSA) → `verifyPdfSignature`, self-signed cert issuance, multi-signer **envelopes** with single-use tokenized signing links, the `CertStore`/`AuditLogStore`/`PdfStorageStore`/`EnvelopeStore` interfaces, filesystem adapters (`@e-sig/core/fs`), `ensureActiveCert`, and the end-to-end `signDocument()` orchestrator. | Node, stack-agnostic |
-| **`@e-sig/supabase`** | Reference adapters: `SupabaseCertStore`, `SupabaseAuditLogStore`, `SupabasePdfStorageStore`. | Supabase (Postgres + Storage) |
-| **`@e-sig/react`** | UI: `SignaturePadCanvas` (draw-to-sign), `SelfSignFlow`, `SelfSignedReceipt`. | React 18/19 |
+| **`@e-sig/supabase`** | Reference adapters: `SupabaseCertStore`, `SupabasePqKeyStore`, `SupabaseAuditLogStore`, `SupabasePdfStorageStore`, and `verifyAuditChain`. | Supabase (Postgres + Storage) |
+| **`@e-sig/react`** | UI: `SignaturePadCanvas` (draw-to-sign), `SelfSignFlow`, `SelfSignedReceipt`, `VerifyPanel`. | React 18/19 |
 | **`@e-sig/uuaid`** | **Opt-in**: `withUuaidActor` stamps the acting agent's [UUAID](https://uuaid.org) into the audit log; `anchorChainHead` anchors the audit hash-chain head to UUAID's Polygon-anchored ledger (encrypted, hash-only — no document content leaves your infra). Core stays SaaS-free without it. | UUAID (optional) |
+| **`@e-sig/uaid-exch`** | **Preview** implementation of the proposed IAASO Exchange Profile: wraps each signing operation as a signed UUAID Network authorization with verifiable receipts and anchoring. | UUAID Network (preview) |
+| **`@e-sig/worm`** | Write-once-read-many (WORM) archival adapter: writes signed PDFs to S3 Object Lock with atomic retention and exports audit-chain snapshots to the same locked storage. | Amazon S3 Object Lock |
+| **`@e-sig/hsm-pkcs11`** | PKCS#11 adapter that keeps the RSA signing key inside a hardware security module (HSM) while implementing core's `ExternalSigner` seam. | PKCS#11 HSMs |
+| **`@e-sig/pillar-bridge`** | Optional Pillar bridge for `@e-sig/mcp`: delivers signing links, lifecycle events, and identity proofs as signed, end-to-end encrypted envelopes. | `@uuaid/pillar` (optional) |
+| **`@e-sig/assurance-gateway`** | Private internal signing service that renders caller-supplied HTML to PDF, signs it, and returns the bytes. | Private HTTP service (in-repo only) |
 
 Plus **`migrations/`** (a `tenant_id`-keyed schema bundle) and a **Next.js +
 Supabase starter** under `examples/nextjs-supabase`.

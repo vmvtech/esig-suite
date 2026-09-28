@@ -3,6 +3,13 @@
 All notable changes to the `@e-sig/*` packages. This project follows
 [Semantic Versioning](https://semver.org/). Dates are ISO-8601.
 
+## @e-sig/pillar-bridge 0.1.0 — 2026-08-28
+
+Optional, dependency-light shim over `@uuaid/pillar` for `@e-sig/mcp`.
+It provides Pillar-backed signing-link delivery, lifecycle event publishing,
+and identity-proof intake as signed, end-to-end encrypted envelopes without
+loading Pillar's full libp2p and SQLite dependency graph into the MCP process.
+
 ## @e-sig/mcp 0.5.0 — 2026-08-27
 
 ### `@e-sig/mcp` 0.5.0: L1p self-authenticating identity + Pillar seams (docs/architecture/esig-mcp.md §17 Stage B)

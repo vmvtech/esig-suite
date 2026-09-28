@@ -23,7 +23,7 @@ ESIG_APPROVE_PRODUCTION=1 ./site/finish.sh
 `finish.sh` is the canonical publisher: it backs up production, publishes the
 fail-closed checkout Lambda and URL function, uploads static files without
 deleting S3 objects, waits for CloudFront, and hard-fails on live verification.
-It never commits or pushes. See the [production runbook](../docs/RUNBOOK-uaid-exch-and-why-esig.md).
+It never commits or pushes. See the [production runbook](../docs/RUNBOOK-production-publish.md).
 
 `deploy.sh` is a static-files-only helper and does **not** publish edge code.
 Its default sync is non-destructive. Set `ESIG_SITE_PRUNE=1` only after a
