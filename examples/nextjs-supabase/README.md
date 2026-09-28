@@ -14,10 +14,10 @@ them into a Next.js (App Router) project that already has a Supabase SSR client
 - `app/sign/page.tsx` + `app/sign/sign-client.tsx` — load the doc, render
   `<SelfSignFlow>` (or `<SelfSignedReceipt>` once signed).
 
-## Setup
-1. Install:
+## Run it
+1. From the repository root, install every workspace and build the packages:
    ```bash
-   npm i @e-sig/core @e-sig/supabase @e-sig/react
+   npm install && npm run build
    ```
 2. Apply `../../migrations/0001_esig_self_contained.sql` to your Supabase DB, then
    **replace the `esig_tenant_member()` stub** with your tenant-membership check.
@@ -39,10 +39,14 @@ them into a Next.js (App Router) project that already has a Supabase SSR client
    );
    -- add RLS so a member can read their tenant's documents.
    ```
-4. Set env: `ESIG_CERT_PASSPHRASE` (key-at-rest passphrase),
-   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-   `SUPABASE_SERVICE_ROLE_KEY`. See `.env.example`.
-5. `npm run dev`, open `/sign?document=<id>`, draw a signature, submit. A signed
+4. Copy `.env.example` to `.env.local`, then set all four required keys:
+   `ESIG_CERT_PASSPHRASE`, `NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
+5. From the repository root, start the example workspace:
+   ```bash
+   npm run dev -w esig-example-nextjs-supabase
+   ```
+   Open `/sign?document=<id>`, draw a signature, and submit. A signed
    PDF lands in the `signed-documents` bucket; an `esig_audit_log` row is written;
    the page re-renders to the receipt with a download link.
 

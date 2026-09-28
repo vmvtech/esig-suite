@@ -177,6 +177,7 @@ function assertSafeIdentityString(
       level,
     );
   }
+  // eslint-disable-next-line no-control-regex -- Control characters are exactly what this validator rejects.
   if (/[\x00-\x1f\x7f]/.test(value)) {
     throw new IdentityError(`${field} contains control characters`, "L1_UNSAFE_IDENTITY_STRING", uuaid, level);
   }

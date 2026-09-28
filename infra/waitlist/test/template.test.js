@@ -8,11 +8,12 @@ const { join } = require("node:path");
 const { describe, it } = require("node:test");
 
 const waitlistRoot = join(__dirname, "..");
+const repoRoot = join(waitlistRoot, "..", "..");
 const templatePath = join(waitlistRoot, "template.yaml");
 const bootstrapPath = join(waitlistRoot, "artifact-bootstrap.yaml");
 const deployScriptPath = join(waitlistRoot, "scripts", "deploy.sh");
 const packagePath = join(waitlistRoot, "package.json");
-const lockPath = join(waitlistRoot, "package-lock.json");
+const lockPath = join(repoRoot, "package-lock.json");
 const brokerKmsKeyArn = "arn:aws:kms:us-east-1:633740007231:key/01234567-89ab-cdef-0123-456789abcdef";
 
 function spawnResult(command, args, options) {
@@ -104,6 +105,23 @@ echo "unexpected aws stub call" >&2
 exit 2
 `;
 
+  const npmStub = `#!/usr/bin/env bash
+set -euo pipefail
+printf 'npm %s\n' "$*" >> "$AWS_STUB_LOG"
+prefix=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --prefix) prefix="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[[ -n "$prefix" ]]
+cmp "$REPO_ROOT/package.json" "$prefix/package.json"
+cmp "$REPO_ROOT/package-lock.json" "$prefix/package-lock.json"
+cmp "$REPO_ROOT/infra/waitlist/package.json" "$prefix/infra/waitlist/package.json"
+test -f "$prefix/src/handler.js"
+`;
+
   const nodeStub = `#!/usr/bin/env bash
 set -euo pipefail
 printf 'node %s\n' "$*" >> "$AWS_STUB_LOG"
@@ -120,7 +138,7 @@ exec "$REAL_NODE_BIN" "$@"
 
   try {
     await writeFile(awsPath, awsStub, { mode: 0o700 });
-    await writeFile(npmPath, "#!/usr/bin/env bash\nexit 0\n", { mode: 0o700 });
+    await writeFile(npmPath, npmStub, { mode: 0o700 });
     await writeFile(nodePath, nodeStub, { mode: 0o700 });
     await chmod(awsPath, 0o700);
     await chmod(npmPath, 0o700);
@@ -145,6 +163,7 @@ exec "$REAL_NODE_BIN" "$@"
         REAL_NODE_BIN: process.execPath,
         TMPDIR: directory,
         PROOF_COUNTER_FILE: proofCounterPath,
+        REPO_ROOT: repoRoot,
         WRITER_VERSION: writerVersion,
         WAITLIST_BROKER_QUEUE_ARN:
           "arn:aws:sqs:us-east-1:633740007231:esig-mail-enqueue-standard.fifo",
@@ -573,6 +592,12 @@ describe("waitlist deployment artifacts", () => {
     assert.match(deployScript, /get-bucket-policy/);
     assert.match(deployScript, /aws:SecureTransport/);
     assert.match(deployScript, /npm[^\n]*ci|"\$NPM_BIN" ci/);
+    assert.match(deployScript, /cp "\$ROOT_DIR\/package\.json" "\$build_dir\/package\.json"/);
+    assert.match(deployScript, /cp "\$ROOT_DIR\/package-lock\.json" "\$build_dir\/package-lock\.json"/);
+    assert.match(deployScript, /cp "\$ROOT_DIR\/infra\/waitlist\/package\.json" "\$build_dir\/infra\/waitlist\/package\.json"/);
+    assert.match(deployScript, /--workspace @e-sig\/waitlist-api/);
+    assert.match(deployScript, /--include-workspace-root=false/);
+    assert.doesNotMatch(deployScript, /infra\/waitlist\/package-lock\.json/);
     assert.match(deployScript, /cloudformation package/);
     assert.match(deployScript, /PACKAGED_TEMPLATE_SHA256/);
     assert.match(deployScript, /EXECUTE_CHANGESET=\$\{EXECUTE_CHANGESET:-0\}/);
@@ -612,6 +637,7 @@ describe("waitlist deployment artifacts", () => {
     assert.equal(clear.code, 0, clear.stderr);
     assert.match(clear.log, /node .*\/src\/backfill-outbox\.js/);
     assert.match(clear.log, /node .*\/src\/replay-outbox\.js/);
+    assert.match(clear.log, /npm ci .*--workspace @e-sig\/waitlist-api .*--include-workspace-root=false .*--prefix/);
     assert.match(clear.log, /lambda list-event-source-mappings/);
     assert.match(clear.log, /lambda invoke .*waitlist-activation-proof-read-v1/);
     assert.match(clear.log, /cloudformation package/);
@@ -673,6 +699,7 @@ describe("waitlist deployment artifacts", () => {
     assert.equal(packageJson.dependencies["@aws-sdk/client-dynamodb"], "3.1103.0");
     assert.equal(packageJson.dependencies["@aws-sdk/client-lambda"], "3.1103.0");
     assert.equal(packageJson.dependencies["@aws-sdk/client-sqs"], "3.1103.0");
+    assert.deepEqual(packageLock.packages["infra/waitlist"].dependencies, packageJson.dependencies);
     assert.equal(
       packageLock.packages["node_modules/@aws-sdk/client-dynamodb"].version,
       "3.1103.0",

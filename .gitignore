@@ -8,6 +8,9 @@ infra/provisioning/packaged-template.yaml
 .env.local
 packages/esig-react/npmrc.publish
 examples/quickstart/signed.pdf
+examples/nextjs-supabase/.next/
+examples/nextjs-supabase/next-env.d.ts
+examples/nextjs-supabase/tsconfig.tsbuildinfo
 .claude/
 
 # Local secrets — never commit

@@ -37,6 +37,7 @@ const BROKER_ENV = Object.freeze({
   WAITLIST_BROKER_QUEUE_URL: APPROVED_BROKER_QUEUE_URL,
   WAITLIST_BROKER_QUEUE_ARN: APPROVED_BROKER_QUEUE_ARN,
 });
+const ACTIVE_RECORD_NOW = new Date("2026-08-07T12:00:00.000Z");
 
 function stringAttribute(value) {
   return { S: value };
@@ -100,7 +101,7 @@ function collectingSender() {
 
 describe("waitlist broker payload", () => {
   it("constructs only the frozen metadata allow-list", () => {
-    const payload = buildBrokerPayload(validRecord());
+    const payload = buildBrokerPayload(validRecord(), ACTIVE_RECORD_NOW);
 
     assert.equal(Object.isFrozen(BROKER_PAYLOAD_FIELDS), true);
     assert.equal(Object.isFrozen(OUTBOX_IMAGE_FIELDS), true);
@@ -144,6 +145,7 @@ describe("waitlist broker payload", () => {
     for (const offer of ALLOWED_OFFERS) {
       const payload = buildBrokerPayload(
         validRecord({ image: { offer: stringAttribute(offer) } }),
+        ACTIVE_RECORD_NOW,
       );
       assert.equal(payload.offer, offer);
     }
@@ -156,6 +158,7 @@ describe("waitlist broker payload", () => {
             expires_at_epoch: { N: "1788609600" },
           },
         }),
+        ACTIVE_RECORD_NOW,
       ).retentionClass,
       "waitlist_30d",
     );
@@ -276,7 +279,11 @@ describe("waitlist stream notifier", () => {
 
   it("sends the fixed FIFO route with submission-id deduplication and no headers", async () => {
     const sender = collectingSender();
-    const handler = createHandler({ sendMessage: sender.sendMessage, env: BROKER_ENV });
+    const handler = createHandler({
+      sendMessage: sender.sendMessage,
+      env: BROKER_ENV,
+      now: () => ACTIVE_RECORD_NOW,
+    });
 
     const result = await handler({ Records: [validRecord()] });
 
@@ -304,7 +311,11 @@ describe("waitlist stream notifier", () => {
 
   it("skips non-inserts, smoke tests, honeypots, and duplicate records", async () => {
     const sender = collectingSender();
-    const handler = createHandler({ sendMessage: sender.sendMessage, env: BROKER_ENV });
+    const handler = createHandler({
+      sendMessage: sender.sendMessage,
+      env: BROKER_ENV,
+      now: () => ACTIVE_RECORD_NOW,
+    });
     const duplicate = validRecord({ sequenceNumber: "100000000000000000005" });
 
     const result = await handler({
@@ -332,7 +343,11 @@ describe("waitlist stream notifier", () => {
 
   it("emits a stable route and submission id for broker-owned durable at-least-once idempotency", async () => {
     const sender = collectingSender();
-    const handler = createHandler({ sendMessage: sender.sendMessage, env: BROKER_ENV });
+    const handler = createHandler({
+      sendMessage: sender.sendMessage,
+      env: BROKER_ENV,
+      now: () => ACTIVE_RECORD_NOW,
+    });
     const record = validRecord();
 
     await handler({ Records: [record] });
@@ -381,6 +396,7 @@ describe("waitlist stream notifier", () => {
     const sent = [];
     const handler = createHandler({
       env: BROKER_ENV,
+      now: () => ACTIVE_RECORD_NOW,
       sendMessage: async (input) => {
         if (input.MessageDeduplicationId === "wl_0123456789abcdef01234567") {
           throw new Error("broker secret response");
@@ -413,6 +429,7 @@ describe("waitlist stream notifier", () => {
   it("fails the whole batch generically when an eligible failure has no sequence number", async () => {
     const handler = createHandler({
       env: BROKER_ENV,
+      now: () => ACTIVE_RECORD_NOW,
       sendMessage: async () => {
         throw new Error("private-person@example.org:SECRET-do-not-log");
       },

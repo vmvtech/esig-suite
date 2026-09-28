@@ -7,23 +7,32 @@
   "workspaces": [
     "packages/*",
     "examples/quickstart",
-    "infra/provisioning"
+    "examples/react-playground",
+    "examples/nextjs-supabase",
+    "examples/pillar-agent",
+    "infra/provisioning",
+    "infra/waitlist"
   ],
   "scripts": {
     "build": "npm run build -w @e-sig/core && npm run build -w @e-sig/supabase && npm run build -w @e-sig/react && npm run build -w @e-sig/uuaid && npm run build -w @e-sig/uaid-exch && npm run build -w @e-sig/worm && npm run build -w @e-sig/hsm-pkcs11 && npm run build -w @e-sig/assurance-gateway && npm run build -w @e-sig/pillar-bridge && npm run build -w @e-sig/mcp && npm run build -w @e-sig/cloud-provisioning",
     "clean": "npm run clean -w @e-sig/core && npm run clean -w @e-sig/supabase && npm run clean -w @e-sig/react && npm run clean -w @e-sig/uuaid && npm run clean -w @e-sig/uaid-exch && npm run clean -w @e-sig/worm && npm run clean -w @e-sig/hsm-pkcs11 && npm run clean -w @e-sig/assurance-gateway && npm run clean -w @e-sig/pillar-bridge && npm run clean -w @e-sig/mcp && npm run clean -w @e-sig/cloud-provisioning",
+    "lint": "eslint .",
     "smoke": "node scripts/smoke.mjs",
     "quickstart": "npm start -w esig-quickstart",
-    "test": "npm run test -w @e-sig/core && npm run test -w @e-sig/supabase && npm run test -w @e-sig/uuaid && npm run test -w @e-sig/uaid-exch && npm run test -w @e-sig/worm && npm run test -w @e-sig/hsm-pkcs11 && npm run test -w @e-sig/assurance-gateway && npm run test -w @e-sig/pillar-bridge && npm run test -w @e-sig/mcp && npm run test -w @e-sig/cloud-provisioning && npm run test:scripts",
+    "test": "npm run test -w @e-sig/core && npm run test -w @e-sig/supabase && npm run test -w @e-sig/react && npm run test -w esig-react-playground && npm run test -w @e-sig/uuaid && npm run test -w @e-sig/uaid-exch && npm run test -w @e-sig/worm && npm run test -w @e-sig/hsm-pkcs11 && npm run test -w @e-sig/assurance-gateway && npm run test -w @e-sig/pillar-bridge && npm run test -w @e-sig/mcp && npm run test -w @e-sig/cloud-provisioning && npm run test -w esig-pillar-agent-example && npm run test:scripts",
     "test:provisioning": "npm run test -w @e-sig/cloud-provisioning",
     "test:provisioning:supabase": "npm run test:supabase -w @e-sig/cloud-provisioning",
     "test:provisioning:templates": "npm run test:templates -w @e-sig/cloud-provisioning",
     "bundle:provisioning": "npm run bundle -w @e-sig/cloud-provisioning",
-    "test:scripts": "vitest run scripts/ && npm test --prefix infra/waitlist",
+    "test:scripts": "vitest run scripts/ && npm run test -w @e-sig/waitlist-api",
     "typecheck": "npm run build"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "typescript": "^5.4.0",
+    "typescript-eslint": "^8.70.1",
     "vitest": "^4.1.10"
   },
   "overrides": {
