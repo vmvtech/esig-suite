@@ -156,6 +156,7 @@ describe("waitlist broker payload", () => {
             expires_at_epoch: { N: "1788609600" },
           },
         }),
+        new Date("2026-08-06T12:00:00.000Z"),
       ).retentionClass,
       "waitlist_30d",
     );
