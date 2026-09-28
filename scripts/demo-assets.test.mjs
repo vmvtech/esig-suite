@@ -45,4 +45,29 @@ describe("published demo assets", () => {
     expect(output?.[2]).toMatch(/^Demo completed in \d+ms\.\r\n$/);
     expect(events.at(-1)?.slice(1)).toEqual(["x", "0"]);
   });
+
+  it("keeps the two envelope demo GIFs byte-identical", () => {
+    const packageGif = new URL("packages/esig-core/demo-envelope.gif", repoRoot);
+    const siteGif = new URL("site/assets/envelope-demo.gif", repoRoot);
+
+    expect(sha256(packageGif)).toBe(sha256(siteGif));
+  });
+
+  it("keeps a successful envelope cast as the recording source", () => {
+    const cast = new URL("demos/casts/envelope.cast", repoRoot);
+
+    expect(existsSync(cast)).toBe(true);
+
+    const [header, ...events] = readFileSync(cast, "utf8")
+      .trimEnd()
+      .split("\n")
+      .map(JSON.parse);
+    const output = events.filter((event) => event[1] === "o").at(-1);
+
+    expect(header.command).toBe("node demos/envelope.mjs");
+    expect(output?.[2]).toBe(
+      "7. completed + verified  status=completed ok=true digestValid=true signatureValid=true\r\n",
+    );
+    expect(events.at(-1)?.slice(1)).toEqual(["x", "0"]);
+  });
 });
