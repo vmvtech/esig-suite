@@ -1,0 +1,7 @@
+{"version":3,"term":{"cols":100,"rows":30},"timestamp":1790605195,"idle_time_limit":1.0,"command":"node packages/esig-mcp/dist/bin.js demo --auto","env":{"SHELL":"/bin/zsh"}}
+[0.392, "o", "[esig-mcp] WARNING: ESIG_MCP_RETURN_LINKS=1 — returning raw signing links for envelope cfbd25c0-ef81-4329-9da4-faed94203ac0 directly to the MCP caller. This defeats the human-in-the-loop token custody guarantee (T1/T8, docs/architecture/esig-mcp.md §2) and is intended for local demos only.\r\n"]
+[0.001, "o", "Signing URL:  http://127.0.0.1:51187/sign/igUR_Dre_xFTifi0uVfXbQMHZBGGQlI0sYw_-8vTwRg\r\nOutbox file:  /var/folders/tq/bdphjw656kj2wywl66qgmtlr0000gn/T/esig-mcp-demo-mk3K69/outbox/cfbd25c0-ef81-4329-9da4-faed94203ac0.json\r\n"]
+[0.000, "o", "Try it:       curl -s -X POST 'http://127.0.0.1:51187/sign/igUR_Dre_xFTifi0uVfXbQMHZBGGQlI0sYw_-8vTwRg' -H 'content-type: application/json' -d '{\"signatureImageDataUrl\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\",\"consent\":true}'\r\n"]
+[0.231, "o", "Sealed PDF: /var/folders/tq/bdphjw656kj2wywl66qgmtlr0000gn/T/esig-mcp-demo-mk3K69/blobs/default/cfbd25c0-ef81-4329-9da4-faed94203ac0/sealed.pdf\r\nVerify verdict: ok=true classical.digestValid=true postQuantum.ok=true\r\n"]
+[0.000, "o", "Demo completed in 240ms.\r\n"]
+[0.006, "x", "0"]

@@ -39,6 +39,8 @@ for the tool list, identity levels, and Claude Code/Cursor/VS Code install snipp
 npx @e-sig/mcp demo --auto
 ```
 
+![Terminal recording of the @e-sig/mcp automatic signing demo](site/assets/mcp-demo.gif)
+
 ## Quickstart (60 seconds, no services)
 
 Issue a cert → sign a PDF → verify → detect tampering, with nothing but Node:

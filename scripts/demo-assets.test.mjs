@@ -22,4 +22,27 @@ describe("published demo assets", () => {
 
     expect(existsSync(cast)).toBe(true);
   });
+
+  it("keeps the two MCP demo GIFs byte-identical", () => {
+    const packageGif = new URL("packages/esig-mcp/demo.gif", repoRoot);
+    const siteGif = new URL("site/assets/mcp-demo.gif", repoRoot);
+
+    expect(sha256(packageGif)).toBe(sha256(siteGif));
+  });
+
+  it("keeps the MCP demo cast as the recording source", () => {
+    const cast = new URL("demos/casts/mcp-demo.cast", repoRoot);
+
+    expect(existsSync(cast)).toBe(true);
+
+    const [header, ...events] = readFileSync(cast, "utf8")
+      .trimEnd()
+      .split("\n")
+      .map(JSON.parse);
+    const output = events.filter((event) => event[1] === "o").at(-1);
+
+    expect(header.command).toBe("node packages/esig-mcp/dist/bin.js demo --auto");
+    expect(output?.[2]).toMatch(/^Demo completed in \d+ms\.\r\n$/);
+    expect(events.at(-1)?.slice(1)).toEqual(["x", "0"]);
+  });
 });
