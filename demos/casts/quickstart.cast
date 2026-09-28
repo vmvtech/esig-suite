@@ -1,0 +1,7 @@
+{"version":3,"term":{"cols":100,"rows":30},"timestamp":1790604815,"idle_time_limit":1.0,"command":"npm run quickstart --silent","env":{"SHELL":"/bin/zsh"}}
+[0.526, "o", "1. issued cert  sha256:c6b55dd31990721f…  valid until 2027-09-28\r\n"]
+[0.042, "o", "2. signed       35441 → 53036 bytes (signed.pdf written)\r\n"]
+[0.001, "o", "3. verified     ok=true digestValid=true signatureValid=true signer=\"E-sig (Acme Inc)\"\r\n"]
+[0.001, "o", "4. tamper check ok=false → rejected: \"document digest does not match messageDigest attribute — content altered after signing\"\r\n"]
+[0.000, "o", "\r\nquickstart passed ✓\r\n"]
+[0.010, "x", "0"]
