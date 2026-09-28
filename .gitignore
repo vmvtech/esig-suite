@@ -8,6 +8,7 @@ infra/provisioning/packaged-template.yaml
 .env.local
 packages/esig-react/npmrc.publish
 examples/quickstart/signed.pdf
+demos/out/
 .claude/
 
 # Local secrets — never commit
