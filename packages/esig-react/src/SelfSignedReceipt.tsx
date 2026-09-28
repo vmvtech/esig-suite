@@ -101,7 +101,6 @@ export function SelfSignedReceipt({
       {signatureImageUrl ? (
         <div className="mt-5 rounded-md border border-input bg-background p-3">
           <p className="mb-2 text-xs text-muted-foreground">Signature</p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={downloadHref(signatureImageUrl)}
             alt="Captured signature"

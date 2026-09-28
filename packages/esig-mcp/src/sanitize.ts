@@ -71,6 +71,7 @@ function normalizeUrlValue(raw: string): string {
     .replace(/&(colon|tab|newline|lpar|rpar|quot|apos|sol);/gi, (_, n) => NAMED_ENTITIES[n.toLowerCase()] ?? "")
     .replace(/\\([0-9a-f]{1,6})\s?/gi, (_, h) => codePointOrReplacement(parseInt(h, 16)))
     .replace(/\\([^0-9a-f\r\n])/gi, "$1")
+    // eslint-disable-next-line no-control-regex -- URL normalization intentionally strips control characters.
     .replace(/[\s\x00-\x1f\x7f]/g, "")
     .toLowerCase();
 }
