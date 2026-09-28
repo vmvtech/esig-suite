@@ -55,6 +55,9 @@
 
   .note{color:var(--dim);font-size:13px;margin-top:22px;max-width:760px;line-height:1.6}
   .note b{color:var(--mut)}
+  .demo-recording{margin:20px 0 0}
+  .demo-recording img{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:7px}
+  .demo-recording figcaption{margin-top:8px;color:var(--mut);font-family:var(--mono);font-size:13px}
 </style>
 </head>
 <body>
@@ -132,6 +135,10 @@ $ npm run quickstart   <span class="c"># issue cert → render → sign (+timest
 <section id="mcp"><div class="wrap" data-stagger="80">
   <h2 class="rv"><span class="mono">@e-sig/mcp</span> — agent-driven signing</h2>
   <p class="lead rv">An MCP server that lets an agent drive the whole envelope lifecycle — create a PDF envelope, track its signers, poll status, and confirm the sealed result — while cryptographic control of signing stays with a human by default. Two commands to try it: <span class="mono">npx @e-sig/mcp demo --auto</span> for a scripted end-to-end run, or <span class="mono">npx @e-sig/mcp init</span> to wire it into Claude Desktop or a project's <span class="mono">.mcp.json</span>. Published to npm at <span class="mono">0.5.0</span> — <a href="https://www.npmjs.com/package/@e-sig/mcp">npm ↗</a>. Source: <a href="https://github.com/vmvtech/esig-suite/tree/main/packages/esig-mcp"><span class="mono">packages/esig-mcp</span> ↗</a>. Full reference: <a href="https://docs.e-sig.org/#mcp">docs.e-sig.org</a>.</p>
+  <figure class="demo-recording rv">
+    <a href="/assets/mcp-demo.gif"><img src="/assets/mcp-demo.gif" width="1009" height="694" loading="lazy" alt="Terminal recording of the MCP automatic demo creating, signing, sealing, and verifying an envelope"></a>
+    <figcaption><span class="mono">npx @e-sig/mcp demo --auto</span> · <a href="/assets/mcp-demo.mp4">MP4 download</a></figcaption>
+  </figure>
 
   <h3 style="margin:28px 0 12px;font-size:15.5px">Tool surface (11 tools)</h3>
   <div class="tblwrap rv"><table class="cmp">

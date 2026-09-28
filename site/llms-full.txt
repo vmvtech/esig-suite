@@ -76,6 +76,8 @@ classicalPAdES · PKCS#7 RSAOpens valid in every PDF reader, including Adobe Acr
 
 post-quantumML-DSA-65 · FIPS 204Quantum-resistant hybrid seal — Ed25519 + ML-DSA-65.✓ verified
 
+recorded from npm run demo:pq
+
 ### 🛡️Hybrid, not either-or
 Both a classical Ed25519 and a post-quantum ML-DSA-65 signature must verify — the NIST / CNSA 2.0 migration path. Breaking the seal means breaking both schemes at once.
 
@@ -1074,6 +1076,8 @@ const ok = verifyPdfSignature(signedPdf).ok; // cryptographic check
 
 An MCP server that lets an agent drive the whole envelope lifecycle — create a PDF envelope, track its signers, poll status, and confirm the sealed result — while cryptographic control of signing stays with a human by default. Two commands to try it: npx @e-sig/mcp demo --auto for a scripted end-to-end run, or npx @e-sig/mcp init to wire it into Claude Desktop or a project's .mcp.json. Published to npm at 0.5.0 — npm ↗. Source: packages/esig-mcp ↗. Full reference: docs.e-sig.org.
 
+npx @e-sig/mcp demo --auto · MP4 download
+
 ### Tool surface (11 tools)
 
 Tool · Purpose ·
@@ -1205,6 +1209,16 @@ The share card used across the site — safe to reuse in coverage.
 
 ### Quickstart demo (GIF)
 Cert → render → sign → verify → tamper rejection, ~60 seconds, no services.
+
+### Demo recordings
+
+- SDK quickstart — GIF · MP4
+
+- MCP automatic signing — GIF · MP4
+
+- Multi-signer envelope — GIF · MP4
+
+- Post-quantum hybrid seal — GIF · MP4
 
 ## Story angles (each with a source link)
 
